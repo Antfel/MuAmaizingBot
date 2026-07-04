@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">MU Amaizing Bot</string>
+    <string name="overlay_notification_channel">Overlay del bot</string>
+    <string name="overlay_notification_title">MU Bot activo</string>
+    <string name="overlay_notification_body">Overlay en ejecución</string>
+    <string name="capture_notification_channel">Captura de pantalla</string>
+    <string name="capture_notification_title">Captura activa</string>
+    <string name="capture_notification_body">El bot está capturando la pantalla</string>
+    <string name="accessibility_service_description">Permite a MU Amaizing Bot enviar taps y swipes al juego.</string>
 </resources>

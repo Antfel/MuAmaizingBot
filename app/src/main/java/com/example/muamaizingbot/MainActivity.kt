@@ -4,16 +4,27 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.layout.Box
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.example.muamaizingbot.capture.ScreenCapturePermission
+import com.example.muamaizingbot.ui.navigation.AppNavigation
 import com.example.muamaizingbot.ui.theme.MUAmaizingBotTheme
 
 class MainActivity : ComponentActivity() {
+
+    private val captureLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        ScreenCapturePermission.handleResult(
+            context = this,
+            resultCode = result.resultCode,
+            data = result.data
+        )
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -21,14 +32,15 @@ class MainActivity : ComponentActivity() {
             MUAmaizingBotTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
+                    color = MaterialTheme.colorScheme.background,
                 ) {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(text = "MU Amaizing Bot")
-                    }
+                    AppNavigation(
+                        onRequestCapture = {
+                            captureLauncher.launch(
+                                ScreenCapturePermission.createRequestIntent(this)
+                            )
+                        },
+                    )
                 }
             }
         }
