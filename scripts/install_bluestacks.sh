@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APK="$ROOT/app/build/outputs/apk/debug/app-debug.apk"
 PACKAGE="com.example.muamaizingbot"
 
 resolve_device() {
@@ -23,6 +22,20 @@ resolve_device() {
   echo ""
 }
 
+resolve_flavor() {
+  local device="$1"
+  local abi
+  abi="$(adb -s "$device" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r\n')"
+  case "$abi" in
+    arm64-v8a|armeabi-v7a) echo "arm64" ;;
+    x86_64|x86) echo "x86_64" ;;
+    *)
+      echo "arm64"
+      echo "WARN: ABI desconocido '$abi', usando flavor arm64" >&2
+      ;;
+  esac
+}
+
 echo "==> Reiniciando ADB"
 adb kill-server >/dev/null 2>&1 || true
 sleep 1
@@ -38,8 +51,22 @@ if [[ -z "$DEVICE" ]]; then
 fi
 echo "==> Dispositivo: $DEVICE"
 
-echo "==> Compilando APK (arm64-v8a)"
-(cd "$ROOT" && ./gradlew assembleDebug)
+FLAVOR="$(resolve_flavor "$DEVICE")"
+ABI="$(adb -s "$DEVICE" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r\n')"
+APK="$ROOT/app/build/outputs/apk/${FLAVOR}/debug/app-${FLAVOR}-debug.apk"
+echo "==> ABI del emulador: ${ABI:-?} → flavor $FLAVOR"
+
+echo "==> Compilando APK ($FLAVOR)"
+GRADLE_TASK="assembleArm64Debug"
+if [[ "$FLAVOR" == "x86_64" ]]; then
+  GRADLE_TASK="assembleX86_64Debug"
+fi
+(cd "$ROOT" && ./gradlew "$GRADLE_TASK")
+
+if [[ ! -f "$APK" ]]; then
+  echo "ERROR: APK no encontrado: $APK"
+  exit 1
+fi
 
 echo "==> Deteniendo app"
 adb -s "$DEVICE" shell am force-stop "$PACKAGE" >/dev/null 2>&1 || true
@@ -58,8 +85,8 @@ if adb -s "$DEVICE" shell pm install -r -t /data/local/tmp/mubot.apk; then
 fi
 
 echo ""
-echo "ERROR: Broken pipe en PackageManager de BlueStacks."
-echo "  1. Cierra BlueStacks por completo y ábrelo de nuevo"
-echo "  2. Settings > Advanced > Android debug bridge = ON"
-echo "  3. Vuelve a ejecutar: ./scripts/install_bluestacks.sh"
+echo "ERROR: instalación fallida."
+echo "  Intel Windows BlueStacks → usa MuAmaizingBot-*-x86_64-debug.apk"
+echo "  Mac / ARM BlueStacks     → usa MuAmaizingBot-*-arm64-debug.apk"
+echo "  Verifica ABI: adb shell getprop ro.product.cpu.abi"
 exit 1

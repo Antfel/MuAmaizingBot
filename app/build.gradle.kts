@@ -15,14 +15,25 @@ android {
         applicationId = "com.example.muamaizingbot"
         minSdk = 29
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
 
-        // BlueStacks arm64 only — evita APK ~170MB (OpenCV x4 ABIs) que rompe pm install.
-        ndk {
-            abiFilters += listOf("arm64-v8a")
+    flavorDimensions += "abi"
+    productFlavors {
+        create("arm64") {
+            dimension = "abi"
+            ndk {
+                abiFilters += listOf("arm64-v8a")
+            }
+        }
+        create("x86_64") {
+            dimension = "abi"
+            ndk {
+                abiFilters += listOf("x86_64")
+            }
         }
     }
 
