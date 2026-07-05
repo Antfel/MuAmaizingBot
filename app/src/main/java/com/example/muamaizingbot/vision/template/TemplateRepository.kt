@@ -8,34 +8,64 @@ import android.util.Log
 object TemplateRepository {
 
     private const val TAG = "TemplateRepository"
-    private const val ROOT = "templates/mu"
 
-    private val templatesByPath = linkedMapOf<String, TemplateInfo>()
-    private var initialized = false
+    private val templatesByCanonicalPath = linkedMapOf<String, TemplateInfo>()
+    private var currentResolutionKey = TemplateAssets.REF_RESOLUTION_KEY
+    private lateinit var appContext: Context
 
     fun init(context: Context) {
-        if (initialized) {
+        appContext = context.applicationContext
+        reloadForActiveResolution()
+    }
+
+    fun reloadForActiveResolution() {
+        if (!::appContext.isInitialized) {
             return
         }
-        val appContext = context.applicationContext
-        walkAssets(appContext, ROOT)
-        initialized = true
-        Log.d(TAG, "[TEMPLATE] loaded count=${templatesByPath.size}")
+        reload(TemplateAssets.templateResolutionKey())
     }
 
-    fun getByPath(assetPath: String): TemplateInfo? = templatesByPath[assetPath]
+    fun currentResolutionKey(): String = currentResolutionKey
+
+    fun reload(resolutionKey: String) {
+        if (!TemplateAssets.SUPPORTED_RESOLUTION_KEYS.contains(resolutionKey)) {
+            Log.w(TAG, "[TEMPLATE] unsupported resolution=$resolutionKey fallback=${TemplateAssets.REF_RESOLUTION_KEY}")
+            reload(TemplateAssets.REF_RESOLUTION_KEY)
+            return
+        }
+
+        templatesByCanonicalPath.values.forEach { info ->
+            if (!info.bitmap.isRecycled) {
+                info.bitmap.recycle()
+            }
+        }
+        templatesByCanonicalPath.clear()
+        currentResolutionKey = resolutionKey
+
+        val root = "templates/$resolutionKey/mu"
+        walkAssets(appContext, root)
+        Log.d(
+            TAG,
+            "[TEMPLATE] loaded resolution=$resolutionKey count=${templatesByCanonicalPath.size}"
+        )
+    }
+
+    fun getByPath(canonicalPath: String): TemplateInfo? {
+        val normalized = TemplateAssets.normalizeToCanonical(canonicalPath)
+        return templatesByCanonicalPath[normalized]
+    }
 
     fun getByName(sourceName: String): TemplateInfo? {
-        return templatesByPath.values.firstOrNull { it.sourceName == sourceName }
+        return templatesByCanonicalPath.values.firstOrNull { it.sourceName == sourceName }
     }
 
-    fun allTemplates(): List<TemplateInfo> = templatesByPath.values.toList()
+    fun allTemplates(): List<TemplateInfo> = templatesByCanonicalPath.values.toList()
 
-    private fun walkAssets(context: Context, path: String) {
+    private fun walkAssets(context: Context, physicalRoot: String) {
         val assetManager = context.assets
-        val entries = assetManager.list(path) ?: return
+        val entries = assetManager.list(physicalRoot) ?: return
         for (entry in entries) {
-            val fullPath = "$path/$entry"
+            val fullPath = "$physicalRoot/$entry"
             if (entry.endsWith(".png", ignoreCase = true)) {
                 loadAsset(context, fullPath)
             } else {
@@ -44,25 +74,30 @@ object TemplateRepository {
         }
     }
 
-    private fun loadAsset(context: Context, assetPath: String) {
-        if (templatesByPath.containsKey(assetPath)) {
+    private fun loadAsset(context: Context, physicalPath: String) {
+        val prefix = "templates/$currentResolutionKey/mu/"
+        if (!physicalPath.startsWith(prefix)) {
             return
         }
-        val bitmap = context.assets.open(assetPath).use { stream ->
+        val relative = physicalPath.removePrefix(prefix)
+        val canonicalPath = "${TemplateAssets.CANONICAL_PREFIX}/$relative"
+        if (templatesByCanonicalPath.containsKey(canonicalPath)) {
+            return
+        }
+
+        val bitmap = context.assets.open(physicalPath).use { stream ->
             BitmapFactory.decodeStream(stream)
         } ?: run {
-            Log.w(TAG, "[TEMPLATE] failed path=$assetPath")
+            Log.w(TAG, "[TEMPLATE] failed physical=$physicalPath")
             return
         }
 
-        val relativePath = assetPath.removePrefix("$ROOT/")
-        val category = relativePath.substringBefore('/', missingDelimiterValue = "root")
-
-        templatesByPath[assetPath] = TemplateInfo(
-            assetPath = assetPath,
-            sourceName = assetPath.substringAfterLast('/').removeSuffix(".png"),
+        val category = relative.substringBefore('/', missingDelimiterValue = "root")
+        templatesByCanonicalPath[canonicalPath] = TemplateInfo(
+            assetPath = canonicalPath,
+            sourceName = relative.substringAfterLast('/').removeSuffix(".png"),
             category = category,
-            bitmap = bitmap
+            bitmap = bitmap,
         )
     }
 }

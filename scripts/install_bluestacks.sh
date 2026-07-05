@@ -27,7 +27,8 @@ resolve_flavor() {
   local abi
   abi="$(adb -s "$device" shell getprop ro.product.cpu.abi 2>/dev/null | tr -d '\r\n')"
   case "$abi" in
-    arm64-v8a|armeabi-v7a) echo "arm64" ;;
+    arm64-v8a) echo "arm64" ;;
+    armeabi-v7a) echo "arm32" ;;
     x86_64|x86) echo "x86_64" ;;
     *)
       echo "arm64"
@@ -60,6 +61,8 @@ echo "==> Compilando APK ($FLAVOR)"
 GRADLE_TASK="assembleArm64Debug"
 if [[ "$FLAVOR" == "x86_64" ]]; then
   GRADLE_TASK="assembleX86_64Debug"
+elif [[ "$FLAVOR" == "arm32" ]]; then
+  GRADLE_TASK="assembleArm32Debug"
 fi
 (cd "$ROOT" && ./gradlew "$GRADLE_TASK")
 
@@ -88,5 +91,6 @@ echo ""
 echo "ERROR: instalación fallida."
 echo "  Intel Windows BlueStacks → usa MuAmaizingBot-*-x86_64-debug.apk"
 echo "  Mac / ARM BlueStacks     → usa MuAmaizingBot-*-arm64-debug.apk"
+echo "  Teléfono 32-bit (A13)    → usa MuAmaizingBot-*-arm32-debug.apk"
 echo "  Verifica ABI: adb shell getprop ro.product.cpu.abi"
 exit 1

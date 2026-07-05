@@ -19,6 +19,7 @@ fun ConfigDrawerContent(
     profileLabel: String,
     farmSpotLabel: String,
     onOpenProfiles: () -> Unit,
+    onOpenResolution: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -53,9 +54,15 @@ fun ConfigDrawerContent(
             onClick = onOpenProfiles,
         )
 
+        NavigationDrawerItem(
+            label = { Text("Resolución") },
+            selected = false,
+            onClick = onOpenResolution,
+        )
+
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Más opciones próximamente",
+            text = "Calibrado para 2560×1440; escala automática según captura.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

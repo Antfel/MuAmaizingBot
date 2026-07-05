@@ -53,7 +53,44 @@ object NavigationOrchestrator {
             return false
         }
 
-        if (!navigateToMapAndWire(mapDef, wireId)) {
+        val onMap = NavigationWaitActions.isOnConfiguredMap(mapDef, farmSpot)
+        val atSpot = farmSpot?.let { NavigationWaitActions.isAtFarmSpot(it, mapDef) } == true
+
+        if (onMap && atSpot) {
+            Log.d(TAG, "[NAV] already on map and at farm spot; ensure auto only")
+            if (!NavigationWaitActions.waitUntilUiSettled()) {
+                Log.w(TAG, "[NAV] UI not settled; continuing")
+            }
+            GameActions.ensureAutoMode()
+            Log.d(TAG, "[NAV] go_to_active_farm_spot finished=true (on spot)")
+            return true
+        }
+
+        if (onMap) {
+            Log.d(TAG, "[NAV] on configured map; wire + spot tap only")
+            if (!WireSwitchActions.switchToWire(mapDef, wireId)) {
+                Log.w(TAG, "[NAV] switch_to_wire failed (spot-only path)")
+                return false
+            }
+            val destination = resolveDestination(farmSpot, profile.spot, mapDef)
+                ?: run {
+                    Log.w(TAG, "[NAV] no farm destination")
+                    return false
+                }
+            val (destX, destY) = destination
+            if (!tapVisualLocation(destX, destY, farmSpot, mapDef)) {
+                Log.w(TAG, "[NAV] tap_visual_location failed (spot-only path)")
+                return false
+            }
+            if (!NavigationWaitActions.waitUntilUiSettled()) {
+                Log.w(TAG, "[NAV] UI not settled before auto; continuing")
+            }
+            GameActions.ensureAutoMode()
+            Log.d(TAG, "[NAV] go_to_active_farm_spot finished=true (spot-only)")
+            return true
+        }
+
+        if (!navigateToMapAndWire(mapDef, wireId, farmSpot)) {
             Log.w(TAG, "[NAV] navigate_to_map_and_wire failed")
             return false
         }
@@ -102,12 +139,25 @@ object NavigationOrchestrator {
         return true
     }
 
-    suspend fun navigateToMapAndWire(mapDef: MapDefinition, wireId: Int): Boolean {
+    suspend fun navigateToMapAndWire(
+        mapDef: MapDefinition,
+        wireId: Int,
+        farmSpot: FarmLocation? = LocationRepository.farmSpot.value,
+    ): Boolean {
         Log.d(TAG, "[NAV] navigate map=${mapDef.name} wire=$wireId")
 
         if (!mapDef.isNavigable()) {
             Log.w(TAG, "[NAV] map not navigable id=${mapDef.id}")
             return false
+        }
+
+        if (NavigationWaitActions.isOnConfiguredMap(mapDef, farmSpot)) {
+            Log.d(TAG, "[NAV] skip teleport; already on configured map")
+            if (!WireSwitchActions.switchToWire(mapDef, wireId)) {
+                Log.w(TAG, "[NAV] switch_to_wire failed")
+                return false
+            }
+            return true
         }
 
         cleanGameUi()

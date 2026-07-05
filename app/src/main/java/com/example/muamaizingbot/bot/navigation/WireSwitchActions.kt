@@ -14,10 +14,16 @@ import kotlinx.coroutines.delay
 object WireSwitchActions {
 
     private const val TAG = "WireSwitch"
-    private const val WIRE_THRESHOLD = 0.8f
+    private const val WIRE_THRESHOLD = 0.75f
+    private const val WIRE_ENTER_THRESHOLD = 0.52f
+    private const val WIRE_SELECTED_THRESHOLD = 0.65f
+    /** PC bot tap on Switch Line @ 2560×1440 (log: tap 1279 1102). */
+    private const val WIRE_ENTER_REF_X = 1279
+    private const val WIRE_ENTER_REF_Y = 1102
     private const val SCROLL_WAIT_MS = 1000L
     private const val POPUP_OPEN_WAIT_MS = 1000L
-    private const val WIRE_SELECT_WAIT_MS = 1000L
+    private const val WIRE_SELECT_WAIT_MS = 1500L
+    private const val WIRE_ENTER_WAIT_MS = 4000L
 
     suspend fun switchToWire(mapDef: MapDefinition, wireId: Int): Boolean {
         val wire = wireId.coerceAtLeast(1)
@@ -61,19 +67,17 @@ object WireSwitchActions {
 
         val wireMatch = findWireOptionWithScroll(config, wire) ?: return false
 
-        val confirmOk = if (isWireRowSelected(config, wireMatch)) {
+        if (isWireRowSelected(config, wireMatch)) {
             Log.d(TAG, "[WIRE] wire $wire already selected in popup")
-            confirmWireSwitch(config)
         } else {
-            Log.d(TAG, "[WIRE] selecting wire $wire")
+            Log.d(TAG, "[WIRE] selecting wire $wire score=${wireMatch.score}")
             if (!NavigationVision.tapMatch(wireMatch)) {
                 return false
             }
             delay(WIRE_SELECT_WAIT_MS)
-            confirmWireSwitch(config)
         }
 
-        if (!confirmOk) {
+        if (!confirmWireSwitch(config)) {
             return false
         }
 
@@ -83,7 +87,7 @@ object WireSwitchActions {
                     Log.d(TAG, "[WIRE] confirmed via HUD")
                     return true
                 }
-                Log.w(TAG, "[WIRE] HUD not confirmed after switch")
+                Log.w(TAG, "[WIRE] HUD not confirmed after switch — continuing (enter tapped)")
             }
         }
 
@@ -131,7 +135,7 @@ object WireSwitchActions {
         repeat(maxAttempts) { attempt ->
             val match = NavigationVision.findTemplate(optionPath, WIRE_THRESHOLD)
             if (match != null) {
-                Log.d(TAG, "[WIRE] option found attempt=${attempt + 1}")
+                Log.d(TAG, "[WIRE] option found attempt=${attempt + 1} score=${match.score}")
                 return match
             }
             if (attempt < maxAttempts - 1) {
@@ -150,17 +154,49 @@ object WireSwitchActions {
         wireMatch: com.example.muamaizingbot.vision.template.PcTemplateMatchResult,
     ): Boolean {
         val region = NavigationVision.wireRowRegion(wireMatch)
-        return NavigationVision.findTemplate(config.templates.selected, WIRE_THRESHOLD, region) != null
+        return NavigationVision.findTemplate(
+            config.templates.selected,
+            WIRE_SELECTED_THRESHOLD,
+            region,
+        ) != null
     }
 
     private suspend fun confirmWireSwitch(config: WireSwitchConfig): Boolean {
-        val enter = NavigationVision.findTemplate(config.templates.enterButton, WIRE_THRESHOLD)
-            ?: run {
-                Log.w(TAG, "[WIRE] enter button not found")
-                return false
-            }
-        Log.d(TAG, "[WIRE] confirming switch wait=${config.switchWaitSeconds}s")
-        NavigationVision.tapMatch(enter)
+        val enterPath = config.templates.enterButton
+        val enterRoi = NavigationVision.wirePopupEnterRoi(config.popupScroll)
+
+        var enter = NavigationVision.waitForTemplate(
+            assetPath = enterPath,
+            threshold = WIRE_ENTER_THRESHOLD,
+            timeoutMs = WIRE_ENTER_WAIT_MS,
+            pollMs = 300L,
+            roi = enterRoi,
+        )
+        if (enter == null) {
+            enter = NavigationVision.waitForTemplate(
+                assetPath = enterPath,
+                threshold = WIRE_ENTER_THRESHOLD,
+                timeoutMs = 1500L,
+                pollMs = 300L,
+            )
+        }
+
+        if (enter != null) {
+            Log.d(
+                TAG,
+                "[WIRE] confirming switch score=${enter.score} at=(${enter.centerX},${enter.centerY}) " +
+                    "wait=${config.switchWaitSeconds}s"
+            )
+            NavigationVision.tapMatch(enter)
+            delay(config.switchWaitSeconds * 1000L)
+            return true
+        }
+
+        NavigationVision.logBestScore(enterPath, enterRoi)
+        Log.w(TAG, "[WIRE] enter button not found — fallback ref tap ($WIRE_ENTER_REF_X,$WIRE_ENTER_REF_Y)")
+        if (!NavigationVision.tap(WIRE_ENTER_REF_X, WIRE_ENTER_REF_Y)) {
+            return false
+        }
         delay(config.switchWaitSeconds * 1000L)
         return true
     }

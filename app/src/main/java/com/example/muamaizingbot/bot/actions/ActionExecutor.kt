@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.muamaizingbot.bot.combat.GameActions
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.input.InputController
+import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.template.PcTemplateMatcher
 import com.example.muamaizingbot.vision.template.TemplateRepository
 import kotlin.coroutines.resume
@@ -29,7 +30,8 @@ object ActionExecutor {
         }
     }
 
-    private suspend fun tap(x: Int, y: Int): Boolean {
+    private suspend fun tap(refX: Int, refY: Int): Boolean {
+        val (x, y) = RefCoords.scalePoint(refX, refY)
         val success = suspendCancellableCoroutine { continuation ->
             InputController.tap(x, y) { result ->
                 if (continuation.isActive) {
@@ -37,17 +39,19 @@ object ActionExecutor {
                 }
             }
         }
-        Log.d(TAG, "[ACTION] tap x=$x y=$y success=$success")
+        Log.d(TAG, "[ACTION] tap ref=($refX,$refY) screen=($x,$y) success=$success")
         return success
     }
 
     private suspend fun swipe(
-        x1: Int,
-        y1: Int,
-        x2: Int,
-        y2: Int,
+        refX1: Int,
+        refY1: Int,
+        refX2: Int,
+        refY2: Int,
         durationMs: Long
     ): Boolean {
+        val (x1, y1) = RefCoords.scalePoint(refX1, refY1)
+        val (x2, y2) = RefCoords.scalePoint(refX2, refY2)
         val success = suspendCancellableCoroutine { continuation ->
             InputController.swipe(x1, y1, x2, y2, durationMs) { result ->
                 if (continuation.isActive) {
@@ -94,10 +98,22 @@ object ActionExecutor {
                     "[ACTION] tapTemplate name=$templateName score=${match.score} " +
                         "tap=(${match.centerX},${match.centerY})"
                 )
-                tap(match.centerX, match.centerY)
+                tapScreen(match.centerX, match.centerY)
             }
         } finally {
             frame.recycle()
         }
+    }
+
+    private suspend fun tapScreen(x: Int, y: Int): Boolean {
+        val success = suspendCancellableCoroutine { continuation ->
+            InputController.tap(x, y) { result ->
+                if (continuation.isActive) {
+                    continuation.resume(result)
+                }
+            }
+        }
+        Log.d(TAG, "[ACTION] tapScreen x=$x y=$y success=$success")
+        return success
     }
 }

@@ -5,6 +5,7 @@ import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.vision.navigation.NavigationVision
 
 object MapCheckActions {
 
@@ -27,8 +28,16 @@ object MapCheckActions {
             return false
         }
 
-        val onMap = NavigationWaitActions.isCurrentMap(mapDef)
-        Log.d(TAG, "[MAP_CHECK] expected=$mapId onMap=$onMap")
+        val presence = NavigationWaitActions.detectMapPresence(mapDef, farmSpot)
+        val onMap = presence != NavigationWaitActions.MapPresence.NONE
+        if (onMap) {
+            Log.d(TAG, "[MAP_CHECK] expected=$mapId onMap=true via=$presence")
+        } else {
+            mapDef.navigation?.currentMapTemplate?.takeIf { it.isNotBlank() }?.let { path ->
+                NavigationVision.logBestScore(path)
+            }
+            Log.d(TAG, "[MAP_CHECK] expected=$mapId onMap=false")
+        }
         return onMap
     }
 }

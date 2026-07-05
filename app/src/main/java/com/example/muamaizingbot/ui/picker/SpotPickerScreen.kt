@@ -58,6 +58,8 @@ import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.vision.coord.RefCoords
+import com.example.muamaizingbot.vision.template.TemplateAssets
 import java.util.Locale
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -215,16 +217,16 @@ fun SpotPickerScreen(
 
         if (mapDef?.hasMaintenanceImage() == true) {
             ZoomableMapPicker(
-                assetPath = mapDef.maintenance!!.mapUiImageAssetPath,
-                imageWidth = mapDef.maintenance.imageWidth,
-                imageHeight = mapDef.maintenance.imageHeight,
+                canonicalAssetPath = mapDef.maintenance!!.mapUiImageAssetPath,
+                refImageWidth = RefCoords.REF_WIDTH,
+                refImageHeight = RefCoords.REF_HEIGHT,
                 selectedX = selectedX,
                 selectedY = selectedY,
-                onSelect = { x, y ->
-                    selectedX = x
-                    selectedY = y
+                onSelect = { refX, refY ->
+                    selectedX = refX
+                    selectedY = refY
                     if (CoordinateMapping.hasMapping(mapDef)) {
-                        val coords = CoordinateMapping.pixelToMapCoord(mapDef, x, y)
+                        val coords = CoordinateMapping.pixelToMapCoord(mapDef, refX, refY)
                         coordX = coords?.first
                         coordY = coords?.second
                     } else {
@@ -422,26 +424,43 @@ private fun WireDropdown(
 
 @Composable
 private fun ZoomableMapPicker(
-    assetPath: String,
-    imageWidth: Int,
-    imageHeight: Int,
+    canonicalAssetPath: String,
+    refImageWidth: Int,
+    refImageHeight: Int,
     selectedX: Int,
     selectedY: Int,
     onSelect: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val bitmap = remember(assetPath) {
+    val resolutionKey = TemplateAssets.templateResolutionKey()
+    val physicalPath = remember(canonicalAssetPath, resolutionKey) {
+        TemplateAssets.toPhysicalPath(canonicalAssetPath, resolutionKey)
+    }
+    val bitmap = remember(physicalPath) {
         runCatching {
-            context.assets.open(assetPath).use { stream ->
+            context.assets.open(physicalPath).use { stream ->
                 BitmapFactory.decodeStream(stream)?.asImageBitmap()
             }
         }.getOrNull()
     }
 
-    var zoom by remember(assetPath) { mutableFloatStateOf(MIN_ZOOM) }
-    var panX by remember(assetPath) { mutableFloatStateOf(0f) }
-    var panY by remember(assetPath) { mutableFloatStateOf(0f) }
+    val imageWidth = bitmap?.width ?: refImageWidth
+    val imageHeight = bitmap?.height ?: refImageHeight
+    val displaySelectedX = if (selectedX >= 0) {
+        selectedX * imageWidth / refImageWidth
+    } else {
+        -1
+    }
+    val displaySelectedY = if (selectedY >= 0) {
+        selectedY * imageHeight / refImageHeight
+    } else {
+        -1
+    }
+
+    var zoom by remember(physicalPath) { mutableFloatStateOf(MIN_ZOOM) }
+    var panX by remember(physicalPath) { mutableFloatStateOf(0f) }
+    var panY by remember(physicalPath) { mutableFloatStateOf(0f) }
 
     Column(
         modifier = modifier,
@@ -518,7 +537,7 @@ private fun ZoomableMapPicker(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(assetPath, zoom, viewportW, viewportH) {
+                    .pointerInput(physicalPath, zoom, viewportW, viewportH) {
                         coroutineScope {
                             launch {
                                 detectTapGestures { tap ->
@@ -531,9 +550,11 @@ private fun ZoomableMapPicker(
                                     }
                                     val relX = (tap.x - left) / currentTotalScale
                                     val relY = (tap.y - top) / currentTotalScale
-                                    val realX = relX.roundToInt().coerceIn(0, imageWidth)
-                                    val realY = relY.roundToInt().coerceIn(0, imageHeight)
-                                    onSelect(realX, realY)
+                                    val localX = relX.roundToInt().coerceIn(0, imageWidth)
+                                    val localY = relY.roundToInt().coerceIn(0, imageHeight)
+                                    val refX = (localX.toLong() * refImageWidth / imageWidth).toInt()
+                                    val refY = (localY.toLong() * refImageHeight / imageHeight).toInt()
+                                    onSelect(refX, refY)
                                 }
                             }
                             if (zoom > MIN_ZOOM) {
@@ -557,9 +578,9 @@ private fun ZoomableMapPicker(
                             dstOffset = IntOffset(imageLeft.roundToInt(), imageTop.roundToInt()),
                             dstSize = IntSize(scaledW.roundToInt(), scaledH.roundToInt()),
                         )
-                        if (selectedX >= 0 && selectedY >= 0) {
-                            val markerX = imageLeft + selectedX * totalScale
-                            val markerY = imageTop + selectedY * totalScale
+                        if (displaySelectedX >= 0 && displaySelectedY >= 0) {
+                            val markerX = imageLeft + displaySelectedX * totalScale
+                            val markerY = imageTop + displaySelectedY * totalScale
                             drawCircle(
                                 color = Color(0xFF22C55E),
                                 radius = 10f,

@@ -5,6 +5,9 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.example.muamaizingbot.settings.ResolutionSettingsRepository
+import com.example.muamaizingbot.vision.template.TemplateAssets
+import com.example.muamaizingbot.vision.template.TemplateRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,8 +22,14 @@ object ScreenCaptureManager {
     @Volatile
     private var latestBitmap: Bitmap? = null
 
+    @Volatile
+    private var lastAutoTemplateResolution: String? = null
+
     internal fun setActive(active: Boolean) {
         _isActive.value = active
+        if (!active) {
+            lastAutoTemplateResolution = null
+        }
         Log.d(TAG, "[CAPTURE] active=$active")
     }
 
@@ -28,6 +37,22 @@ object ScreenCaptureManager {
         synchronized(this) {
             latestBitmap?.recycle()
             latestBitmap = frame
+        }
+        maybeReloadTemplatesForCapture(frame.width, frame.height)
+    }
+
+    private fun maybeReloadTemplatesForCapture(width: Int, height: Int) {
+        if (!ResolutionSettingsRepository.preset.value.isAuto) {
+            return
+        }
+        val key = TemplateAssets.snapToSupported(width, height)
+        if (key == lastAutoTemplateResolution) {
+            return
+        }
+        lastAutoTemplateResolution = key
+        if (TemplateRepository.currentResolutionKey() != key) {
+            Log.d(TAG, "[CAPTURE] reloading templates for ${width}x$height -> $key")
+            TemplateRepository.reload(key)
         }
     }
 

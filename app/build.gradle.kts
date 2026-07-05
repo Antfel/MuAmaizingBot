@@ -15,8 +15,8 @@ android {
         applicationId = "com.example.muamaizingbot"
         minSdk = 28
         targetSdk = 36
-        versionCode = 3
-        versionName = "1.0.2"
+        versionCode = 5
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -27,6 +27,13 @@ android {
             dimension = "abi"
             ndk {
                 abiFilters += listOf("arm64-v8a")
+            }
+        }
+        /** Samsung A13 and other 32-bit ARM phones (armeabi-v7a only). */
+        create("arm32") {
+            dimension = "abi"
+            ndk {
+                abiFilters += listOf("armeabi-v7a")
             }
         }
         create("x86_64") {

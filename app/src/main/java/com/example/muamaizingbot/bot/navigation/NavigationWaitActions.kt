@@ -15,6 +15,12 @@ import kotlinx.coroutines.delay
 object NavigationWaitActions {
 
     private const val TAG = "NavWait"
+    /** HUD map name template — 1920×1080 PNGs often score below JSON threshold (0.72). */
+    const val MAPHUD_TEMPLATE_THRESHOLD = 0.55f
+    /** Min template score to trust OCR coords (avoids Lorencia / wrong zone false positives). */
+    private const val WEAK_MAP_TEMPLATE_FLOOR = 0.35f
+    /** Near spot tolerance when template is a weak match (map check only). */
+    private const val MAP_CHECK_NEAR_SPOT_TOLERANCE = 25
     private const val AUTO_NAV_TEMPLATE = "templates/mu/ui/common/auto_navigating.png"
     private const val AUTO_NAV_THRESHOLD = 0.70f
     private const val AUTO_NAV_TIMEOUT_MS = 180_000L
@@ -45,7 +51,7 @@ object NavigationWaitActions {
             pollMs = 500L,
             label = "map_loaded",
         ) {
-            isCurrentMap(mapDef) && !MapWindowActions.isMapWindowOpen()
+            isOnConfiguredMap(mapDef, null) && !MapWindowActions.isMapWindowOpen()
         }
         if (loaded) {
             Log.d(TAG, "[MAP_LOAD] confirmed map=${mapDef.id}")
@@ -66,7 +72,7 @@ object NavigationWaitActions {
         }
 
         val ready = AdaptiveWait.until(timeoutMs = timeoutMs, label = "world_ready") {
-            isCurrentMap(mapDef)
+            isOnConfiguredMap(mapDef, null)
         }
         if (ready) {
             Log.d(TAG, "[WORLD_READY] map=${mapDef.id}")
@@ -84,7 +90,7 @@ object NavigationWaitActions {
 
         var hudStable = 0
         val hudReady = AdaptiveWait.until(timeoutMs = timeoutMs, label = "zone_hud_stable") {
-            if (isCurrentMap(mapDef)) {
+            if (isOnConfiguredMap(mapDef, null)) {
                 hudStable++
                 hudStable >= 2
             } else {
@@ -119,13 +125,92 @@ object NavigationWaitActions {
         return waitForScreenStability()
     }
 
-    suspend fun isCurrentMap(mapDef: MapDefinition): Boolean {
+    enum class MapPresence {
+        TEMPLATE,
+        COORDS_AT_SPOT,
+        COORDS_NEAR_SPOT,
+        NONE,
+    }
+
+    suspend fun isCurrentMap(mapDef: MapDefinition, threshold: Float? = null): Boolean {
         val navigation = mapDef.navigation ?: return false
         val template = navigation.currentMapTemplate
         if (template.isBlank()) {
             return false
         }
-        return NavigationVision.findTemplate(template, navigation.currentMapThreshold) != null
+        val effectiveThreshold = threshold ?: navigation.currentMapThreshold
+        return NavigationVision.findTemplate(template, effectiveThreshold) != null
+    }
+
+    suspend fun detectMapPresence(
+        mapDef: MapDefinition,
+        farmSpot: FarmLocation?,
+    ): MapPresence {
+        if (isCurrentMap(mapDef, MAPHUD_TEMPLATE_THRESHOLD)) {
+            return MapPresence.TEMPLATE
+        }
+
+        val templateScore = currentMapTemplateScore(mapDef)
+        if (templateScore < WEAK_MAP_TEMPLATE_FLOOR) {
+            return MapPresence.NONE
+        }
+
+        if (farmSpot == null || farmSpot.map != mapDef.id) {
+            return MapPresence.NONE
+        }
+
+        if (isAtFarmSpot(farmSpot, mapDef)) {
+            return MapPresence.COORDS_AT_SPOT
+        }
+        if (isNearFarmSpot(farmSpot, mapDef, MAP_CHECK_NEAR_SPOT_TOLERANCE)) {
+            return MapPresence.COORDS_NEAR_SPOT
+        }
+        return MapPresence.NONE
+    }
+
+    suspend fun isOnConfiguredMap(mapDef: MapDefinition, farmSpot: FarmLocation?): Boolean {
+        return detectMapPresence(mapDef, farmSpot) != MapPresence.NONE
+    }
+
+    suspend fun isAtFarmSpot(location: FarmLocation, mapDef: MapDefinition?): Boolean {
+        return coordDistanceToSpot(location, mapDef)?.let { it <= location.arrivalRadius } == true
+    }
+
+    private suspend fun isNearFarmSpot(
+        location: FarmLocation,
+        mapDef: MapDefinition?,
+        tolerance: Int,
+    ): Boolean {
+        return coordDistanceToSpot(location, mapDef)?.let { it <= tolerance } == true
+    }
+
+    private suspend fun coordDistanceToSpot(
+        location: FarmLocation,
+        mapDef: MapDefinition?,
+    ): Int? {
+        if (location.coordX == null || location.coordY == null) {
+            return null
+        }
+        val current = readHudCoordinates(mapDef) ?: return null
+        return manhattanDistance(
+            current.first,
+            current.second,
+            location.coordX,
+            location.coordY,
+        )
+    }
+
+    private suspend fun currentMapTemplateScore(mapDef: MapDefinition): Float {
+        val template = mapDef.navigation?.currentMapTemplate ?: return 0f
+        if (template.isBlank()) {
+            return 0f
+        }
+        val frame = NavigationVision.captureFrame() ?: return 0f
+        return try {
+            NavigationVision.probeOnFrame(frame, template, null).score
+        } finally {
+            frame.recycle()
+        }
     }
 
     suspend fun waitUntilNavigationComplete(): Boolean {

@@ -28,12 +28,13 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APKs (arm64 + x86_64)
-        run: ./gradlew assembleArm64Debug assembleX86_64Debug --no-daemon --stacktrace
+      - name: Build debug APKs (arm32 + arm64 + x86_64)
+        run: ./gradlew assembleArm32Debug assembleArm64Debug assembleX86_64Debug --no-daemon --stacktrace
 
       - name: Prepare release artifacts
         run: |
           VERSION=$(grep versionName app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
+          cp app/build/outputs/apk/arm32/debug/app-arm32-debug.apk "MuAmaizingBot-${VERSION}-arm32-debug.apk"
           cp app/build/outputs/apk/arm64/debug/app-arm64-debug.apk "MuAmaizingBot-${VERSION}-arm64-debug.apk"
           cp app/build/outputs/apk/x86_64/debug/app-x86_64-debug.apk "MuAmaizingBot-${VERSION}-x86_64-debug.apk"
 

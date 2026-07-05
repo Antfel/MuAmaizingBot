@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.input.InputController
 import com.example.muamaizingbot.profile.LocationRepository
+import com.example.muamaizingbot.vision.coord.RefCoords
 import kotlin.coroutines.resume
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -101,9 +102,10 @@ object GameActions {
             Log.w(TAG, "[NAV] tapFarmSpot failed reason=no_farm_spot")
             return false
         }
-        Log.d(TAG, "[NAV] tapping farm spot map=${spot.map} wire=${spot.wire} (${spot.x},${spot.y})")
+        Log.d(TAG, "[NAV] tapping farm spot map=${spot.map} wire=${spot.wire} ref=(${spot.x},${spot.y})")
+        val (x, y) = RefCoords.scalePoint(spot.x, spot.y)
         return suspendCancellableCoroutine { continuation ->
-            InputController.tap(spot.x, spot.y) { result ->
+            InputController.tap(x, y) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }

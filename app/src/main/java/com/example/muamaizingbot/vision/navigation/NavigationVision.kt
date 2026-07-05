@@ -7,7 +7,11 @@ import com.example.muamaizingbot.util.AdaptiveWait
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.input.InputController
 import com.example.muamaizingbot.maps.SwipeCoords
+import com.example.muamaizingbot.vision.coord.RefCoords
+import com.example.muamaizingbot.vision.navigation.ScrollSettleWait
+import com.example.muamaizingbot.vision.roi.ScaledRoi
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
+import kotlin.math.roundToInt
 import com.example.muamaizingbot.vision.template.PcTemplateMatcher
 import com.example.muamaizingbot.vision.template.TemplateRepository
 import kotlin.coroutines.resume
@@ -79,23 +83,98 @@ object NavigationVision {
         maxAttempts: Int = 10,
         swipe: SwipeCoords? = null,
     ): PcTemplateMatchResult? {
+        var bestScore = 0f
+
         for (attempt in 1..maxAttempts) {
-            val match = findTemplate(assetPath, threshold)
-            if (match != null) {
+            val frame = captureFrame()
+            if (frame == null) {
+                Log.w(TAG, "[VISION] no frame path=$assetPath attempt=$attempt")
+                break
+            }
+
+            val roi = mapListRoi(swipe, frame.width, frame.height)
+            val probe = try {
+                probeOnFrame(frame, assetPath, roi)
+            } finally {
+                frame.recycle()
+            }
+
+            if (probe.score > bestScore) {
+                bestScore = probe.score
+            }
+
+            Log.d(
+                TAG,
+                "[VISION] scroll probe path=${assetPath.substringAfterLast('/')} " +
+                    "attempt=$attempt/$maxAttempts score=${"%.3f".format(probe.score)} " +
+                    "best=${"%.3f".format(bestScore)}"
+            )
+
+            if (probe.score >= threshold) {
                 Log.d(
                     TAG,
-                    "[VISION] found path=$assetPath score=${match.score} attempt=$attempt"
+                    "[VISION] found path=$assetPath score=${probe.score} attempt=$attempt"
                 )
-                return match
+                return probe
             }
-            Log.d(TAG, "[VISION] not found path=$assetPath attempt=$attempt/$maxAttempts")
+
             if (swipe != null && attempt < maxAttempts) {
                 swipe(swipe)
                 delay(MAP_LIST_SCROLL_WAIT_MS)
             }
         }
-        Log.w(TAG, "[VISION] exhausted scroll path=$assetPath")
+
+        Log.w(
+            TAG,
+            "[VISION] exhausted scroll path=$assetPath bestScore=${"%.3f".format(bestScore)} " +
+                "needed=$threshold"
+        )
         return null
+    }
+
+    fun mapListRoi(swipe: SwipeCoords?, screenWidth: Int, screenHeight: Int): Rect? {
+        if (swipe == null) {
+            return null
+        }
+        return ScrollSettleWait.listRegionRect(swipe, screenWidth, screenHeight)
+    }
+
+    fun mapListRoi(swipe: SwipeCoords?): Rect? {
+        val size = ScreenCaptureManager.peekLatestBitmapSize() ?: return null
+        return mapListRoi(swipe, size.first, size.second)
+    }
+
+    /** Lower strip of the wire popup where the Switch Line confirm button lives. */
+    fun wirePopupEnterRoi(swipe: SwipeCoords?, screenWidth: Int, screenHeight: Int): Rect {
+        if (swipe != null) {
+            val panel = ScrollSettleWait.listRegionRect(swipe, screenWidth, screenHeight)
+            val enterTop = panel.top + (panel.height() * 0.50f).roundToInt()
+            return Rect(panel.left, enterTop, panel.right, panel.bottom)
+        }
+        return ScaledRoi.fromRefRect(680, 760, 1180, 850, screenWidth, screenHeight)
+    }
+
+    fun wirePopupEnterRoi(swipe: SwipeCoords?): Rect? {
+        val size = ScreenCaptureManager.peekLatestBitmapSize() ?: return null
+        return wirePopupEnterRoi(swipe, size.first, size.second)
+    }
+
+    suspend fun logBestScore(assetPath: String, roi: Rect? = null) {
+        val frame = captureFrame() ?: run {
+            Log.w(TAG, "[VISION] best score skipped path=$assetPath reason=no_frame")
+            return
+        }
+        try {
+            val probe = probeOnFrame(frame, assetPath, roi)
+            Log.w(
+                TAG,
+                "[VISION] best score path=$assetPath score=${"%.3f".format(probe.score)} " +
+                    "at=(${probe.bestX},${probe.bestY}) template=${probe.templateWidth}x${probe.templateHeight} " +
+                    "frame=${frame.width}x${frame.height}"
+            )
+        } finally {
+            frame.recycle()
+        }
     }
 
     suspend fun waitForTemplate(
@@ -134,7 +213,7 @@ object NavigationVision {
     }
 
     suspend fun tapMatch(match: PcTemplateMatchResult): Boolean {
-        return tap(match.centerX, match.centerY)
+        return tapScreen(match.centerX, match.centerY)
     }
 
     suspend fun tapTemplate(assetPath: String, threshold: Float, roi: Rect? = null): Boolean {
@@ -142,7 +221,14 @@ object NavigationVision {
         return tapMatch(match)
     }
 
-    suspend fun tap(x: Int, y: Int): Boolean {
+    /** Tap at reference coordinates (authored for 2560×1440). */
+    suspend fun tap(refX: Int, refY: Int): Boolean {
+        val (x, y) = RefCoords.scalePoint(refX, refY)
+        return tapScreen(x, y)
+    }
+
+    /** Tap at absolute screen pixels (e.g. template match center). */
+    suspend fun tapScreen(x: Int, y: Int): Boolean {
         return suspendCancellableCoroutine { continuation ->
             InputController.tap(x, y) { result ->
                 if (continuation.isActive) {
@@ -153,13 +239,14 @@ object NavigationVision {
     }
 
     suspend fun swipe(coords: SwipeCoords): Boolean {
+        val scaled = RefCoords.scaleSwipe(coords)
         return suspendCancellableCoroutine { continuation ->
             InputController.swipe(
-                coords.x1,
-                coords.y1,
-                coords.x2,
-                coords.y2,
-                coords.durationMs,
+                scaled.x1,
+                scaled.y1,
+                scaled.x2,
+                scaled.y2,
+                scaled.durationMs,
             ) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
@@ -169,11 +256,20 @@ object NavigationVision {
     }
 
     fun wireRowRegion(match: PcTemplateMatchResult): Rect {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize() ?: RefCoords.activeScreenSize()
+        return wireRowRegion(match, w, h)
+    }
+
+    fun wireRowRegion(match: PcTemplateMatchResult, screenWidth: Int, screenHeight: Int): Rect {
+        val padLeft = RefCoords.scaleX(40, screenWidth)
+        val padTop = RefCoords.scaleY(30, screenHeight)
+        val padRight = RefCoords.scaleX(300, screenWidth)
+        val padBottom = RefCoords.scaleY(80, screenHeight)
         return Rect(
-            maxOf(0, match.bestX - 40),
-            maxOf(0, match.bestY - 30),
-            match.bestX + match.templateWidth + 300,
-            match.bestY + match.templateHeight + 80,
+            maxOf(0, match.bestX - padLeft),
+            maxOf(0, match.bestY - padTop),
+            match.bestX + match.templateWidth + padRight,
+            match.bestY + match.templateHeight + padBottom,
         )
     }
 
