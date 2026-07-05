@@ -2,6 +2,7 @@ package com.example.muamaizingbot.vision.coord
 
 import android.graphics.Bitmap
 import android.graphics.Rect
+import com.example.muamaizingbot.calibration.CalibrationRepository
 import com.example.muamaizingbot.maps.SwipeCoords
 import com.example.muamaizingbot.settings.ResolutionSettingsRepository
 import kotlin.math.abs
@@ -30,6 +31,9 @@ object RefCoords {
     }
 
     fun scalePoint(refX: Int, refY: Int, screenWidth: Int, screenHeight: Int): Pair<Int, Int> {
+        CalibrationRepository.transformFor(screenWidth, screenHeight)?.let { transform ->
+            return transform.map(refX, refY)
+        }
         return scaleX(refX, screenWidth) to scaleY(refY, screenHeight)
     }
 

@@ -28,6 +28,7 @@ import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.ui.home.HomeScreen
 import com.example.muamaizingbot.ui.picker.LocationPickerType
 import com.example.muamaizingbot.ui.picker.SpotPickerScreen
+import com.example.muamaizingbot.ui.settings.CalibrationScreen
 import com.example.muamaizingbot.ui.settings.PotionConfigScreen
 import com.example.muamaizingbot.ui.settings.ProfileConfigureScreen
 import com.example.muamaizingbot.ui.settings.ProfileListScreen
@@ -42,6 +43,7 @@ object Routes {
     const val SPOT_PICKER = "spot_picker/{profileStem}/{locationType}"
     const val POTION_CONFIG = "potion_config/{profileStem}"
     const val RESOLUTION = "resolution"
+    const val CALIBRATION = "calibration"
 
     fun profileConfigure(profileStem: String) = "profile_configure/$profileStem"
 
@@ -89,6 +91,12 @@ fun AppNavigation(
                             navController.navigate(Routes.RESOLUTION)
                         }
                     },
+                    onOpenCalibration = {
+                        scope.launch {
+                            drawerState.close()
+                            navController.navigate(Routes.CALIBRATION)
+                        }
+                    },
                 )
             }
         },
@@ -127,6 +135,12 @@ fun AppNavigation(
                 composable(Routes.RESOLUTION) {
                     ResolutionSettingsScreen(
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.CALIBRATION) {
+                    CalibrationScreen(
+                        onBack = { navController.popBackStack() },
+                        onRequestCapture = onRequestCapture,
                     )
                 }
                 composable(

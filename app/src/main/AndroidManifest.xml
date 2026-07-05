@@ -41,6 +41,15 @@
         </service>
 
         <service
+            android:name=".overlay.CalibrationOverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="HUD calibration overlay" />
+        </service>
+
+        <service
             android:name=".capture.ScreenCaptureService"
             android:exported="false"
             android:foregroundServiceType="mediaProjection" />
