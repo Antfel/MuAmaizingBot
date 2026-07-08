@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.calibration.CalibrationRepository
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.settings.ResolutionPreset
 import com.example.muamaizingbot.settings.ResolutionSettingsRepository
@@ -50,6 +51,7 @@ fun ResolutionSettingsScreen(
     val selectedPreset by ResolutionSettingsRepository.preset.collectAsState()
     val detection by ResolutionSettingsRepository.detectionResult.collectAsState()
     val captureActive by ScreenCaptureManager.isActive.collectAsState()
+    val calibration by CalibrationRepository.state.collectAsState()
     val detectedSize = ResolutionSettingsRepository.detectedCaptureSize()
     val activeSize = ResolutionSettingsRepository.activeScreenSize()
     val captureMatches = ResolutionSettingsRepository.captureMatchesPreset()
@@ -107,8 +109,24 @@ fun ResolutionSettingsScreen(
 
             InfoCard(
                 title = "Templates cargados",
-                value = "templates/${TemplateRepository.currentResolutionKey()}/mu/",
+                value = when {
+                    TemplateRepository.isUsingCalibratedTemplates() -> {
+                        val size = TemplateRepository.loadedCaptureSize()
+                        "Calibrados en dispositivo (${size?.first ?: "?"}×${size?.second ?: "?"})"
+                    }
+                    else -> "Preset templates/${TemplateRepository.currentResolutionKey()}/mu/"
+                },
             )
+
+            if (calibration.isComplete && TemplateRepository.isUsingCalibratedTemplates()) {
+                Text(
+                    text = "Con calibración HUD activa, los templates vienen del dispositivo " +
+                        "(${calibration.captureWidth}×${calibration.captureHeight}). " +
+                        "El preset solo aplica sin calibrar.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
 
             if (detectedSize != null && selectedPreset != ResolutionPreset.AUTO && !captureMatches) {
                 Text(

@@ -239,12 +239,24 @@ object NavigationOrchestrator {
     suspend fun cleanGameUi() {
         Log.d(TAG, "[NAV] cleaning UI")
         repeat(3) {
-            val close = NavigationVision.findTemplate(MapWindowActions.CLOSE_X, 0.8f)
-            if (close == null) {
+            if (!MapWindowActions.isMapWindowOpen()) {
+                return
+            }
+            val close = NavigationVision.findTemplate(
+                MapWindowActions.CLOSE_X,
+                NavigationTemplateThresholds.closeX(),
+            ) ?: return
+            if (!MapWindowActions.isLikelyPanelCloseButton(close.centerX, close.centerY)) {
+                Log.d(TAG, "[NAV] skip UI clean; close_x outside panel at=(${close.centerX},${close.centerY})")
                 return
             }
             NavigationVision.tapMatch(close)
-            if (NavigationVision.waitUntilAbsent(MapWindowActions.CLOSE_X, 0.8f, 1500)) {
+            if (NavigationVision.waitUntilAbsent(
+                    MapWindowActions.CLOSE_X,
+                    NavigationTemplateThresholds.closeX(),
+                    1500,
+                )
+            ) {
                 return
             }
             Log.d(TAG, "[NAV] close_x still visible after tap; stopping UI clean")

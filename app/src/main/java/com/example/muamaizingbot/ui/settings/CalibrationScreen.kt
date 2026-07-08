@@ -130,9 +130,23 @@ fun CalibrationScreen(
                 )
             }
 
-            if (captureMatches) {
+            if (calibration.recalibrationRequired) {
                 Text(
-                    text = "Calibración activa para la captura actual.",
+                    text = "La resolución de captura cambió. Vuelve a calibrar el HUD.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            } else if (captureMatches) {
+                Text(
+                    text = buildString {
+                        append("Calibración activa para ${calibration.captureWidth}×${calibration.captureHeight}.")
+                        if (calibration.templatesGenerated) {
+                            append(" Templates del dispositivo: ${calibration.calibratedTemplateCount}.")
+                        } else if (calibration.isComplete) {
+                            append(" Generando templates del dispositivo…")
+                        }
+                    },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -154,12 +168,12 @@ fun CalibrationScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
                     CalibrationAnchor.ordered.forEach { anchor ->
-                        val saved = calibration.screenPoints[anchor]
+                        val saved = calibration.screenRects[anchor]
                         Text(
                             text = if (saved != null) {
-                                "${anchor.label}: (${saved.first}, ${saved.second})"
+                                "${anchor.label}: (${saved.centerX}, ${saved.centerY}) ${saved.width}×${saved.height}"
                             } else {
-                                "${anchor.label}: ref (${anchor.refX}, ${anchor.refY})"
+                                "${anchor.label}: ref (${anchor.refAnchorX}, ${anchor.refAnchorY}) · ${anchor.refTemplateWidth}×${anchor.refTemplateHeight}"
                             },
                             style = MaterialTheme.typography.bodySmall,
                         )
@@ -170,8 +184,9 @@ fun CalibrationScreen(
             Text(
                 text = "1. Abre MU Immortal en fullscreen.\n" +
                     "2. Activa captura de pantalla.\n" +
-                    "3. Inicia calibración y encaja cada rectángulo sobre el HUD.\n" +
-                    "4. Confirmar los 4 pasos (controles se mueven según el punto).",
+                    "3. Calibra los 4 puntos del HUD.\n" +
+                    "4. Al finalizar, el bot reescala y guarda templates para esta captura.\n" +
+                    "5. Si cambias resolución del juego, debes calibrar de nuevo.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

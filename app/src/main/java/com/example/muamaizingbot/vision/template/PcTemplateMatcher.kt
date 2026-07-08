@@ -17,6 +17,8 @@ object PcTemplateMatcher {
 
     /** Fine tune around pre-scaled PNG size — game text rarely matches 0.75x exactly. */
     private val FINE_SCALE_FACTORS = floatArrayOf(0.90f, 0.94f, 0.97f, 1.0f, 1.03f, 1.06f, 1.10f)
+    /** Small tolerance when templates were generated from calibration (no preset snap). */
+    private val CALIBRATED_FINE_SCALE_FACTORS = floatArrayOf(0.92f, 0.96f, 1.0f, 1.04f, 1.08f)
 
     fun findTemplate(
         source: Bitmap,
@@ -158,6 +160,9 @@ object PcTemplateMatcher {
     }
 
     private fun fineScaleFactors(): FloatArray {
+        if (TemplateRepository.isUsingCalibratedTemplates()) {
+            return CALIBRATED_FINE_SCALE_FACTORS
+        }
         return if (TemplateRepository.currentResolutionKey() == TemplateAssets.REF_RESOLUTION_KEY) {
             floatArrayOf(1f)
         } else {

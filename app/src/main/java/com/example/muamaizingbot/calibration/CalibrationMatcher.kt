@@ -4,7 +4,9 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
+import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.template.PcTemplateMatcher
+import kotlin.math.roundToInt
 
 object CalibrationMatcher {
 
@@ -13,7 +15,11 @@ object CalibrationMatcher {
 
     private val templateCache = mutableMapOf<CalibrationAnchor, Bitmap>()
 
-    fun suggestScreenPoint(
+    /**
+     * Returns frame center (top-left window position is derived from center + size).
+     * Template match locates the crop; anchor offset within the crop is applied.
+     */
+    fun suggestFrameCenter(
         context: Context,
         frame: Bitmap,
         anchor: CalibrationAnchor,
@@ -29,21 +35,30 @@ object CalibrationMatcher {
             Log.w(TAG, "[CAL] no match anchor=${anchor.id} frame=${frame.width}x${frame.height}")
             return null
         }
+        val templateCenterX = match.centerX
+        val templateCenterY = match.centerY
         Log.d(
             TAG,
-            "[CAL] suggest anchor=${anchor.id} score=${match.score} at=(${match.centerX},${match.centerY})"
+            "[CAL] suggest anchor=${anchor.id} score=${match.score} frameCenter=($templateCenterX,$templateCenterY)",
         )
-        return match.centerX to match.centerY
+        return templateCenterX to templateCenterY
     }
 
-    fun defaultScreenPoint(
+    fun defaultFrameCenter(
         frameWidth: Int,
         frameHeight: Int,
         anchor: CalibrationAnchor,
+        markerWidthPx: Int,
+        markerHeightPx: Int,
     ): Pair<Int, Int> {
-        val x = anchor.refX.toLong() * frameWidth / REF_WIDTH
-        val y = anchor.refY.toLong() * frameHeight / REF_HEIGHT
-        return x.toInt() to y.toInt()
+        val anchorX = anchor.refAnchorX.toLong() * frameWidth / REF_WIDTH
+        val anchorY = anchor.refAnchorY.toLong() * frameHeight / REF_HEIGHT
+        return anchor.frameCenterForAnchorPoint(
+            anchorX.toInt(),
+            anchorY.toInt(),
+            markerWidthPx,
+            markerHeightPx,
+        )
     }
 
     private fun loadTemplate(context: Context, anchor: CalibrationAnchor): Bitmap? {
@@ -59,6 +74,6 @@ object CalibrationMatcher {
         }.getOrNull()
     }
 
-    private const val REF_WIDTH = 2560
-    private const val REF_HEIGHT = 1440
+    private const val REF_WIDTH = RefCoords.REF_WIDTH
+    private const val REF_HEIGHT = RefCoords.REF_HEIGHT
 }

@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -28,9 +29,12 @@ import com.example.muamaizingbot.R
 import com.example.muamaizingbot.calibration.CalibrationAnchor
 import com.example.muamaizingbot.calibration.CalibrationMatcher
 import com.example.muamaizingbot.calibration.CalibrationRepository
+import com.example.muamaizingbot.calibration.CalibrationScreenRect
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.overlay.ui.CalibrationInstructionPanel
 import com.example.muamaizingbot.overlay.ui.CalibrationMarker
+import com.example.muamaizingbot.overlay.ui.CalibrationMinimizedBubble
+import com.example.muamaizingbot.overlay.ui.OverlayHudStyle
 import com.example.muamaizingbot.ui.theme.MUAmaizingBotTheme
 import com.example.muamaizingbot.vision.coord.RefCoords
 import kotlin.math.roundToInt
@@ -52,6 +56,10 @@ class CalibrationOverlayService : Service() {
     private var markerHeightPx by mutableIntStateOf(0)
     private var markerWidthDp by mutableFloatStateOf(48f)
     private var markerHeightDp by mutableFloatStateOf(24f)
+    private var baseMarkerWidthPx by mutableIntStateOf(0)
+    private var baseMarkerHeightPx by mutableIntStateOf(0)
+    private var scalePercent by mutableIntStateOf(100)
+    private var panelMinimized by mutableStateOf(true)
 
     override fun onCreate() {
         super.onCreate()
@@ -76,38 +84,87 @@ class CalibrationOverlayService : Service() {
 
     private fun placeStep(index: Int) {
         stepIndex = index
+        panelMinimized = true
         CalibrationOverlayManager.setStep(index)
         val anchor = CalibrationAnchor.ordered[index]
         updateMarkerDimensions(anchor)
         val frame = ScreenCaptureManager.getLatestBitmap()
         val suggested = if (frame != null) {
-            CalibrationMatcher.suggestScreenPoint(this, frame, anchor)
+            CalibrationMatcher.suggestFrameCenter(this, frame, anchor)
         } else {
             null
         }
         val (screenW, screenH) = OverlayBounds.displaySize(windowManager)
         val (defaultX, defaultY) = if (frame != null) {
-            CalibrationMatcher.defaultScreenPoint(frame.width, frame.height, anchor)
+            CalibrationMatcher.defaultFrameCenter(
+                frame.width,
+                frame.height,
+                anchor,
+                markerWidthPx,
+                markerHeightPx,
+            )
         } else {
-            CalibrationMatcher.defaultScreenPoint(screenW, screenH, anchor)
+            CalibrationMatcher.defaultFrameCenter(
+                screenW,
+                screenH,
+                anchor,
+                markerWidthPx,
+                markerHeightPx,
+            )
         }
         markerCenterX = suggested?.first ?: defaultX
         markerCenterY = suggested?.second ?: defaultY
         updateMarkerPosition()
-        updatePanelPosition(anchor)
+        updatePanelLayout(anchor)
         refreshOverlayContent()
         Log.d(TAG, "[CAL-OVERLAY] step=$index anchor=${anchor.id} marker=($markerCenterX,$markerCenterY)")
     }
 
     private fun updateMarkerDimensions(anchor: CalibrationAnchor) {
         val (w, h) = captureSize()
-        markerWidthPx = (anchor.refTemplateWidth.toLong() * w / RefCoords.REF_WIDTH).toInt()
-            .coerceAtLeast(pxFromDp(48f))
-        markerHeightPx = (anchor.refTemplateHeight.toLong() * h / RefCoords.REF_HEIGHT).toInt()
-            .coerceAtLeast(pxFromDp(24f))
+        baseMarkerWidthPx = (anchor.refTemplateWidth.toLong() * w / RefCoords.REF_WIDTH).toInt()
+            .coerceAtLeast(pxFromDp(32f))
+        baseMarkerHeightPx = anchor.heightForWidth(baseMarkerWidthPx)
+        scalePercent = 100
+        applyMarkerSize(baseMarkerWidthPx, anchor)
+    }
+
+    private fun applyMarkerSize(widthPx: Int, anchor: CalibrationAnchor) {
+        val aspect = anchor.templateAspectRatio
+        val maxW = pxFromDp(320f)
+        val maxH = pxFromDp(240f)
+        var w = widthPx.coerceIn(pxFromDp(32f), maxW)
+        var h = anchor.heightForWidth(w)
+        if (h > maxH) {
+            h = maxH
+            w = (h * aspect).roundToInt().coerceAtLeast(pxFromDp(32f))
+        }
+        markerWidthPx = w
+        markerHeightPx = h
         val density = resources.displayMetrics.density
         markerWidthDp = markerWidthPx / density
         markerHeightDp = markerHeightPx / density
+        if (baseMarkerWidthPx > 0) {
+            scalePercent = ((markerWidthPx.toFloat() / baseMarkerWidthPx) * 100f).roundToInt()
+        }
+    }
+
+    private fun applyScaleFactor(factor: Float) {
+        if (baseMarkerWidthPx <= 0) {
+            return
+        }
+        applyScalePercent((scalePercent * factor).roundToInt())
+    }
+
+    private fun applyScalePercent(percent: Int) {
+        if (baseMarkerWidthPx <= 0) {
+            return
+        }
+        val anchor = CalibrationAnchor.ordered[stepIndex]
+        scalePercent = percent.coerceIn(MIN_SCALE_PERCENT, MAX_SCALE_PERCENT)
+        val w = (baseMarkerWidthPx * scalePercent / 100f).roundToInt()
+        applyMarkerSize(w, anchor)
+        updateMarkerPosition()
     }
 
     private fun captureSize(): Pair<Int, Int> {
@@ -125,7 +182,15 @@ class CalibrationOverlayService : Service() {
 
     private fun confirmCurrentStep() {
         val anchor = CalibrationAnchor.ordered[stepIndex]
-        CalibrationRepository.recordScreenPoint(anchor, markerCenterX, markerCenterY)
+        CalibrationRepository.recordScreenRect(
+            anchor,
+            CalibrationScreenRect(
+                centerX = markerCenterX,
+                centerY = markerCenterY,
+                width = markerWidthPx,
+                height = markerHeightPx,
+            ),
+        )
         if (stepIndex + 1 >= CalibrationAnchor.ordered.size) {
             val ok = CalibrationRepository.completeSession(this)
             if (ok) {
@@ -175,14 +240,38 @@ class CalibrationOverlayService : Service() {
 
         windowManager.addView(markerView, markerParams)
         windowManager.addView(panelView, panelParams)
-        updatePanelPosition(CalibrationAnchor.ordered[stepIndex])
+        updatePanelLayout(CalibrationAnchor.ordered[stepIndex])
         updateMarkerPosition()
     }
 
-    private fun updatePanelPosition(anchor: CalibrationAnchor) {
+    private fun applyPanelMinimizedState(minimized: Boolean) {
+        panelMinimized = minimized
+        updatePanelLayout(CalibrationAnchor.ordered[stepIndex])
+        refreshOverlayContent()
+    }
+
+    private fun updatePanelLayout(anchor: CalibrationAnchor) {
         val view = panelView ?: return
         val params = panelParams ?: return
-        params.gravity = if (anchor.panelAtBottom) Gravity.BOTTOM else Gravity.TOP
+        val margin = pxFromDp(16f)
+        if (panelMinimized) {
+            val bubblePx = pxFromDp(OverlayHudStyle.bubbleSize.value)
+            params.width = bubblePx
+            params.height = bubblePx
+            params.gravity = if (anchor.panelAtBottom) {
+                Gravity.BOTTOM or Gravity.END
+            } else {
+                Gravity.TOP or Gravity.END
+            }
+            params.x = margin
+            params.y = margin
+        } else {
+            params.width = WindowManager.LayoutParams.MATCH_PARENT
+            params.height = WindowManager.LayoutParams.WRAP_CONTENT
+            params.gravity = if (anchor.panelAtBottom) Gravity.BOTTOM else Gravity.TOP
+            params.x = 0
+            params.y = 0
+        }
         windowManager.updateViewLayout(view, params)
     }
 
@@ -199,15 +288,20 @@ class CalibrationOverlayService : Service() {
 
     @Composable
     private fun renderMarker() {
+        val anchor = CalibrationAnchor.ordered[stepIndex]
         MUAmaizingBotTheme {
             CalibrationMarker(
                 frameWidth = markerWidthDp.dp,
                 frameHeight = markerHeightDp.dp,
+                scalePercent = scalePercent,
+                anchorOffsetXFraction = 0.5f + anchor.refAnchorOffsetX.toFloat() / anchor.refTemplateWidth,
+                anchorOffsetYFraction = 0.5f + anchor.refAnchorOffsetY.toFloat() / anchor.refTemplateHeight,
                 onDragBy = { dx, dy ->
                     markerCenterX += dx
                     markerCenterY += dy
                     updateMarkerPosition()
                 },
+                onScaleBy = { factor -> applyScaleFactor(factor) },
             )
         }
     }
@@ -216,16 +310,37 @@ class CalibrationOverlayService : Service() {
     private fun renderInstructionPanel() {
         val anchor = CalibrationAnchor.ordered[stepIndex]
         MUAmaizingBotTheme {
-            CalibrationInstructionPanel(
-                stepIndex = stepIndex,
-                stepLabel = anchor.label,
-                totalSteps = CalibrationAnchor.ordered.size,
-                markerX = markerCenterX,
-                markerY = markerCenterY,
-                panelAtBottom = anchor.panelAtBottom,
-                onConfirm = { confirmCurrentStep() },
-                onCancel = { cancelCalibration() },
-            )
+            if (panelMinimized) {
+                CalibrationMinimizedBubble(
+                    stepIndex = stepIndex,
+                    totalSteps = CalibrationAnchor.ordered.size,
+                    onExpand = { applyPanelMinimizedState(false) },
+                )
+            } else {
+                val (anchorX, anchorY) = anchor.anchorPointForFrameCenter(
+                    markerCenterX,
+                    markerCenterY,
+                    markerWidthPx,
+                    markerHeightPx,
+                )
+                CalibrationInstructionPanel(
+                    stepIndex = stepIndex,
+                    stepLabel = anchor.label,
+                    totalSteps = CalibrationAnchor.ordered.size,
+                    frameCenterX = markerCenterX,
+                    frameCenterY = markerCenterY,
+                    anchorX = anchorX,
+                    anchorY = anchorY,
+                    markerWidth = markerWidthPx,
+                    markerHeight = markerHeightPx,
+                    scalePercent = scalePercent,
+                    panelAtBottom = anchor.panelAtBottom,
+                    onMinimize = { applyPanelMinimizedState(true) },
+                    onScalePercentChange = { applyScalePercent(it) },
+                    onConfirm = { confirmCurrentStep() },
+                    onCancel = { cancelCalibration() },
+                )
+            }
         }
     }
 
@@ -242,6 +357,7 @@ class CalibrationOverlayService : Service() {
         params.x = markerCenterX - halfW
         params.y = markerCenterY - halfH
         windowManager.updateViewLayout(view, params)
+        markerView?.setContent { renderMarker() }
         panelView?.setContent { renderInstructionPanel() }
     }
 
@@ -296,5 +412,7 @@ class CalibrationOverlayService : Service() {
         private const val TAG = "CalOverlay"
         private const val CHANNEL_ID = "calibration_overlay"
         private const val NOTIFICATION_ID = 1002
+        private const val MIN_SCALE_PERCENT = 50
+        private const val MAX_SCALE_PERCENT = 200
     }
 }

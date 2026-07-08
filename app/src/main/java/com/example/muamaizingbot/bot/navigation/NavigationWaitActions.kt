@@ -9,16 +9,16 @@ import com.example.muamaizingbot.vision.BitmapRegionSimilarity
 import com.example.muamaizingbot.vision.coordinate.CoordinateReader
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.ScaledRoi
+import com.example.muamaizingbot.vision.template.TemplateRepository
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 object NavigationWaitActions {
 
     private const val TAG = "NavWait"
-    /** HUD map name template — 1920×1080 PNGs often score below JSON threshold (0.72). */
-    const val MAPHUD_TEMPLATE_THRESHOLD = 0.55f
     /** Min template score to trust OCR coords (avoids Lorencia / wrong zone false positives). */
     private const val WEAK_MAP_TEMPLATE_FLOOR = 0.35f
+    private const val WEAK_MAP_TEMPLATE_FLOOR_CALIBRATED = 0.50f
     /** Near spot tolerance when template is a weak match (map check only). */
     private const val MAP_CHECK_NEAR_SPOT_TOLERANCE = 25
     private const val AUTO_NAV_TEMPLATE = "templates/mu/ui/common/auto_navigating.png"
@@ -56,9 +56,9 @@ object NavigationWaitActions {
         if (loaded) {
             Log.d(TAG, "[MAP_LOAD] confirmed map=${mapDef.id}")
         } else {
-            Log.w(TAG, "[MAP_LOAD] timeout map=${mapDef.id}; continuing")
+            Log.w(TAG, "[MAP_LOAD] timeout map=${mapDef.id}")
         }
-        return true
+        return loaded
     }
 
     /** Poll until the in-world map indicator is visible (after teleport / loading). */
@@ -146,12 +146,20 @@ object NavigationWaitActions {
         mapDef: MapDefinition,
         farmSpot: FarmLocation?,
     ): MapPresence {
-        if (isCurrentMap(mapDef, MAPHUD_TEMPLATE_THRESHOLD)) {
+        val navigation = mapDef.navigation
+        val mapThreshold = navigation?.currentMapThreshold?.takeIf { it > 0f } ?: 0.72f
+
+        if (isCurrentMap(mapDef, mapThreshold)) {
             return MapPresence.TEMPLATE
         }
 
         val templateScore = currentMapTemplateScore(mapDef)
-        if (templateScore < WEAK_MAP_TEMPLATE_FLOOR) {
+        val weakFloor = if (TemplateRepository.isUsingCalibratedTemplates()) {
+            WEAK_MAP_TEMPLATE_FLOOR_CALIBRATED
+        } else {
+            WEAK_MAP_TEMPLATE_FLOOR
+        }
+        if (templateScore < weakFloor) {
             return MapPresence.NONE
         }
 

@@ -14,11 +14,21 @@ object BotRecoveryActions {
 
     private const val TAG = "Recovery"
     private const val MAX_NAV_ATTEMPTS = 2
+    private const val NAV_RETRY_COOLDOWN_MS = 15_000L
+
+    private var lastFailedNavigateMs = 0L
 
     suspend fun navigateToFarmWithRetry(reason: String): Boolean {
         if (MapCheckActions.isInConfiguredMap()) {
             Log.d(TAG, "[RECOVERY] already on farm map; skip navigate reason=$reason")
             return true
+        }
+
+        val now = System.currentTimeMillis()
+        if (now - lastFailedNavigateMs < NAV_RETRY_COOLDOWN_MS) {
+            val waitSec = (NAV_RETRY_COOLDOWN_MS - (now - lastFailedNavigateMs)) / 1000
+            Log.w(TAG, "[RECOVERY] nav cooldown ${waitSec}s reason=$reason")
+            return false
         }
 
         repeat(MAX_NAV_ATTEMPTS) { attempt ->
@@ -31,6 +41,7 @@ object BotRecoveryActions {
             }
             if (NavigationOrchestrator.goToActiveFarmSpot()) {
                 Log.d(TAG, "[RECOVERY] navigate ok reason=$reason")
+                lastFailedNavigateMs = 0L
                 return true
             }
             if (attempt < MAX_NAV_ATTEMPTS - 1) {
@@ -38,6 +49,7 @@ object BotRecoveryActions {
                 NavigationOrchestrator.cleanGameUi()
             }
         }
+        lastFailedNavigateMs = System.currentTimeMillis()
         Log.w(TAG, "[RECOVERY] navigate failed after retries reason=$reason")
         return false
     }
