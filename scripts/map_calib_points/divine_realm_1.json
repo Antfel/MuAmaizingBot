@@ -1,0 +1,24 @@
+{
+  "map_id": "divine_realm_1",
+  "pixel_space": "png_1280_converted_to_ref",
+  "points": [
+    {
+      "ref_x": 1303.0,
+      "ref_y": 840.2,
+      "game_x": 104,
+      "game_y": 47
+    },
+    {
+      "ref_x": 1729.0,
+      "ref_y": 762.4,
+      "game_x": 193,
+      "game_y": 175
+    },
+    {
+      "ref_x": 1514.0,
+      "ref_y": 548.6,
+      "game_x": 84,
+      "game_y": 175
+    }
+  ]
+}

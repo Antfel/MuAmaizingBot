@@ -23,9 +23,35 @@
   },
   "maintenance": {
     "map_ui_image": "templates/maps/Plain_of_four_winds/maintenance/plains_of_four_winds_1_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "order": 22,
-  "wire": 6
+  "wire": 6,
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 1,
+    "source_image_size": {
+      "width": 2560,
+      "height": 1440
+    },
+    "transform": {
+      "coord_x": [
+        0.102067731,
+        0.103778076,
+        -100.225124618
+      ],
+      "coord_y": [
+        0.102531379,
+        -0.100669919,
+        44.529564576
+      ]
+    }
+  },
+  "coordinate_bounds": {
+    "x_min": 0,
+    "x_max": 300,
+    "y_min": 0,
+    "y_max": 300
+  }
 }

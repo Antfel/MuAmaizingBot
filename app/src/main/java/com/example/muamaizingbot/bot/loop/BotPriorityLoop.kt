@@ -6,11 +6,11 @@ import com.example.muamaizingbot.bot.combat.GameActions
 import com.example.muamaizingbot.bot.farming.FarmingLoop
 import com.example.muamaizingbot.bot.maintenance.ElfBuffCheckActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffNavigationActions
+import com.example.muamaizingbot.bot.maintenance.ElfBuffSeekGate
 import com.example.muamaizingbot.bot.maintenance.MapCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
-import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 
 object BotPriorityLoop {
@@ -52,16 +52,11 @@ object BotPriorityLoop {
             }
         }
 
-        if (profile.enableElfBuff) {
-            val elfConfigured = LocationRepository.getElfBuff(profile.filename) != null
-            if (elfConfigured && !ElfBuffCheckActions.hasElfBuff()) {
-                Log.d(TAG, "[LOOP] branch=elf_buff")
-                consecutiveFarmSoftFails = 0
-                return if (ElfBuffNavigationActions.goToElfBuffAndReturn()) {
-                    IterationResult.OK
-                } else {
-                    recoveryOrError("elf-failed")
-                }
+        // enableElfBuff=false → skip buff icon + elf route; farm navigation unchanged.
+        // After 3 failed seeks, ElfBuffSeekGate pauses for 1h then retries.
+        if (ElfBuffSeekGate.shouldAttemptSeek(profile)) {
+            if (!ElfBuffCheckActions.hasElfBuff()) {
+                return handleMissingElfBuff("loop")
             }
         }
 
@@ -84,6 +79,12 @@ object BotPriorityLoop {
             return IterationResult.ERROR
         }
 
+        Log.d(
+            TAG,
+            "[STARTUP] profile=${profile.displayName} elfBuff=${profile.enableElfBuff} " +
+                "potions=${profile.enablePotionRecovery}",
+        )
+
         if (DeathActions.isDead()) {
             Log.d(TAG, "[STARTUP] dead before navigation")
             if (!DeathActions.recoverIfDead()) {
@@ -101,15 +102,19 @@ object BotPriorityLoop {
             }
         }
 
-        if (profile.enableElfBuff) {
-            val elfConfigured = LocationRepository.getElfBuff(profile.filename) != null
-            if (elfConfigured && !ElfBuffCheckActions.hasElfBuff()) {
+        if (ElfBuffSeekGate.shouldAttemptSeek(profile)) {
+            if (!ElfBuffCheckActions.hasElfBuff()) {
                 Log.d(TAG, "[STARTUP] elf buff missing before navigation")
-                if (!ElfBuffNavigationActions.goToElfBuffAndReturn()) {
-                    return recoveryOrError("startup-elf-failed")
+                val result = handleMissingElfBuff("startup")
+                if (result == IterationResult.ERROR) {
+                    return result
                 }
                 return ensureAutoOnly("startup-after-elf")
             }
+        } else if (!ProfileRepository.shouldSeekElfBuff(profile)) {
+            Log.d(TAG, "[STARTUP] elf buff skipped (disabled or not configured)")
+        } else {
+            Log.d(TAG, "[STARTUP] elf buff skipped (seek cooldown)")
         }
 
         if (MapCheckActions.isInConfiguredMap()) {
@@ -118,6 +123,18 @@ object BotPriorityLoop {
         }
 
         return navigateToFarm("startup")
+    }
+
+    private suspend fun handleMissingElfBuff(reason: String): IterationResult {
+        Log.d(TAG, "[LOOP] branch=elf_buff reason=$reason")
+        consecutiveFarmSoftFails = 0
+        if (!ElfBuffNavigationActions.goToElfBuffAndReturn()) {
+            return recoveryOrError("elf-failed-$reason")
+        }
+        if (!ElfBuffCheckActions.hasElfBuff()) {
+            ElfBuffSeekGate.noteSeekFailed()
+        }
+        return IterationResult.OK
     }
 
     private suspend fun handleFarmingCycle(): IterationResult {

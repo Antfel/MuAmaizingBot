@@ -1,0 +1,49 @@
+{
+  "id": "land_of_demons_1",
+  "name": "Land of Demons 1",
+  "group": "Land of Demons",
+  "submap": 1,
+  "requirements": {
+    "min_level": 450
+  },
+  "navigation": {
+    "behavior": "direct_teleport",
+    "current_map_template": "templates/maps/Land_of_demons/current/land_of_demons_1_current.png",
+    "map_option_template": "templates/maps/Land_of_demons/mapsui/land_of_demons_1.png",
+    "enter_wait": 10,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  },
+  "order": 24,
+  "wire": 3,
+  "maintenance": {
+    "map_ui_image": "templates/maps/Land_of_demons/maintenance/land_of_demons_1_map_open_reference.png",
+    "image_width": 1280,
+    "image_height": 720
+  },
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 1,
+    "source_image_size": {
+      "width": 2560,
+      "height": 1440
+    },
+    "transform": {
+      "coord_x": [
+        0.128351627,
+        0.128151579,
+        -195.011119147
+      ],
+      "coord_y": [
+        0.127107373,
+        -0.127261256,
+        96.553884337
+      ]
+    }
+  }
+}

@@ -5,7 +5,7 @@ import android.graphics.Rect
 
 object MuCombatRois {
 
-    // auto_text / manual_text viven arriba-derecha (ref 2560x1440), no en el HUD inferior.
+    // auto_text / manual_text viven arriba-derecha (logical ref 2560×1440), no en el HUD inferior.
     // Validado con frames BlueStacks: auto ~0.89 @ (2445,692), manual ~0.98 @ (2427,617).
     private const val AUTO_HUD_LEFT = 2300
     private const val AUTO_HUD_TOP = 550
@@ -23,7 +23,7 @@ object MuCombatRois {
         )
     }
 
-    /** Death / revive dialog (ref 2560x1440). Revive button ~(1120,865). */
+    /** Death / revive dialog (logical ref 2560×1440). Revive button ~(1120,865). */
     fun deathDialogRoi(frame: Bitmap): Rect {
         return ScaledRoi.fromRefRect(
             left = 500,

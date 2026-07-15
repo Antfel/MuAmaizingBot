@@ -123,10 +123,17 @@ fun SpotPickerScreen(
     var coordY by remember(profileFilename, locationType) {
         mutableStateOf(existingLocation?.coordY)
     }
+    var coordXText by remember(profileFilename, locationType) {
+        mutableStateOf(existingLocation?.coordX?.toString().orEmpty())
+    }
+    var coordYText by remember(profileFilename, locationType) {
+        mutableStateOf(existingLocation?.coordY?.toString().orEmpty())
+    }
     var statusMessage by remember { mutableStateOf("") }
 
     val mapDef = remember(selectedMapId) { MapDefinitionRepository.getById(selectedMapId) }
     val wires = remember(mapDef) { mapDef?.availableWires().orEmpty() }
+    val hasMapping = remember(mapDef) { CoordinateMapping.hasMapping(mapDef) }
 
     LaunchedEffect(mapDef, wires) {
         if (wires.isNotEmpty() && selectedWire !in wires) {
@@ -142,8 +149,53 @@ fun SpotPickerScreen(
             selectedY = spot.y
             coordX = spot.coordX
             coordY = spot.coordY
+            coordXText = spot.coordX?.toString().orEmpty()
+            coordYText = spot.coordY?.toString().orEmpty()
             spotName = spot.name
         }
+    }
+
+    fun applyPixelSelection(refX: Int, refY: Int) {
+        selectedX = refX
+        selectedY = refY
+        if (CoordinateMapping.hasMapping(mapDef)) {
+            val coords = CoordinateMapping.pixelToMapCoord(mapDef!!, refX, refY)
+            coordX = coords?.first
+            coordY = coords?.second
+            coordXText = coords?.first?.toString().orEmpty()
+            coordYText = coords?.second?.toString().orEmpty()
+            statusMessage = ""
+        } else {
+            coordX = null
+            coordY = null
+            coordXText = ""
+            coordYText = ""
+            statusMessage = "Mapa sin calibrar: se guardará el pixel; añade coordinate_mapping para coords de juego."
+        }
+    }
+
+    fun applyGameCoordTexts(xText: String, yText: String) {
+        coordXText = xText
+        coordYText = yText
+        val gx = xText.trim().toIntOrNull()
+        val gy = yText.trim().toIntOrNull()
+        if (gx == null || gy == null) {
+            return
+        }
+        if (!CoordinateMapping.hasMapping(mapDef)) {
+            statusMessage = "Mapa sin calibrar: no se puede ubicar el punto desde coords."
+            return
+        }
+        val pixel = CoordinateMapping.mapCoordToPixel(mapDef!!, gx, gy)
+        if (pixel == null) {
+            statusMessage = "No se pudo invertir el mapeo (affine singular)."
+            return
+        }
+        selectedX = pixel.first
+        selectedY = pixel.second
+        coordX = gx
+        coordY = gy
+        statusMessage = ""
     }
 
     Column(
@@ -198,6 +250,9 @@ fun SpotPickerScreen(
                 selectedY = -1
                 coordX = null
                 coordY = null
+                coordXText = ""
+                coordYText = ""
+                statusMessage = ""
             },
         )
 
@@ -215,6 +270,36 @@ fun SpotPickerScreen(
             singleLine = true,
         )
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = coordXText,
+                onValueChange = { applyGameCoordTexts(it, coordYText) },
+                label = { Text("Coord X (juego)") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                enabled = hasMapping,
+            )
+            OutlinedTextField(
+                value = coordYText,
+                onValueChange = { applyGameCoordTexts(coordXText, it) },
+                label = { Text("Coord Y (juego)") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+                enabled = hasMapping,
+            )
+        }
+
+        if (!hasMapping && mapDef?.hasMaintenanceImage() == true) {
+            Text(
+                text = "Mapa sin calibrar: toca para marcar pixel; las coords de juego no están disponibles hasta añadir coordinate_mapping.",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+
         if (mapDef?.hasMaintenanceImage() == true) {
             ZoomableMapPicker(
                 canonicalAssetPath = mapDef.maintenance!!.mapUiImageAssetPath,
@@ -222,18 +307,7 @@ fun SpotPickerScreen(
                 refImageHeight = RefCoords.REF_HEIGHT,
                 selectedX = selectedX,
                 selectedY = selectedY,
-                onSelect = { refX, refY ->
-                    selectedX = refX
-                    selectedY = refY
-                    if (CoordinateMapping.hasMapping(mapDef)) {
-                        val coords = CoordinateMapping.pixelToMapCoord(mapDef, refX, refY)
-                        coordX = coords?.first
-                        coordY = coords?.second
-                    } else {
-                        coordX = null
-                        coordY = null
-                    }
-                },
+                onSelect = { refX, refY -> applyPixelSelection(refX, refY) },
                 modifier = Modifier.fillMaxWidth(),
             )
         } else {
@@ -433,13 +507,10 @@ private fun ZoomableMapPicker(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val resolutionKey = TemplateAssets.templateResolutionKey()
-    val physicalPath = remember(canonicalAssetPath, resolutionKey) {
-        TemplateAssets.toPhysicalPath(canonicalAssetPath, resolutionKey)
-    }
-    val bitmap = remember(physicalPath) {
+    val assetPath = TemplateAssets.normalizeToCanonical(canonicalAssetPath)
+    val bitmap = remember(assetPath) {
         runCatching {
-            context.assets.open(physicalPath).use { stream ->
+            context.assets.open(assetPath).use { stream ->
                 BitmapFactory.decodeStream(stream)?.asImageBitmap()
             }
         }.getOrNull()
@@ -458,9 +529,9 @@ private fun ZoomableMapPicker(
         -1
     }
 
-    var zoom by remember(physicalPath) { mutableFloatStateOf(MIN_ZOOM) }
-    var panX by remember(physicalPath) { mutableFloatStateOf(0f) }
-    var panY by remember(physicalPath) { mutableFloatStateOf(0f) }
+    var zoom by remember(assetPath) { mutableFloatStateOf(MIN_ZOOM) }
+    var panX by remember(assetPath) { mutableFloatStateOf(0f) }
+    var panY by remember(assetPath) { mutableFloatStateOf(0f) }
 
     Column(
         modifier = modifier,
@@ -537,7 +608,7 @@ private fun ZoomableMapPicker(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .pointerInput(physicalPath, zoom, viewportW, viewportH) {
+                    .pointerInput(assetPath, zoom, viewportW, viewportH) {
                         coroutineScope {
                             launch {
                                 detectTapGestures { tap ->

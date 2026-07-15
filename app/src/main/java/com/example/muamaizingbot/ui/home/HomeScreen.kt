@@ -43,8 +43,6 @@ import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.overlay.OverlayManager
 import com.example.muamaizingbot.overlay.OverlayPermission
-import com.example.muamaizingbot.settings.ResolutionDetectionResult
-import com.example.muamaizingbot.settings.ResolutionSettingsRepository
 
 @Composable
 fun HomeScreen(
@@ -60,8 +58,6 @@ fun HomeScreen(
     val botState by BotController.state.collectAsState()
     val currentProfile by ProfileRepository.currentProfile.collectAsState()
     val farmSpot by LocationRepository.farmSpot.collectAsState()
-    val resolutionPreset by ResolutionSettingsRepository.preset.collectAsState()
-    val resolutionDetection by ResolutionSettingsRepository.detectionResult.collectAsState()
 
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -93,7 +89,7 @@ fun HomeScreen(
         )
 
         Text(
-            text = "Usa el menú lateral (☰) para perfiles y farm spot.",
+            text = "Usa el menú lateral (☰) para perfiles y farm spot. Emulador: 1280×720 @ 240 DPI.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -109,31 +105,6 @@ fun HomeScreen(
                 MapDefinitionRepository.getById(farmSpot?.map.orEmpty())?.name
             ) ?: "Sin configurar",
         )
-
-        StatusCard(
-            title = "Resolución",
-            value = resolutionPreset.label,
-        )
-
-        resolutionDetection?.let { detection ->
-            when (detection.matchType) {
-                ResolutionDetectionResult.MatchType.UNSUPPORTED -> {
-                    Text(
-                        text = detection.userMessage,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                ResolutionDetectionResult.MatchType.NEAREST -> {
-                    Text(
-                        text = detection.userMessage,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                ResolutionDetectionResult.MatchType.EXACT -> Unit
-            }
-        }
 
         StatusCard(
             title = "Bot",

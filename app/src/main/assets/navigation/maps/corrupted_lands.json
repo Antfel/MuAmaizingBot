@@ -8,8 +8,8 @@
   },
   "navigation": {
     "behavior": "direct_teleport",
-    "current_map_template": "templates/maps/Corrupted_lands/current/corrupted_lands_current.png",
-    "map_option_template": "templates/maps/Corrupted_lands/mapsui/corrupted_lands.png",
+    "current_map_template": "templates/maps/Corrupted_lands/current/corrupted_lands_1_current.png",
+    "map_option_template": "templates/maps/Corrupted_lands/mapsui/corrupted_lands_1.png",
     "enter_wait": 10,
     "map_list_swipe": {
       "x1": 530,
@@ -21,8 +21,8 @@
   },
   "maintenance": {
     "map_ui_image": "templates/maps/Corrupted_lands/maintenance/corrupted_lands_1_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "coordinate_bounds": {
     "x_min": 0,
@@ -38,8 +38,16 @@
       "height": 1440
     },
     "transform": {
-      "coord_x": [0.204082698, 0.201896478, -102.039067355],
-      "coord_y": [0.20193824, -0.199562004, 50.120392442]
+      "coord_x": [
+        0.076990849,
+        0.096265012,
+        -61.079090914
+      ],
+      "coord_y": [
+        0.076188681,
+        -0.109745095,
+        95.325825781
+      ]
     }
   },
   "order": 23,

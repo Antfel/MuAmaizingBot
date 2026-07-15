@@ -1,0 +1,24 @@
+{
+  "map_id": "corrupted_lands",
+  "pixel_space": "png_1280_converted_to_ref",
+  "points": [
+    {
+      "ref_x": 1986.4,
+      "ref_y": 780.6,
+      "game_x": 167,
+      "game_y": 161
+    },
+    {
+      "ref_x": 1385.4,
+      "ref_y": 1147.0,
+      "game_x": 156,
+      "game_y": 75
+    },
+    {
+      "ref_x": 1511.4,
+      "ref_y": 724.2,
+      "game_x": 125,
+      "game_y": 131
+    }
+  ]
+}

@@ -5,20 +5,14 @@ import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.vision.opencv.OpenCVInitializer
 import com.example.muamaizingbot.vision.opencv.OpenCvBitmapConverter
-import kotlin.math.roundToInt
 import org.opencv.core.Core
 import org.opencv.core.Mat
-import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
+/** 1:1 template match against the fixed 1280×720 pack. */
 object PcTemplateMatcher {
 
     private const val TAG = "PcTemplateMatcher"
-
-    /** Fine tune around pre-scaled PNG size — game text rarely matches 0.75x exactly. */
-    private val FINE_SCALE_FACTORS = floatArrayOf(0.90f, 0.94f, 0.97f, 1.0f, 1.03f, 1.06f, 1.10f)
-    /** Small tolerance when templates were generated from calibration (no preset snap). */
-    private val CALIBRATED_FINE_SCALE_FACTORS = floatArrayOf(0.92f, 0.96f, 1.0f, 1.04f, 1.08f)
 
     fun findTemplate(
         source: Bitmap,
@@ -26,14 +20,14 @@ object PcTemplateMatcher {
         threshold: Float = 0.85f,
         roi: Rect? = null,
         templateName: String = "unknown",
-        category: String = "unknown"
+        category: String = "unknown",
     ): PcTemplateMatchResult? {
         val result = matchDebug(
             source = source,
             template = template,
             templateName = templateName,
             category = category,
-            roi = roi
+            roi = roi,
         )
         return if (result.score >= threshold) result else null
     }
@@ -42,7 +36,7 @@ object PcTemplateMatcher {
         source: Bitmap,
         template: Bitmap,
         threshold: Float = 0.85f,
-        roi: Rect? = null
+        roi: Rect? = null,
     ): Float {
         return matchDebug(source, template, roi = roi).score
     }
@@ -52,7 +46,7 @@ object PcTemplateMatcher {
         template: Bitmap,
         templateName: String = "unknown",
         category: String = "unknown",
-        roi: Rect? = null
+        roi: Rect? = null,
     ): PcTemplateMatchResult {
         require(!source.isRecycled) { "source bitmap is recycled" }
         require(!template.isRecycled) { "template bitmap is recycled" }
@@ -66,123 +60,53 @@ object PcTemplateMatcher {
         val createdSearchBitmap = searchBitmap !== source
 
         var sourceMat: Mat? = null
-        var templateOrigMat: Mat? = null
-        var scaledTemplateMat: Mat? = null
+        var templateMat: Mat? = null
         var resultMat: Mat? = null
 
         return try {
             val sw = searchBitmap.width
             val sh = searchBitmap.height
-            val scaleFactors = fineScaleFactors()
+            val tw = template.width
+            val th = template.height
 
-            sourceMat = OpenCvBitmapConverter.bitmapToBgrMat(searchBitmap)
-            templateOrigMat = OpenCvBitmapConverter.bitmapToBgrMat(template)
-
-            var bestScore = 0f
-            var bestX = 0
-            var bestY = 0
-            var bestTw = template.width
-            var bestTh = template.height
-            var bestFine = 1f
-
-            for (fine in scaleFactors) {
-                val tw = (template.width * fine).roundToInt().coerceAtLeast(1)
-                val th = (template.height * fine).roundToInt().coerceAtLeast(1)
-                if (tw > sw || th > sh) {
-                    continue
-                }
-
-                scaledTemplateMat?.release()
-                scaledTemplateMat = resizeTemplateMat(templateOrigMat, tw, th)
-                resultMat?.release()
-                resultMat = Mat()
-
-                Imgproc.matchTemplate(sourceMat, scaledTemplateMat, resultMat, Imgproc.TM_CCOEFF_NORMED)
-
-                val minMax = Core.minMaxLoc(resultMat)
-                val score = minMax.maxVal.toFloat()
-                if (score > bestScore) {
-                    bestScore = score
-                    bestX = minMax.maxLoc.x.toInt()
-                    bestY = minMax.maxLoc.y.toInt()
-                    bestTw = tw
-                    bestTh = th
-                    bestFine = fine
-                }
-            }
-
-            if (bestScore <= 0f && (template.width > sw || template.height > sh)) {
+            if (tw > sw || th > sh) {
                 Log.w(
                     TAG,
                     "[MATCH] template larger than search area template=$templateName " +
-                        "template=${template.width}x${template.height} search=${sw}x$sh " +
-                        "frame=${source.width}x${source.height} " +
-                        "resolution=${TemplateRepository.currentResolutionKey()}"
+                        "template=${tw}x$th search=${sw}x$sh frame=${source.width}x${source.height}",
                 )
+                return emptyResult(templateName, category, tw, th)
             }
 
+            sourceMat = OpenCvBitmapConverter.bitmapToBgrMat(searchBitmap)
+            templateMat = OpenCvBitmapConverter.bitmapToBgrMat(template)
+            resultMat = Mat()
+            Imgproc.matchTemplate(sourceMat, templateMat, resultMat, Imgproc.TM_CCOEFF_NORMED)
+
+            val minMax = Core.minMaxLoc(resultMat)
             val roiOffsetX = roi?.left ?: 0
             val roiOffsetY = roi?.top ?: 0
 
-            if (bestFine != 1f && bestScore > 0f) {
-                Log.d(
-                    TAG,
-                    "[MATCH] template=$templateName fine=${"%.2f".format(bestFine)} " +
-                        "score=${"%.3f".format(bestScore)} size=${bestTw}x$bestTh " +
-                        "resolution=${TemplateRepository.currentResolutionKey()}"
-                )
-            }
-
             PcTemplateMatchResult(
-                score = bestScore,
-                bestX = bestX + roiOffsetX,
-                bestY = bestY + roiOffsetY,
-                templateWidth = bestTw,
-                templateHeight = bestTh,
+                score = minMax.maxVal.toFloat(),
+                bestX = minMax.maxLoc.x.toInt() + roiOffsetX,
+                bestY = minMax.maxLoc.y.toInt() + roiOffsetY,
+                templateWidth = tw,
+                templateHeight = th,
                 templateName = templateName,
-                category = category
+                category = category,
             )
         } catch (t: Throwable) {
-            Log.e(
-                TAG,
-                "[MATCH] error engine=opencv template=$templateName message=${t.message}"
-            )
+            Log.e(TAG, "[MATCH] error engine=opencv template=$templateName message=${t.message}")
             emptyResult(templateName, category, template.width, template.height)
         } finally {
             resultMat?.release()
-            scaledTemplateMat?.release()
-            templateOrigMat?.release()
+            templateMat?.release()
             sourceMat?.release()
             if (createdSearchBitmap) {
                 searchBitmap.recycle()
             }
         }
-    }
-
-    private fun fineScaleFactors(): FloatArray {
-        if (TemplateRepository.isUsingCalibratedTemplates()) {
-            return CALIBRATED_FINE_SCALE_FACTORS
-        }
-        return if (TemplateRepository.currentResolutionKey() == TemplateAssets.REF_RESOLUTION_KEY) {
-            floatArrayOf(1f)
-        } else {
-            FINE_SCALE_FACTORS
-        }
-    }
-
-    private fun resizeTemplateMat(source: Mat, targetW: Int, targetH: Int): Mat {
-        val out = Mat()
-        val downscale = targetW < source.cols() || targetH < source.rows()
-        val interpolation = if (downscale) Imgproc.INTER_AREA else Imgproc.INTER_LINEAR
-        Imgproc.resize(
-            source,
-            out,
-            Size(targetW.toDouble(), targetH.toDouble()),
-            0.0,
-            0.0,
-            interpolation,
-        )
-        return out
     }
 
     private fun cropToRoi(source: Bitmap, roi: Rect?): Bitmap {
@@ -205,7 +129,7 @@ object PcTemplateMatcher {
         templateName: String,
         category: String,
         templateWidth: Int,
-        templateHeight: Int
+        templateHeight: Int,
     ): PcTemplateMatchResult {
         return PcTemplateMatchResult(
             score = 0f,
@@ -214,7 +138,7 @@ object PcTemplateMatcher {
             templateWidth = templateWidth,
             templateHeight = templateHeight,
             templateName = templateName,
-            category = category
+            category = category,
         )
     }
 }

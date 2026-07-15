@@ -1,13 +1,17 @@
 package com.example.muamaizingbot.bot.combat
 
 import android.util.Log
+import com.example.muamaizingbot.bot.BotController
+import com.example.muamaizingbot.bot.BotRuntimeState
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.input.InputController
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.vision.coord.RefCoords
 import kotlin.coroutines.resume
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.coroutineContext
 
 object GameActions {
 
@@ -18,6 +22,11 @@ object GameActions {
 
     suspend fun ensureAutoMode(): Boolean {
         repeat(AUTO_MAX_ATTEMPTS) { attempt ->
+            coroutineContext.ensureActive()
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                Log.d(TAG, "[COMBAT] ensureAutoMode aborted — bot not running")
+                return false
+            }
             if (attempt > 0) {
                 delay(AUTO_RETRY_DELAY_MS)
             }

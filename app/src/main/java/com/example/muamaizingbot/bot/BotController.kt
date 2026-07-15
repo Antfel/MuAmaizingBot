@@ -1,6 +1,7 @@
 package com.example.muamaizingbot.bot
 
 import android.util.Log
+import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.bot.actions.ActionQueue
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -14,6 +15,10 @@ object BotController {
     val state: StateFlow<BotRuntimeState> = _state.asStateFlow()
 
     fun start() {
+        if (!ScreenCaptureManager.isReady()) {
+            Log.w(TAG, "[BOT] start blocked: capture inactive or no frame")
+            return
+        }
         val previous = _state.value
         val next = when (previous) {
             BotRuntimeState.IDLE,

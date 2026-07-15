@@ -5,10 +5,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.util.Log
 import androidx.core.content.ContextCompat
-import com.example.muamaizingbot.calibration.CalibrationRepository
-import com.example.muamaizingbot.settings.ResolutionSettingsRepository
-import com.example.muamaizingbot.vision.template.TemplateAssets
-import com.example.muamaizingbot.vision.template.TemplateRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,18 +16,34 @@ object ScreenCaptureManager {
     private val _isActive = MutableStateFlow(false)
     val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
 
+    private val _isReady = MutableStateFlow(false)
+    val isReadyFlow: StateFlow<Boolean> = _isReady.asStateFlow()
+
     @Volatile
     private var latestBitmap: Bitmap? = null
 
-    @Volatile
-    private var lastCaptureSize: Pair<Int, Int>? = null
-
     internal fun setActive(active: Boolean) {
         _isActive.value = active
-        if (!active) {
-            lastCaptureSize = null
-        }
+        refreshReadyState()
         Log.d(TAG, "[CAPTURE] active=$active")
+    }
+
+    /** True when the foreground capture service is running. */
+    fun isActiveNow(): Boolean = _isActive.value
+
+    /** True when a fresh frame is available for vision. */
+    fun hasFrame(): Boolean {
+        synchronized(this) {
+            val frame = latestBitmap
+            return frame != null && !frame.isRecycled
+        }
+    }
+
+    /** Vision-ready: service active and at least one frame buffered. */
+    fun isReady(): Boolean = _isReady.value
+
+    private fun refreshReadyState() {
+        _isReady.value = isActiveNow() && hasFrame()
     }
 
     internal fun updateFrame(frame: Bitmap) {
@@ -39,38 +51,7 @@ object ScreenCaptureManager {
             latestBitmap?.recycle()
             latestBitmap = frame
         }
-        maybeReloadTemplatesForCapture(frame.width, frame.height)
-    }
-
-    private fun maybeReloadTemplatesForCapture(width: Int, height: Int) {
-        val size = width to height
-        if (size == lastCaptureSize) {
-            return
-        }
-        lastCaptureSize = size
-
-        CalibrationRepository.ensureCaptureSize(width, height)
-
-        val calibrated = CalibrationRepository.hasCalibrationFor(width, height)
-        if (calibrated) {
-            Log.d(TAG, "[CAPTURE] reloading calibrated templates for ${width}x$height")
-            TemplateRepository.reloadForCapture(width, height)
-            return
-        }
-
-        if (!ResolutionSettingsRepository.preset.value.isAuto) {
-            val key = ResolutionSettingsRepository.preset.value.resolutionKey
-            if (TemplateRepository.currentResolutionKey() != key) {
-                TemplateRepository.reload(key)
-            }
-            return
-        }
-
-        val key = TemplateAssets.snapToSupported(width, height)
-        if (TemplateRepository.currentResolutionKey() != key) {
-            Log.d(TAG, "[CAPTURE] reloading preset templates for ${width}x$height -> $key")
-            TemplateRepository.reloadForCapture(width, height)
-        }
+        refreshReadyState()
     }
 
     fun getLatestBitmap(): Bitmap? {
@@ -98,6 +79,7 @@ object ScreenCaptureManager {
             latestBitmap?.recycle()
             latestBitmap = null
         }
+        refreshReadyState()
     }
 
     fun start(context: Context, resultCode: Int, data: Intent) {

@@ -9,7 +9,6 @@ import com.example.muamaizingbot.vision.BitmapRegionSimilarity
 import com.example.muamaizingbot.vision.coordinate.CoordinateReader
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.ScaledRoi
-import com.example.muamaizingbot.vision.template.TemplateRepository
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
@@ -18,7 +17,6 @@ object NavigationWaitActions {
     private const val TAG = "NavWait"
     /** Min template score to trust OCR coords (avoids Lorencia / wrong zone false positives). */
     private const val WEAK_MAP_TEMPLATE_FLOOR = 0.35f
-    private const val WEAK_MAP_TEMPLATE_FLOOR_CALIBRATED = 0.50f
     /** Near spot tolerance when template is a weak match (map check only). */
     private const val MAP_CHECK_NEAR_SPOT_TOLERANCE = 25
     private const val AUTO_NAV_TEMPLATE = "templates/mu/ui/common/auto_navigating.png"
@@ -154,12 +152,7 @@ object NavigationWaitActions {
         }
 
         val templateScore = currentMapTemplateScore(mapDef)
-        val weakFloor = if (TemplateRepository.isUsingCalibratedTemplates()) {
-            WEAK_MAP_TEMPLATE_FLOOR_CALIBRATED
-        } else {
-            WEAK_MAP_TEMPLATE_FLOOR
-        }
-        if (templateScore < weakFloor) {
+        if (templateScore < WEAK_MAP_TEMPLATE_FLOOR) {
             return MapPresence.NONE
         }
 

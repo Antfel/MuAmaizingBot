@@ -1,0 +1,118 @@
+{
+  "id": "temple_of_kalima_4",
+  "name": "Temple of Kalima 4",
+  "group": "Temple of Kalima",
+  "submap": 4,
+  "requirements": {
+    "min_level": 500
+  },
+  "navigation": {
+    "behavior": "modal_enter",
+    "current_map_template": "templates/maps/Temple_of_kalima/current/kalima_4_current.png",
+    "map_head_template": "templates/maps/Temple_of_kalima/mapsui/kalima_temple_head.png",
+    "map_option_template": "templates/maps/Temple_of_kalima/mapsui/kalima_temple_4.png",
+    "modal_option_template": "templates/maps/Temple_of_kalima/modalui/kalima_4.png",
+    "checked_template": "templates/ui/common/checked.png",
+    "unchecked_template": "templates/ui/common/unchecked.png",
+    "enter_template": "templates/maps/Temple_of_kalima/modalui/enter_button.png",
+    "enter_wait": 12,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  },
+  "wires": {
+    "1": {
+      "name": "Wire 1",
+      "spots": [
+        "spot_1"
+      ]
+    },
+    "2": {
+      "name": "Wire 2",
+      "spots": [
+        "spot_1"
+      ]
+    }
+  },
+  "spots": {
+    "spot_1": {
+      "name": "Spot 1",
+      "spot_click": {
+        "x": 1145,
+        "y": 768
+      },
+      "post_spot_actions": [
+        {
+          "type": "wait",
+          "seconds": 10
+        },
+        {
+          "type": "ensure_auto_mode"
+        }
+      ],
+      "arrival_wait": 20
+    }
+  },
+  "wire": 2,
+  "order": 24,
+  "wire_switch": {
+    "enabled": true,
+    "available_wires": [
+      1,
+      2
+    ],
+    "hud_detection": true,
+    "templates": {
+      "switch_button": "templates/wires/common/switch_button.png",
+      "popup_open": "templates/wires/common/wire_popup_open.png",
+      "enter_button": "templates/wires/common/wire_enter_button.png",
+      "selected": "templates/wires/common/wire_selected.png",
+      "hud": {
+        "1": "templates/wires/common/wire_1_hud.png",
+        "2": "templates/wires/common/wire_2_hud.png"
+      },
+      "options": {
+        "1": "templates/wires/common/wire_1_option.png",
+        "2": "templates/wires/common/wire_2_option.png"
+      }
+    },
+    "popup_scroll": {
+      "x1": 930,
+      "y1": 560,
+      "x2": 930,
+      "y2": 300,
+      "duration": 300,
+      "max_attempts": 5
+    },
+    "switch_wait": 5
+  },
+  "maintenance": {
+    "map_ui_image": "templates/maps/Temple_of_kalima/maintenance/temple_of_kalima_map_open_reference.png",
+    "image_width": 1280,
+    "image_height": 720
+  },
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 1,
+    "source_image_size": {
+      "width": 2560,
+      "height": 1440
+    },
+    "transform": {
+      "coord_x": [
+        0.127505173,
+        0.124983418,
+        -204.733497994
+      ],
+      "coord_y": [
+        0.126373919,
+        -0.121960006,
+        -32.79316224
+      ]
+    }
+  }
+}

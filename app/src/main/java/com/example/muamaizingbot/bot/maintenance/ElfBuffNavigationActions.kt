@@ -21,6 +21,11 @@ object ElfBuffNavigationActions {
             return false
         }
 
+        if (!ProfileRepository.shouldSeekElfBuff(profile)) {
+            Log.d(TAG, "[ELF] route skipped enableElfBuff=${profile.enableElfBuff}")
+            return true
+        }
+
         val elfLocation = LocationRepository.getElfBuff(profile.filename)
         if (elfLocation == null) {
             Log.w(TAG, "[ELF] no elf buff location configured")

@@ -19,8 +19,6 @@ fun ConfigDrawerContent(
     profileLabel: String,
     farmSpotLabel: String,
     onOpenProfiles: () -> Unit,
-    onOpenResolution: () -> Unit,
-    onOpenCalibration: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -55,21 +53,9 @@ fun ConfigDrawerContent(
             onClick = onOpenProfiles,
         )
 
-        NavigationDrawerItem(
-            label = { Text("Resolución") },
-            selected = false,
-            onClick = onOpenResolution,
-        )
-
-        NavigationDrawerItem(
-            label = { Text("Calibración HUD") },
-            selected = false,
-            onClick = onOpenCalibration,
-        )
-
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Calibrado para 2560×1440; usa Calibración HUD en teléfonos.",
+            text = "Contrato fijo: emulador 1280×720 @ 240 DPI.",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

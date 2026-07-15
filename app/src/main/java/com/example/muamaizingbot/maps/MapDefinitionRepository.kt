@@ -33,13 +33,28 @@ object MapDefinitionRepository {
 
     fun getById(mapId: String): MapDefinition? = mapsById[mapId]
 
+    /**
+     * Maps ready for profile Farm Spot / Elf Buff: maintenance image, affine calibration,
+     * and navigable templates (option + current/modal).
+     */
     fun listForPicker(): List<MapDefinition> {
         return mapsById.values
-            .filter { it.hasMaintenanceImage() }
+            .filter {
+                it.hasMaintenanceImage() &&
+                    CoordinateMapping.hasMapping(it) &&
+                    it.isNavigable()
+            }
             .sortedWith(compareBy({ it.order }, { it.name.lowercase(Locale.getDefault()) }))
     }
 
     fun allMaps(): List<MapDefinition> {
         return mapsById.values.sortedBy { it.order }
+    }
+
+    /** Same zone head (e.g. Plains 1/2) — used to disambiguate similar sub-map labels. */
+    fun siblingsSharingHead(mapDef: MapDefinition): List<MapDefinition> {
+        val head = mapDef.navigation?.mapHeadTemplate?.takeIf { it.isNotBlank() }
+            ?: return listOf(mapDef)
+        return mapsById.values.filter { it.navigation?.mapHeadTemplate == head }
     }
 }

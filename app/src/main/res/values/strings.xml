@@ -3,9 +3,6 @@
     <string name="overlay_notification_channel">Overlay del bot</string>
     <string name="overlay_notification_title">MU Bot activo</string>
     <string name="overlay_notification_body">Overlay en ejecución</string>
-    <string name="calibration_notification_channel">Calibración HUD</string>
-    <string name="calibration_notification_title">Calibración activa</string>
-    <string name="calibration_notification_body">Alinea los 4 puntos del HUD</string>
     <string name="capture_notification_channel">Captura de pantalla</string>
     <string name="capture_notification_title">Captura activa</string>
     <string name="capture_notification_body">El bot está capturando la pantalla</string>

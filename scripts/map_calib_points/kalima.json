@@ -1,0 +1,24 @@
+{
+  "map_id": "temple_of_kalima_1",
+  "pixel_space": "png_1280_converted_to_ref",
+  "points": [
+    {
+      "ref_x": 1256.4,
+      "ref_y": 844.4,
+      "game_x": 61,
+      "game_y": 23
+    },
+    {
+      "ref_x": 1626.0,
+      "ref_y": 899.4,
+      "game_x": 115,
+      "game_y": 63
+    },
+    {
+      "ref_x": 1565.0,
+      "ref_y": 729.6,
+      "game_x": 86,
+      "game_y": 76
+    }
+  ]
+}

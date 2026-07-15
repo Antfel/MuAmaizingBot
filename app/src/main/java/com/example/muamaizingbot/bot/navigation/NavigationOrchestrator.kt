@@ -14,7 +14,7 @@ object NavigationOrchestrator {
 
     private const val TAG = "Navigation"
     /** Fixed HUD settle after teleport / closing world map (PC-style wait(1)). */
-    private const val PRE_WIRE_SETTLE_MS = 1000L
+    private const val PRE_WIRE_SETTLE_MS = 2500L
 
     suspend fun goToActiveFarmSpot(): Boolean {
         Log.d(TAG, "[NAV] go_to_active_farm_spot started")

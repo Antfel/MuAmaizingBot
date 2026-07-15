@@ -11,9 +11,11 @@
     "current_map_template": "templates/maps/Temple_of_kalima/current/kalima_1_current.png",
     "map_head_template": "templates/maps/Temple_of_kalima/mapsui/kalima_temple_head.png",
     "map_option_template": "templates/maps/Temple_of_kalima/mapsui/kalima_temple_1.png",
-    "checked_template": "templates/maps/Temple_of_kalima/modalui/kalima_1_checked.png",
+    "modal_option_template": "templates/maps/Temple_of_kalima/modalui/kalima_1.png",
+    "checked_template": "templates/ui/common/checked.png",
+    "unchecked_template": "templates/ui/common/unchecked.png",
     "enter_template": "templates/maps/Temple_of_kalima/modalui/enter_button.png",
-    "enter_wait": 8,
+    "enter_wait": 12,
     "map_list_swipe": {
       "x1": 530,
       "y1": 708,
@@ -57,9 +59,9 @@
   },
   "wire": 2,
   "maintenance": {
-    "map_ui_image": "templates/maps/Temple_of_kalima/maintenance/temple_of_kalima_1_map_open_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "map_ui_image": "templates/maps/Temple_of_kalima/maintenance/temple_of_kalima_map_open_reference.png",
+    "image_width": 1280,
+    "image_height": 720
   },
   "order": 21,
   "wire_switch": {
@@ -92,5 +94,25 @@
       "max_attempts": 5
     },
     "switch_wait": 5
+  },
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 1,
+    "source_image_size": {
+      "width": 2560,
+      "height": 1440
+    },
+    "transform": {
+      "coord_x": [
+        0.127505173,
+        0.124983418,
+        -204.733497994
+      ],
+      "coord_y": [
+        0.126373919,
+        -0.121960006,
+        -32.79316224
+      ]
+    }
   }
 }

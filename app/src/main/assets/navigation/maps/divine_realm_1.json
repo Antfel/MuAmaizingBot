@@ -21,8 +21,8 @@
   },
   "maintenance": {
     "map_ui_image": "templates/maps/Divine_realm/maintenance/divine_realm_1_map_open_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "coordinate_bounds": {
     "x_min": 0,
@@ -38,8 +38,16 @@
       "height": 1440
     },
     "transform": {
-      "coord_x": [0.254291001, 0.259324545, -444.531683],
-      "coord_y": [0.25507822, -0.25609037, -70.418181]
+      "coord_x": [
+        0.255166234,
+        0.253223853,
+        -441.240283918
+      ],
+      "coord_y": [
+        0.253849051,
+        -0.255273835,
+        -69.284237026
+      ]
     }
   },
   "order": 15,

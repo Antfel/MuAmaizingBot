@@ -112,6 +112,25 @@ object ProfileRepository {
             ?: loadProfileFile(File(profilesDir, filename))
     }
 
+    /**
+     * Elf buff is active only when the profile toggle is on AND a zone is saved.
+     * Callers must use this instead of probing the buff icon when the toggle is off.
+     */
+    fun shouldSeekElfBuff(profile: BotProfile? = currentProfile.value): Boolean {
+        if (profile == null || !profile.enableElfBuff) {
+            return false
+        }
+        return LocationRepository.getElfBuff(profile.filename) != null
+    }
+
+    fun setElfBuffEnabled(profileFilename: String, enabled: Boolean): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(enableElfBuff = enabled)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] enable_elf_buff=$enabled file=$profileFilename")
+        return updated
+    }
+
     fun updateProfileMapWire(profile: BotProfile, mapId: String, wire: Int) {
         saveProfile(profile.copy(map = mapId, wire = wire))
     }

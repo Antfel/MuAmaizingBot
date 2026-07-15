@@ -47,6 +47,7 @@ fun OverlayPanel(
     var expanded by remember { mutableStateOf(false) }
     val botState by BotController.state.collectAsState()
     val captureActive by ScreenCaptureManager.isActive.collectAsState()
+    val captureReady by ScreenCaptureManager.isReadyFlow.collectAsState()
     val inputConnected = BotAccessibilityService.isConnected
 
     val dragModifier = Modifier.pointerInput(Unit) {
@@ -64,6 +65,7 @@ fun OverlayPanel(
             modifier = modifier.then(dragModifier),
             botState = botState,
             captureActive = captureActive,
+            captureReady = captureReady,
             inputConnected = inputConnected,
             onCollapse = { expanded = false },
             onStart = {
@@ -108,6 +110,7 @@ private fun BubbleOverlay(
 private fun ExpandedOverlay(
     botState: BotRuntimeState,
     captureActive: Boolean,
+    captureReady: Boolean,
     inputConnected: Boolean,
     onCollapse: () -> Unit,
     onStart: () -> Unit,
@@ -150,11 +153,12 @@ private fun ExpandedOverlay(
             fontWeight = FontWeight.Medium,
         )
 
-        val ready = inputConnected && captureActive
+        val ready = inputConnected && captureReady
         Text(
             text = when {
                 !inputConnected -> "Input: no listo"
-                !captureActive -> "Captura: inactiva"
+                !captureActive -> "Captura: inactiva (Inicio → Iniciar captura)"
+                !captureReady -> "Captura: iniciando…"
                 else -> "Listo"
             },
             color = if (ready) OverlayHudStyle.accentGreen else OverlayHudStyle.textSecondary,

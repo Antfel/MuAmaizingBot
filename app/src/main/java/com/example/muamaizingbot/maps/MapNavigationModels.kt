@@ -8,7 +8,7 @@ data class SwipeCoords(
     val x2: Int,
     val y2: Int,
     val durationMs: Long = 300L,
-    val maxAttempts: Int = 5,
+    val maxAttempts: Int = 10,
 )
 
 data class MapNavigation(
@@ -17,7 +17,12 @@ data class MapNavigation(
     val currentMapThreshold: Float = 0.72f,
     val mapHeadTemplate: String = "",
     val mapOptionTemplate: String = "",
+    /** Floor/row label inside the enter dialog (e.g. modalui/kalima_N.png). */
+    val modalOptionTemplate: String = "",
+    /** Common checked checkbox icon (left of modal row). */
     val checkedTemplate: String = "",
+    /** Common unchecked checkbox icon (left of modal row). */
+    val uncheckedTemplate: String = "",
     val enterTemplate: String = "",
     val enterWaitSeconds: Int = 8,
     val mapListSwipe: SwipeCoords? = null,
@@ -49,6 +54,9 @@ object MapNavigationParser {
 
     private val IMPLEMENTED_BEHAVIORS = setOf("direct_teleport", "modal_enter")
 
+    private const val DEFAULT_CHECKED_TEMPLATE = "templates/ui/common/checked.png"
+    private const val DEFAULT_UNCHECKED_TEMPLATE = "templates/ui/common/unchecked.png"
+
     private val COMMON_WIRE_DEFAULTS = WireSwitchTemplates(
         switchButton = "templates/mu/wires/common/switch_button.png",
         popupOpen = "templates/mu/wires/common/wire_popup_open.png",
@@ -61,13 +69,34 @@ object MapNavigationParser {
     fun parseNavigation(json: JSONObject): MapNavigation? {
         val nav = json.optJSONObject("navigation") ?: return null
         val behavior = nav.optString("behavior", "modal_enter").trim()
+        val modalOptionRaw = nav.optString("modal_option_template", "").trim()
+        val checkedRaw = nav.optString("checked_template", "").trim()
+        val uncheckedRaw = nav.optString("unchecked_template", "").trim()
+
+        // Legacy: checked_template pointed at the modal floor label (modalui/kalima_N.png).
+        val modalOptionTemplate = when {
+            modalOptionRaw.isNotBlank() -> pcPathToAssetPath(modalOptionRaw)
+            checkedRaw.contains("modalui") -> pcPathToAssetPath(checkedRaw)
+            else -> ""
+        }
+        val checkedTemplate = when {
+            checkedRaw.isNotBlank() && !checkedRaw.contains("modalui") ->
+                pcPathToAssetPath(checkedRaw)
+            else -> pcPathToAssetPath(DEFAULT_CHECKED_TEMPLATE)
+        }
+        val uncheckedTemplate = pcPathToAssetPath(
+            uncheckedRaw.ifBlank { DEFAULT_UNCHECKED_TEMPLATE },
+        )
+
         return MapNavigation(
             behavior = behavior,
             currentMapTemplate = pcPathToAssetPath(nav.optString("current_map_template", "")),
             currentMapThreshold = nav.optDouble("current_map_threshold", 0.72).toFloat(),
             mapHeadTemplate = pcPathToAssetPath(nav.optString("map_head_template", "")),
             mapOptionTemplate = pcPathToAssetPath(nav.optString("map_option_template", "")),
-            checkedTemplate = pcPathToAssetPath(nav.optString("checked_template", "")),
+            modalOptionTemplate = modalOptionTemplate,
+            checkedTemplate = checkedTemplate,
+            uncheckedTemplate = uncheckedTemplate,
             enterTemplate = pcPathToAssetPath(nav.optString("enter_template", "")),
             enterWaitSeconds = nav.optInt("enter_wait", 8),
             mapListSwipe = parseSwipe(nav.optJSONObject("map_list_swipe")),
@@ -83,9 +112,17 @@ object MapNavigationParser {
     }
 
     fun isNavigable(navigation: MapNavigation?): Boolean {
-        return navigation != null && navigation.isImplemented &&
-            navigation.currentMapTemplate.isNotBlank() &&
-            navigation.mapOptionTemplate.isNotBlank()
+        if (navigation == null || !navigation.isImplemented) {
+            return false
+        }
+        if (navigation.mapOptionTemplate.isBlank()) {
+            return false
+        }
+        return when {
+            navigation.isModalEnter -> navigation.modalOptionTemplate.isNotBlank()
+            navigation.isDirectTeleport -> navigation.currentMapTemplate.isNotBlank()
+            else -> false
+        }
     }
 
     private fun parseExplicitWireSwitch(json: JSONObject): WireSwitchConfig? {
@@ -116,7 +153,9 @@ object MapNavigationParser {
                 options = options,
                 hud = hud,
             ),
-            popupScroll = parseSwipe(json.optJSONObject("popup_scroll")) ?: SwipeCoords(930, 560, 930, 300),
+            // Fallback only — live flow anchors swipe to "Switch Channel" title match.
+            popupScroll = parseSwipe(json.optJSONObject("popup_scroll"))
+                ?: SwipeCoords(1280, 780, 1280, 420, maxAttempts = 10),
             switchWaitSeconds = json.optInt("switch_wait", 5),
         )
     }
@@ -145,7 +184,7 @@ object MapNavigationParser {
             availableWires = (1..wireCount).toList(),
             hudDetection = true,
             templates = COMMON_WIRE_DEFAULTS.copy(options = options, hud = hud),
-            popupScroll = SwipeCoords(930, 560, 930, 300),
+            popupScroll = SwipeCoords(1280, 780, 1280, 420, maxAttempts = 10),
             switchWaitSeconds = 5,
         )
     }
@@ -193,7 +232,7 @@ object MapNavigationParser {
             x2 = json.optInt("x2"),
             y2 = json.optInt("y2"),
             durationMs = json.optLong("duration", 300L),
-            maxAttempts = json.optInt("max_attempts", 5),
+            maxAttempts = json.optInt("max_attempts", 10),
         )
     }
 

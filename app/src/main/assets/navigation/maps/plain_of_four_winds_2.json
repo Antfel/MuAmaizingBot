@@ -23,8 +23,8 @@
   },
   "maintenance": {
     "map_ui_image": "templates/maps/Plain_of_four_winds/maintenance/plains_of_four_winds_2_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "coordinate_bounds": {
     "x_min": 0,
@@ -40,8 +40,16 @@
       "height": 1440
     },
     "transform": {
-      "coord_x": [0.128144021, 0.128094355, -155.446674],
-      "coord_y": [0.12578925, -0.12754393, 27.906028]
+      "coord_x": [
+        0.127596211,
+        0.129766229,
+        -156.140223689
+      ],
+      "coord_y": [
+        0.125943367,
+        -0.129996319,
+        29.443153129
+      ]
     }
   },
   "order": 22,

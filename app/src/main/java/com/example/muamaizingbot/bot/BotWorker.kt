@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot
 
 import android.util.Log
 import com.example.muamaizingbot.bot.loop.BotPriorityLoop
+import com.example.muamaizingbot.capture.ScreenCaptureManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -26,6 +27,10 @@ object BotWorker {
         workerJob = scope.launch {
             Log.d(TAG, "[BOT] worker started")
             try {
+                if (!ensureCaptureReady("startup")) {
+                    BotController.setError("Captura inactiva")
+                    return@launch
+                }
                 if (BotPriorityLoop.runStartup() == BotPriorityLoop.IterationResult.ERROR) {
                     BotController.setError("Startup failed")
                     return@launch
@@ -34,6 +39,10 @@ object BotWorker {
                 var iteration = 0
                 var consecutiveErrors = 0
                 while (isActive && BotController.state.value == BotRuntimeState.RUNNING) {
+                    if (!ensureCaptureReady("loop")) {
+                        BotController.setError("Captura inactiva")
+                        break
+                    }
                     iteration++
                     Log.d(TAG, "[BOT] loop iteration=$iteration")
                     when (BotPriorityLoop.runIteration()) {
@@ -64,5 +73,17 @@ object BotWorker {
     fun stopAsync() {
         workerJob?.cancel()
         workerJob = null
+    }
+
+    private fun ensureCaptureReady(phase: String): Boolean {
+        if (ScreenCaptureManager.isReady()) {
+            return true
+        }
+        Log.e(
+            TAG,
+            "[BOT] capture not ready phase=$phase active=${ScreenCaptureManager.isActiveNow()} " +
+                "hasFrame=${ScreenCaptureManager.hasFrame()}",
+        )
+        return false
     }
 }

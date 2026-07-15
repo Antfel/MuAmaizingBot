@@ -1,0 +1,24 @@
+{
+  "map_id": "plain_of_four_winds_2",
+  "pixel_space": "png_1280_converted_to_ref",
+  "points": [
+    {
+      "ref_x": 1463.0,
+      "ref_y": 1005.4,
+      "game_x": 161,
+      "game_y": 83
+    },
+    {
+      "ref_x": 1348.4,
+      "ref_y": 763.6,
+      "game_x": 115,
+      "game_y": 100
+    },
+    {
+      "ref_x": 1695.4,
+      "ref_y": 669.0,
+      "game_x": 147,
+      "game_y": 156
+    }
+  ]
+}

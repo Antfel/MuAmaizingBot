@@ -139,6 +139,23 @@ object NavigationVision {
         return ScrollSettleWait.listRegionRect(swipe, screenWidth, screenHeight)
     }
 
+    /** Scrollable wire rows inside the channel popup (excludes title + enter button). */
+    fun wirePopupListRoi(swipe: SwipeCoords?, screenWidth: Int, screenHeight: Int): Rect {
+        val panel = if (swipe != null) {
+            ScrollSettleWait.listRegionRect(swipe, screenWidth, screenHeight)
+        } else {
+            ScaledRoi.fromRefRect(680, 350, 1180, 700, screenWidth, screenHeight)
+        }
+        val rowTop = panel.top + (panel.height() * 0.12f).roundToInt()
+        val rowBottom = panel.top + (panel.height() * 0.72f).roundToInt()
+        return Rect(panel.left, rowTop, panel.right, rowBottom)
+    }
+
+    fun wirePopupListRoi(swipe: SwipeCoords?): Rect? {
+        val size = ScreenCaptureManager.peekLatestBitmapSize() ?: return null
+        return wirePopupListRoi(swipe, size.first, size.second)
+    }
+
     fun mapListRoi(swipe: SwipeCoords?): Rect? {
         val size = ScreenCaptureManager.peekLatestBitmapSize() ?: return null
         return mapListRoi(swipe, size.first, size.second)
@@ -221,7 +238,7 @@ object NavigationVision {
         return tapMatch(match)
     }
 
-    /** Tap at reference coordinates (authored for 2560×1440). */
+    /** Tap at reference coordinates (logical 2560×1440 → scaled to capture). */
     suspend fun tap(refX: Int, refY: Int): Boolean {
         val (x, y) = RefCoords.scalePoint(refX, refY)
         return tapScreen(x, y)
@@ -240,19 +257,38 @@ object NavigationVision {
 
     suspend fun swipe(coords: SwipeCoords): Boolean {
         val scaled = RefCoords.scaleSwipe(coords)
+        return swipeScreen(scaled.x1, scaled.y1, scaled.x2, scaled.y2, scaled.durationMs)
+    }
+
+    /** Swipe in absolute capture pixels (already scaled / derived from a template match). */
+    suspend fun swipeScreen(
+        x1: Int,
+        y1: Int,
+        x2: Int,
+        y2: Int,
+        durationMs: Long = 300L,
+    ): Boolean {
         return suspendCancellableCoroutine { continuation ->
-            InputController.swipe(
-                scaled.x1,
-                scaled.y1,
-                scaled.x2,
-                scaled.y2,
-                scaled.durationMs,
-            ) { result ->
+            InputController.swipe(x1, y1, x2, y2, durationMs) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }
             }
         }
+    }
+
+    /** Enter button strip under a wire-list ROI anchored to the Switch Channel title. */
+    fun wirePopupEnterRoiFromList(listRoi: Rect): Rect {
+        val (screenW, screenH) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        val top = minOf(screenH - 8, listRoi.bottom)
+        val bottom = minOf(screenH, top + RefCoords.scaleY(180, screenH))
+        return Rect(
+            maxOf(0, listRoi.left - RefCoords.scaleX(40, screenW)),
+            top,
+            minOf(screenW, listRoi.right + RefCoords.scaleX(40, screenW)),
+            bottom,
+        )
     }
 
     fun wireRowRegion(match: PcTemplateMatchResult): Rect {
@@ -270,6 +306,32 @@ object NavigationVision {
             maxOf(0, match.bestY - padTop),
             match.bestX + match.templateWidth + padRight,
             match.bestY + match.templateHeight + padBottom,
+        )
+    }
+
+    /**
+     * Narrow strip immediately left of a modal row label — where the checkbox lives.
+     * Scaled from 2560×1440 logical padding so it stays useful at 1280×720.
+     */
+    fun checkboxLeftOfRow(match: PcTemplateMatchResult): Rect {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize() ?: RefCoords.activeScreenSize()
+        return checkboxLeftOfRow(match, w, h)
+    }
+
+    fun checkboxLeftOfRow(
+        match: PcTemplateMatchResult,
+        screenWidth: Int,
+        screenHeight: Int,
+    ): Rect {
+        val padLeft = RefCoords.scaleX(90, screenWidth)
+        val padTop = RefCoords.scaleY(20, screenHeight)
+        val padBottom = RefCoords.scaleY(20, screenHeight)
+        val gap = RefCoords.scaleX(8, screenWidth)
+        return Rect(
+            maxOf(0, match.bestX - padLeft),
+            maxOf(0, match.bestY - padTop),
+            maxOf(0, match.bestX - gap),
+            minOf(screenHeight, match.bestY + match.templateHeight + padBottom),
         )
     }
 
