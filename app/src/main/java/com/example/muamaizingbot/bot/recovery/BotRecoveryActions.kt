@@ -23,14 +23,24 @@ object BotRecoveryActions {
 
     private var lastFailedNavigateMs = 0L
 
+    fun isNavCooldownActive(): Boolean {
+        if (lastFailedNavigateMs == 0L) return false
+        return System.currentTimeMillis() - lastFailedNavigateMs < NAV_RETRY_COOLDOWN_MS
+    }
+
+    fun navCooldownRemainingMs(): Long {
+        if (!isNavCooldownActive()) return 0L
+        return (NAV_RETRY_COOLDOWN_MS - (System.currentTimeMillis() - lastFailedNavigateMs))
+            .coerceAtLeast(0L)
+    }
+
     suspend fun navigateToFarmWithRetry(reason: String): Boolean {
         if (isAlreadyAtFarmPost(reason)) {
             return true
         }
 
-        val now = System.currentTimeMillis()
-        if (now - lastFailedNavigateMs < NAV_RETRY_COOLDOWN_MS) {
-            val waitSec = (NAV_RETRY_COOLDOWN_MS - (now - lastFailedNavigateMs)) / 1000
+        if (isNavCooldownActive()) {
+            val waitSec = (navCooldownRemainingMs() + 999L) / 1000L
             Log.w(TAG, "[RECOVERY] nav cooldown ${waitSec}s reason=$reason")
             return false
         }
@@ -96,6 +106,11 @@ object BotRecoveryActions {
         }
 
         if (!navigateToFarmWithRetry(reason)) {
+            if (isNavCooldownActive()) {
+                // Don't escalate to hard ERROR while waiting; next loops will retry.
+                Log.w(TAG, "[RECOVERY] checkpoint deferred (nav cooldown) reason=$reason")
+                return true
+            }
             return false
         }
 

@@ -32,11 +32,15 @@ object ElfBuffNavigationActions {
             return false
         }
 
+        // Death UI often hides the buff icon → false "missing buff". Revive and return to
+        // farm; let the next loop decide whether to seek again.
         if (DeathActions.isDead()) {
-            Log.d(TAG, "[ELF] dead before elf route; reviving")
+            Log.d(TAG, "[ELF] dead before elf route; revive → farm (defer buff)")
             if (!DeathActions.recoverIfDead()) {
                 return false
             }
+            return BotRecoveryActions.navigateToFarmWithRetry("post-revive-defer-elf") ||
+                BotRecoveryActions.recoverFromLostState("post-revive-defer-elf")
         }
 
         if (!goToElfBuff(elfLocation)) {
@@ -57,7 +61,7 @@ object ElfBuffNavigationActions {
         Log.d(
             TAG,
             "[ELF] going to buff map=${location.map} wire=${location.wire} " +
-                "pixel=(${location.x},${location.y})"
+                "pixel=(${location.x},${location.y})",
         )
 
         if (!NavigationOrchestrator.goToVisualLocation(location)) {
