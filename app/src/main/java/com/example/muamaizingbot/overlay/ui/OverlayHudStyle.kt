@@ -12,9 +12,14 @@ object OverlayHudStyle {
     val accentRed = Color(0xFFE53935)
     val textPrimary = Color(0xFFFFFFFF)
     val textSecondary = Color(0xB3FFFFFF)
-    val panelWidth = 132.dp
-    val bubbleSize = 52.dp
-    val controlButtonSize = 40.dp
-    val cornerRadius = 12.dp
-    val statusFontSize = 13.sp
+    val panelWidth = 118.dp
+    val bubbleSize = 36.dp
+    val controlButtonSize = 28.dp
+    val controlIconSize = 16.dp
+    val cornerRadius = 8.dp
+    val titleFontSize = 11.sp
+    val statusFontSize = 10.sp
+    val metaFontSize = 9.sp
+    /** Collapse expanded panel after this idle time (game-style HUD hide). */
+    const val AUTO_COLLAPSE_MS = 4_000L
 }

@@ -3,6 +3,7 @@ package com.example.muamaizingbot.overlay.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,8 +22,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -31,11 +34,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.accessibility.BotAccessibilityService
 import com.example.muamaizingbot.bot.BotController
 import com.example.muamaizingbot.bot.BotRuntimeState
+import com.example.muamaizingbot.bot.maintenance.ElfBuffSeekGate
 import com.example.muamaizingbot.capture.ScreenCaptureManager
+import com.example.muamaizingbot.profile.ProfileRepository
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 @Composable
@@ -45,17 +52,37 @@ fun OverlayPanel(
     modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var lastInteractionAtMs by remember { mutableLongStateOf(System.currentTimeMillis()) }
     val botState by BotController.state.collectAsState()
     val captureActive by ScreenCaptureManager.isActive.collectAsState()
     val captureReady by ScreenCaptureManager.isReadyFlow.collectAsState()
     val inputConnected = BotAccessibilityService.isConnected
 
-    val dragModifier = Modifier.pointerInput(Unit) {
+    fun markInteraction() {
+        lastInteractionAtMs = System.currentTimeMillis()
+    }
+
+    LaunchedEffect(expanded, lastInteractionAtMs) {
+        if (!expanded) return@LaunchedEffect
+        while (true) {
+            val remaining = OverlayHudStyle.AUTO_COLLAPSE_MS -
+                (System.currentTimeMillis() - lastInteractionAtMs)
+            if (remaining <= 0L) {
+                expanded = false
+                break
+            }
+            delay(remaining.coerceAtMost(500L).coerceAtLeast(50L))
+        }
+    }
+
+    val dragModifier = Modifier.pointerInput(expanded) {
         detectDragGestures(
+            onDragStart = { markInteraction() },
             onDragEnd = { onDragEnd() },
             onDragCancel = { onDragEnd() },
         ) { change, dragAmount ->
             change.consume()
+            markInteraction()
             onDragBy(dragAmount.x.roundToInt(), dragAmount.y.roundToInt())
         }
     }
@@ -68,17 +95,25 @@ fun OverlayPanel(
             captureReady = captureReady,
             inputConnected = inputConnected,
             onCollapse = { expanded = false },
+            onInteract = { markInteraction() },
             onStart = {
+                markInteraction()
                 BotController.start()
                 expanded = false
             },
-            onPause = { BotController.pause() },
+            onPause = {
+                markInteraction()
+                BotController.pause()
+            },
         )
     } else {
         BubbleOverlay(
             modifier = modifier.then(dragModifier),
             botState = botState,
-            onExpand = { expanded = true },
+            onExpand = {
+                markInteraction()
+                expanded = true
+            },
         )
     }
 }
@@ -113,17 +148,30 @@ private fun ExpandedOverlay(
     captureReady: Boolean,
     inputConnected: Boolean,
     onCollapse: () -> Unit,
+    onInteract: () -> Unit,
     onStart: () -> Unit,
     onPause: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val profile by ProfileRepository.currentProfile.collectAsState()
+    val seekEnabled = ProfileRepository.shouldSeekElfBuff(profile)
+    val seekStatus by ElfBuffSeekGate.status.collectAsState()
+
+    LaunchedEffect(seekEnabled, seekStatus.isOnCooldown) {
+        if (!seekEnabled) return@LaunchedEffect
+        while (true) {
+            ElfBuffSeekGate.refreshStatus()
+            delay(1_000L)
+        }
+    }
+
     Column(
         modifier = modifier
             .width(OverlayHudStyle.panelWidth)
             .clip(RoundedCornerShape(OverlayHudStyle.cornerRadius))
             .background(OverlayHudStyle.panelBackground)
-            .padding(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 6.dp, vertical = 5.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -134,15 +182,19 @@ private fun ExpandedOverlay(
                 text = "MU Bot",
                 color = OverlayHudStyle.textPrimary,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = OverlayHudStyle.statusFontSize,
+                fontSize = OverlayHudStyle.titleFontSize,
             )
             Text(
                 text = "−",
                 color = OverlayHudStyle.textSecondary,
+                fontSize = OverlayHudStyle.titleFontSize,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
-                    .clickable(onClick = onCollapse)
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .clickable {
+                        onInteract()
+                        onCollapse()
+                    }
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
             )
         }
 
@@ -156,23 +208,36 @@ private fun ExpandedOverlay(
         val ready = inputConnected && captureReady
         Text(
             text = when {
-                !inputConnected -> "Input: no listo"
-                !captureActive -> "Captura: inactiva (Inicio → Iniciar captura)"
-                !captureReady -> "Captura: iniciando…"
+                !inputConnected -> "Input off"
+                !captureActive -> "Captura off"
+                !captureReady -> "Captura…"
                 else -> "Listo"
             },
             color = if (ready) OverlayHudStyle.accentGreen else OverlayHudStyle.textSecondary,
-            fontSize = OverlayHudStyle.statusFontSize,
+            fontSize = OverlayHudStyle.metaFontSize,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
+
+        if (seekEnabled) {
+            ElfSeekRow(
+                status = seekStatus,
+                onReset = {
+                    onInteract()
+                    ElfBuffSeekGate.reset()
+                },
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         ) {
             FilledIconButton(
                 onClick = onStart,
                 modifier = Modifier.size(OverlayHudStyle.controlButtonSize),
                 enabled = botState != BotRuntimeState.RUNNING && ready,
+                interactionSource = remember { MutableInteractionSource() },
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = OverlayHudStyle.accentGreen,
                     disabledContainerColor = OverlayHudStyle.accentGreen.copy(alpha = 0.4f),
@@ -182,6 +247,7 @@ private fun ExpandedOverlay(
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
                     contentDescription = "Start",
+                    modifier = Modifier.size(OverlayHudStyle.controlIconSize),
                 )
             }
 
@@ -189,6 +255,7 @@ private fun ExpandedOverlay(
                 onClick = onPause,
                 modifier = Modifier.size(OverlayHudStyle.controlButtonSize),
                 enabled = botState == BotRuntimeState.RUNNING,
+                interactionSource = remember { MutableInteractionSource() },
                 colors = IconButtonDefaults.filledIconButtonColors(
                     containerColor = OverlayHudStyle.accentOrange,
                     disabledContainerColor = OverlayHudStyle.accentOrange.copy(alpha = 0.4f),
@@ -198,8 +265,46 @@ private fun ExpandedOverlay(
                 Icon(
                     imageVector = Icons.Default.Pause,
                     contentDescription = "Pause",
+                    modifier = Modifier.size(OverlayHudStyle.controlIconSize),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun ElfSeekRow(
+    status: ElfBuffSeekGate.Status,
+    onReset: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = status.label(),
+            color = when {
+                status.isOnCooldown -> OverlayHudStyle.accentOrange
+                status.failedAttempts > 0 -> OverlayHudStyle.accentOrange
+                else -> OverlayHudStyle.textSecondary
+            },
+            fontSize = OverlayHudStyle.metaFontSize,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f),
+        )
+        if (status.isOnCooldown || status.failedAttempts > 0) {
+            Text(
+                text = "Reset",
+                color = OverlayHudStyle.accentGreen,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = OverlayHudStyle.metaFontSize,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(3.dp))
+                    .clickable(onClick = onReset)
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+            )
         }
     }
 }

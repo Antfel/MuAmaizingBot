@@ -177,6 +177,11 @@ object NavigationWaitActions {
         return coordDistanceToSpot(location, mapDef)?.let { it <= location.arrivalRadius } == true
     }
 
+    /** True when HUD coords are within the farm radius (looser than arrival). */
+    suspend fun isWithinFarmRadius(location: FarmLocation, mapDef: MapDefinition?): Boolean {
+        return coordDistanceToSpot(location, mapDef)?.let { it <= location.farmRadius } == true
+    }
+
     private suspend fun isNearFarmSpot(
         location: FarmLocation,
         mapDef: MapDefinition?,
