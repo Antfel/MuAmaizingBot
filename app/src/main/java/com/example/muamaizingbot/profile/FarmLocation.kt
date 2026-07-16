@@ -14,7 +14,7 @@ data class FarmLocation(
     val coordX: Int? = null,
     val coordY: Int? = null,
     val arrivalRadius: Int = 5,
-    val farmRadius: Int = 20,
+    val farmRadius: Int = 5,
     val lostRadius: Int = 35,
 ) {
     fun toJson(): JSONObject {
@@ -55,7 +55,10 @@ data class FarmLocation(
                 coordX = json.optInt("coord_x").takeIf { json.has("coord_x") && !json.isNull("coord_x") },
                 coordY = json.optInt("coord_y").takeIf { json.has("coord_y") && !json.isNull("coord_y") },
                 arrivalRadius = json.optInt("arrival_radius", 5),
-                farmRadius = json.optInt("farm_radius", 20),
+                farmRadius = json.optInt("farm_radius", 5).let { saved ->
+                    // Migrate old default (20) down to the intended farm radius.
+                    if (saved == 20) 5 else saved
+                },
                 lostRadius = json.optInt("lost_radius", 35),
             )
         }
