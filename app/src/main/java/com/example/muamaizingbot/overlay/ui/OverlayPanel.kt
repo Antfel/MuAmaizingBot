@@ -37,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.accessibility.BotAccessibilityService
+import com.example.muamaizingbot.bot.BotAutoRestart
 import com.example.muamaizingbot.bot.BotController
 import com.example.muamaizingbot.bot.BotRuntimeState
 import com.example.muamaizingbot.bot.maintenance.ElfBuffSeekGate
@@ -107,9 +108,11 @@ fun OverlayPanel(
             },
         )
     } else {
+        val autoRestart by BotAutoRestart.status.collectAsState()
         BubbleOverlay(
             modifier = modifier.then(dragModifier),
             botState = botState,
+            autoRestartPending = autoRestart.isPending,
             onExpand = {
                 markInteraction()
                 expanded = true
@@ -121,6 +124,7 @@ fun OverlayPanel(
 @Composable
 private fun BubbleOverlay(
     botState: BotRuntimeState,
+    autoRestartPending: Boolean,
     onExpand: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -133,7 +137,7 @@ private fun BubbleOverlay(
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = stateShortLabel(botState),
+            text = stateShortLabel(botState, autoRestartPending),
             color = bubbleTextColor(botState),
             fontWeight = FontWeight.Bold,
             fontSize = OverlayHudStyle.statusFontSize,
@@ -156,6 +160,7 @@ private fun ExpandedOverlay(
     val profile by ProfileRepository.currentProfile.collectAsState()
     val seekEnabled = ProfileRepository.shouldSeekElfBuff(profile)
     val seekStatus by ElfBuffSeekGate.status.collectAsState()
+    val autoRestart by BotAutoRestart.status.collectAsState()
 
     LaunchedEffect(seekEnabled, seekStatus.isOnCooldown) {
         if (!seekEnabled) return@LaunchedEffect
@@ -204,6 +209,16 @@ private fun ExpandedOverlay(
             fontSize = OverlayHudStyle.statusFontSize,
             fontWeight = FontWeight.Medium,
         )
+
+        if (autoRestart.detail.isNotEmpty()) {
+            Text(
+                text = autoRestart.detail,
+                color = OverlayHudStyle.accentOrange,
+                fontSize = OverlayHudStyle.metaFontSize,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
 
         val ready = inputConnected && captureReady
         Text(
@@ -309,12 +324,15 @@ private fun ElfSeekRow(
     }
 }
 
-private fun stateShortLabel(state: BotRuntimeState): String = when (state) {
-    BotRuntimeState.IDLE -> "ID"
-    BotRuntimeState.RUNNING -> "ON"
-    BotRuntimeState.PAUSED -> "||"
-    BotRuntimeState.ERROR -> "!"
-}
+private fun stateShortLabel(state: BotRuntimeState, autoRestartPending: Boolean): String =
+    when {
+        autoRestartPending && state == BotRuntimeState.ERROR -> "R"
+        state == BotRuntimeState.IDLE -> "ID"
+        state == BotRuntimeState.RUNNING -> "ON"
+        state == BotRuntimeState.PAUSED -> "||"
+        state == BotRuntimeState.ERROR -> "!"
+        else -> "?"
+    }
 
 private fun bubbleTextColor(state: BotRuntimeState) = when (state) {
     BotRuntimeState.RUNNING -> OverlayHudStyle.accentGreen
