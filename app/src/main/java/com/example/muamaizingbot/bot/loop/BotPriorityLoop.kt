@@ -12,12 +12,14 @@ import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.profile.ProfileRepository
+import kotlinx.coroutines.delay
 
 object BotPriorityLoop {
 
     private const val TAG = "BotLoop"
     /** Farm soft-fails tolerated before any recovery (PC-style: keep farming on spot). */
     private const val FARM_SOFT_FAIL_TOLERANCE = 8
+    private const val NAV_COOLDOWN_SOFT_WAIT_MS = 2_000L
 
     private var consecutiveFarmSoftFails = 0
 
@@ -56,6 +58,15 @@ object BotPriorityLoop {
         // After 3 failed seeks, ElfBuffSeekGate pauses for 1h then retries.
         if (ElfBuffSeekGate.shouldAttemptSeek(profile)) {
             if (!ElfBuffCheckActions.hasElfBuff()) {
+                // Death screen can hide the buff icon; prefer revive over seeking.
+                if (DeathActions.isDead()) {
+                    Log.d(TAG, "[LOOP] branch=death_recovery (masked as missing buff)")
+                    consecutiveFarmSoftFails = 0
+                    if (!DeathActions.recoverIfDead()) {
+                        return IterationResult.ERROR
+                    }
+                    return navigateToFarm("post-revive")
+                }
                 return handleMissingElfBuff("loop")
             }
         }
@@ -166,8 +177,20 @@ object BotPriorityLoop {
 
     private suspend fun navigateToFarm(reason: String): IterationResult {
         Log.d(TAG, "[LOOP] navigating reason=$reason")
+        if (BotRecoveryActions.isNavCooldownActive()) {
+            val waitMs = BotRecoveryActions.navCooldownRemainingMs()
+                .coerceAtMost(NAV_COOLDOWN_SOFT_WAIT_MS)
+                .coerceAtLeast(500L)
+            Log.w(TAG, "[LOOP] nav cooldown soft-wait ${waitMs}ms reason=$reason")
+            delay(waitMs)
+            return IterationResult.OK
+        }
         if (BotRecoveryActions.navigateToFarmWithRetry(reason)) {
             return ensureAutoOnly(reason)
+        }
+        if (BotRecoveryActions.isNavCooldownActive()) {
+            Log.w(TAG, "[LOOP] navigate failed → cooldown; soft OK reason=$reason")
+            return IterationResult.OK
         }
         return recoveryOrError("nav-failed-$reason")
     }
@@ -175,6 +198,9 @@ object BotPriorityLoop {
     private suspend fun recoveryOrError(reason: String): IterationResult {
         Log.w(TAG, "[LOOP] attempting recovery checkpoint reason=$reason")
         return if (BotRecoveryActions.recoverFromLostState(reason)) {
+            IterationResult.OK
+        } else if (BotRecoveryActions.isNavCooldownActive()) {
+            Log.w(TAG, "[LOOP] recovery deferred (nav cooldown); soft OK reason=$reason")
             IterationResult.OK
         } else {
             IterationResult.ERROR

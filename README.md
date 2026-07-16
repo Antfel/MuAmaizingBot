@@ -3,7 +3,7 @@
 Bot de farm para **MU Immortal** en BlueStacks (emulador Android). Automatiza navegación al spot, cambio de wire, buff de elf, compra de pociones y combate en auto.
 
 **Hito estable:** Bot Farming Spot / Elf Buff / Potions  
-**Release:** **v1.1.1**  
+**Release:** **v1.1.2**  
 **Tag:** `bot-farming-spot-elf-buff-potions`
 
 ---
@@ -64,7 +64,7 @@ Sin farm spot configurado el bot no puede navegar al punto de farm. Con elf buff
 ```bash
 git clone git@github.com:Antfel/MuAmaizingBot.git
 cd MuAmaizingBot
-git checkout bot-farming-spot-elf-buff-potions   # hito estable v1.1.1
+git checkout bot-farming-spot-elf-buff-potions   # hito estable v1.1.2
 ```
 
 ### 2. Conectar BlueStacks por ADB
@@ -95,8 +95,8 @@ APKs del Release:
 
 | APK | Chip |
 |-----|------|
-| `MUAmaizingBot-1.1.1-arm64.apk` | BlueStacks Mac / ARM |
-| `MUAmaizingBot-1.1.1-x86_64.apk` | BlueStacks PC Intel / AMD |
+| `MUAmaizingBot-1.1.2-arm64.apk` | BlueStacks Mac / ARM |
+| `MUAmaizingBot-1.1.2-x86_64.apk` | BlueStacks PC Intel / AMD |
 
 Desinstalar:
 
@@ -139,3 +139,5 @@ Abre **MuAmaizingBot** y habilita, en este orden tipico:
 - Pause detiene el worker; al reanudar corre de nuevo el startup (mapa / wire / spot / buff según perfil).
 - El backoff de elf buff **no** se reinicia con Pause/Start; usa **Reset** en el overlay o force-stop de la app.
 - Radio de spot (arrival/farm): **5** coords Manhattan.
+- Si mueres mientras el icono de buff no se ve, el bot revive y vuelve al farm **sin** ir a buscar buff en ese ciclo.
+- Fallos de navegación activan un cooldown corto; el bot **no se detiene** por eso (reintenta al expirar).
