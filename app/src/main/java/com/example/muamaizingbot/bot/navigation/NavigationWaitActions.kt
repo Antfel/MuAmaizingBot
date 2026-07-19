@@ -365,6 +365,11 @@ object NavigationWaitActions {
         }
     }
 
+    /** Public HUD game-coordinate read for War post capture / arrival checks. */
+    suspend fun readHudGameCoordinates(mapDef: MapDefinition?): Pair<Int, Int>? {
+        return readHudCoordinates(mapDef)
+    }
+
     private fun manhattanDistance(ax: Int, ay: Int, bx: Int, by: Int): Int {
         return abs(ax - bx) + abs(ay - by)
     }

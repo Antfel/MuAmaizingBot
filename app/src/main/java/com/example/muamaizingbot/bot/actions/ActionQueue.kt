@@ -1,6 +1,7 @@
 package com.example.muamaizingbot.bot.actions
 
 import android.util.Log
+import com.example.muamaizingbot.bot.BotDiagnosticJournal
 import java.util.ArrayDeque
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,8 +77,10 @@ object ActionQueue {
                 } ?: break
 
                 Log.d(TAG, "[ACTION_QUEUE] dequeue action=$action")
+                BotDiagnosticJournal.record(TAG, "dequeue $action")
                 if (!ActionExecutor.execute(action)) {
                     Log.w(TAG, "[ACTION_QUEUE] stopped on failure action=$action")
+                    BotDiagnosticJournal.record(TAG, "failed $action")
                     mutex.withLock { pending.clear() }
                     break
                 }

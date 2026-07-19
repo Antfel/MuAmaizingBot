@@ -17,5 +17,7 @@ class MuBotApplication : Application() {
         ProfileRepository.init(this)
         LocationRepository.init(this)
         LocationRepository.refreshForCurrentProfile()
+        com.example.muamaizingbot.bot.BotDiagnosticJournal.init(this)
+        com.example.muamaizingbot.bot.maintenance.ElfBuffDebugDump.init(this)
     }
 }

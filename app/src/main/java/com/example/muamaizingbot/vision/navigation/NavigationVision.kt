@@ -239,15 +239,26 @@ object NavigationVision {
     }
 
     /** Tap at reference coordinates (logical 2560×1440 → scaled to capture). */
-    suspend fun tap(refX: Int, refY: Int): Boolean {
+    suspend fun tap(refX: Int, refY: Int, label: String? = null): Boolean {
         val (x, y) = RefCoords.scalePoint(refX, refY)
-        return tapScreen(x, y)
+        return tapScreen(x, y, label = label)
     }
 
     /** Tap at absolute screen pixels (e.g. template match center). */
-    suspend fun tapScreen(x: Int, y: Int): Boolean {
+    suspend fun tapScreen(x: Int, y: Int, label: String? = null): Boolean {
         return suspendCancellableCoroutine { continuation ->
-            InputController.tap(x, y) { result ->
+            InputController.tap(x, y, label = label) { result ->
+                if (continuation.isActive) {
+                    continuation.resume(result)
+                }
+            }
+        }
+    }
+
+    /** Longer press at absolute pixels (character focus / select). */
+    suspend fun tapHoldScreen(x: Int, y: Int, durationMs: Long = 160L, label: String? = null): Boolean {
+        return suspendCancellableCoroutine { continuation ->
+            InputController.tapHold(x, y, durationMs, label = label) { result ->
                 if (continuation.isActive) {
                     continuation.resume(result)
                 }

@@ -34,7 +34,7 @@ object BotRecoveryActions {
             .coerceAtLeast(0L)
     }
 
-    suspend fun navigateToFarmWithRetry(reason: String): Boolean {
+    suspend fun navigateToFarmWithRetry(reason: String, ensureAuto: Boolean = true): Boolean {
         if (isAlreadyAtFarmPost(reason)) {
             return true
         }
@@ -53,7 +53,7 @@ object BotRecoveryActions {
                     return false
                 }
             }
-            if (NavigationOrchestrator.goToActiveFarmSpot()) {
+            if (NavigationOrchestrator.goToActiveFarmSpot(ensureAuto = ensureAuto)) {
                 Log.d(TAG, "[RECOVERY] navigate ok reason=$reason")
                 lastFailedNavigateMs = 0L
                 return true

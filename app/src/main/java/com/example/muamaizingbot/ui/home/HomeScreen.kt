@@ -39,8 +39,11 @@ import com.example.muamaizingbot.accessibility.BotAccessibilityService
 import com.example.muamaizingbot.bot.BotController
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.maps.MapDefinitionRepository
+import com.example.muamaizingbot.profile.BotMode
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isElfBuffGiverMode
+import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.overlay.OverlayManager
 import com.example.muamaizingbot.overlay.OverlayPermission
 
@@ -100,7 +103,16 @@ fun HomeScreen(
         )
 
         StatusCard(
-            title = "Farm spot",
+            title = "Modo",
+            value = currentProfile?.let { BotMode.label(it.botMode) } ?: "—",
+        )
+
+        StatusCard(
+            title = when {
+                currentProfile?.isElfBuffWarMode() == true -> "Divine map"
+                currentProfile?.isElfBuffGiverMode() == true -> "Buff post"
+                else -> "Farm spot"
+            },
             value = farmSpot?.summaryLabel(
                 MapDefinitionRepository.getById(farmSpot?.map.orEmpty())?.name
             ) ?: "Sin configurar",

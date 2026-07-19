@@ -16,8 +16,8 @@ object NavigationOrchestrator {
     /** Fixed HUD settle after teleport / closing world map (PC-style wait(1)). */
     private const val PRE_WIRE_SETTLE_MS = 2500L
 
-    suspend fun goToActiveFarmSpot(): Boolean {
-        Log.d(TAG, "[NAV] go_to_active_farm_spot started")
+    suspend fun goToActiveFarmSpot(ensureAuto: Boolean = true): Boolean {
+        Log.d(TAG, "[NAV] go_to_active_farm_spot started ensureAuto=$ensureAuto")
 
         val profile = ProfileRepository.currentProfile.value
         if (profile == null) {
@@ -61,7 +61,9 @@ object NavigationOrchestrator {
             if (!NavigationWaitActions.waitUntilUiSettled()) {
                 Log.w(TAG, "[NAV] UI not settled; continuing")
             }
-            GameActions.ensureAutoMode()
+            if (ensureAuto) {
+                GameActions.ensureAutoMode()
+            }
             Log.d(TAG, "[NAV] go_to_active_farm_spot finished=true (on spot)")
             return true
         }
@@ -85,7 +87,9 @@ object NavigationOrchestrator {
             if (!NavigationWaitActions.waitUntilUiSettled()) {
                 Log.w(TAG, "[NAV] UI not settled before auto; continuing")
             }
-            GameActions.ensureAutoMode()
+            if (ensureAuto) {
+                GameActions.ensureAutoMode()
+            }
             Log.d(TAG, "[NAV] go_to_active_farm_spot finished=true (spot-only)")
             return true
         }
@@ -111,7 +115,7 @@ object NavigationOrchestrator {
             Log.w(TAG, "[NAV] UI not settled before auto; continuing")
         }
 
-        if (!GameActions.ensureAutoMode()) {
+        if (ensureAuto && !GameActions.ensureAutoMode()) {
             Log.w(TAG, "[NAV] ensure_auto_mode failed; farming loop will retry")
         }
 
@@ -136,6 +140,38 @@ object NavigationOrchestrator {
             return false
         }
 
+        return true
+    }
+
+    /**
+     * Return to a War/APEX post via open map + affine tap.
+     * Skips wire teleport when already on the post's map (Divine).
+     * Does **not** force Auto ON.
+     */
+    suspend fun goToWarPost(location: FarmLocation): Boolean {
+        val mapDef = MapDefinitionRepository.getById(location.map)
+        if (mapDef == null) {
+            Log.w(TAG, "[NAV] war_post map missing id=${location.map}")
+            return false
+        }
+
+        val onMap = NavigationWaitActions.isOnConfiguredMap(mapDef, location)
+        if (!onMap) {
+            Log.d(TAG, "[NAV] war_post off map → teleport to ${mapDef.id}")
+            if (!navigateToMapAndWire(mapDef, location.wire, location)) {
+                Log.w(TAG, "[NAV] war_post navigate_to_map failed")
+                return false
+            }
+        } else {
+            Log.d(TAG, "[NAV] war_post on map → minimap tap only")
+        }
+
+        if (!tapVisualLocation(location.x, location.y, location, mapDef)) {
+            Log.w(TAG, "[NAV] war_post tap failed pixel=(${location.x},${location.y})")
+            return false
+        }
+
+        Log.d(TAG, "[NAV] war_post arrival ok coords=(${location.coordX},${location.coordY})")
         return true
     }
 

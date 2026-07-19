@@ -113,14 +113,23 @@ object ProfileRepository {
     }
 
     /**
-     * Elf buff is active only when the profile toggle is on AND a zone is saved.
-     * Callers must use this instead of probing the buff icon when the toggle is off.
+     * Seek NPC elf buff only in farm mode, when the toggle is on and a zone is saved.
+     * Elf-buff-giver mode never seeks (this profile *is* the buff post).
      */
     fun shouldSeekElfBuff(profile: BotProfile? = currentProfile.value): Boolean {
-        if (profile == null || !profile.enableElfBuff) {
+        if (profile == null || !profile.enableElfBuff || profile.isElfBuffPostMode()) {
             return false
         }
         return LocationRepository.getElfBuff(profile.filename) != null
+    }
+
+    fun setBotMode(profileFilename: String, mode: String): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val normalized = BotMode.normalize(mode)
+        val updated = profile.copy(botMode = normalized)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] bot_mode=$normalized file=$profileFilename")
+        return updated
     }
 
     fun setElfBuffEnabled(profileFilename: String, enabled: Boolean): BotProfile? {
@@ -128,6 +137,32 @@ object ProfileRepository {
         val updated = profile.copy(enableElfBuff = enabled)
         saveProfile(updated)
         Log.d(TAG, "[PROFILE] enable_elf_buff=$enabled file=$profileFilename")
+        return updated
+    }
+
+    fun setElfGiverCastConfig(
+        profileFilename: String,
+        skillRefX: Int?,
+        skillRefY: Int?,
+        intervalSec: Int,
+        autoCast: Boolean,
+    ): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(
+            elfBuffSkillRefX = skillRefX,
+            elfBuffSkillRefY = skillRefY,
+            elfBuffCastIntervalSec = intervalSec.coerceIn(
+                BotProfile.MIN_ELF_CAST_INTERVAL_SEC,
+                BotProfile.MAX_ELF_CAST_INTERVAL_SEC,
+            ),
+            elfBuffAutoCast = autoCast,
+        )
+        saveProfile(updated)
+        Log.d(
+            TAG,
+            "[PROFILE] elf_giver cast skill=($skillRefX,$skillRefY) " +
+                "interval=${updated.elfBuffCastIntervalSec}s auto=$autoCast file=$profileFilename",
+        )
         return updated
     }
 

@@ -1,7 +1,7 @@
 # Elf Buff Bot — hoja de ruta
 
 **Branch:** `Elf-Buff-Bot`  
-**Base estable:** `bot-farming-spot-elf-buff-potions` (`main` @ 8556778)  
+**Base estable:** `main` v1.1.1 (`bot-farming-spot-elf-buff-potions`) merged into this branch.  
 **Rol:** la **elf da buff** a otros jugadores (modo paralelo al farm/seeker actual).
 
 ---
@@ -76,19 +76,21 @@ No hay implementación de *buff-giver* en `mu-adb-bot` ni en este repo: solo see
 ### Iteración 0 — Esqueleto (esta hoja de ruta)
 - [x] Branch `Elf-Buff-Bot`
 - [x] Roadmap documentado
-- [ ] Decidir nombre de modo en perfil (`elf_buff_giver` vs toggle)
+- [x] Nombre de modo: `bot_mode = elf_buff_giver`
 
 ### Iteración 1 — Modo giver + post estático
-- Nuevo `botMode` (o perfil “Elf Buff Bot”) sin tocar el seeker.
-- UI: elegir farm spot = **buff post** (puede reusar el farm spot del perfil).
-- Startup: ir al spot → auto ON → loop que **solo** mantiene farm estático + death/potions.
-- **Sin** castear buff todavía (valida el “estar ahí”).
+- [x] Nuevo `botMode` sin tocar el seeker de farm.
+- [x] UI: chips Farm / Elf Buff; farm spot = buff post en modo giver.
+- [x] Startup: ir al spot → auto ON → loop estático + death/potions.
+- [x] Sin castear buff todavía (valida el “estar ahí”).
+- [ ] Probar en emulador con perfil en modo Elf Buff.
 
 ### Iteración 2 — Casteo manual/semiautomático
-- Templates / coords de skill(s) de buff en la barra.
-- Acción: tap skill (self / ground / target según skill del juego).
-- Trigger temporal: timer o botón de prueba (“buff ahora”).
-- Logs claros `[ELF_GIVER] cast …`.
+- [x] Templates Greater Defense / Greater Damage (`templates/mu/ui/skills/`).
+- [x] Al Start (giver): match 1× → guarda coords; casts siguientes por tap.
+- [x] Cast ambos skills; timer + overlay **Cast** / **Map**.
+- [x] Logs `[ELF_GIVER] cast …` / `skill mapped …`.
+- [x] Probar en emulador 5574.
 
 ### Iteración 3 — Modo Party
 - Detectar UI de party (abierta o iconos en pantalla).
@@ -96,9 +98,13 @@ No hay implementación de *buff-giver* en `mu-adb-bot` ni en este repo: solo see
 - Buff al membre que aparece / se acerca; cooldown por personaje si es posible.
 
 ### Iteración 4 — Detección de aproximación (público)
-- Definir radio / heurística (nombre cerca del centro, popup, silhouette).
-- Modo **Todos**: si hay PJ en rango → cast → cooldown.
-- Debounce para no castear en vacío.
+- [x] Nameplate structure: **`[GUILD]` gold → `SERVER` white → `NAME` green**.
+- [x] Exclusion zones (user-marked): no detect / no focus en HUD + self.
+- [x] Focus: mid del nameplate + offset Y; confirmar HUD de target.
+- [x] Unfocus: tap **X** del focus HUD (no suelo).
+- [x] Overlay debug + logs `plate bounds` / `skip … exclusion` / `focus HUD`.
+- [ ] Affinar template X / umbral HUD si hace falta.
+- [ ] Debounce multi-frame si hace falta.
 
 ### Iteración 5 — Aliados
 - Lista blanca (nombres) y/o marcador de guild.
@@ -124,4 +130,4 @@ No hay implementación de *buff-giver* en `mu-adb-bot` ni en este repo: solo see
 
 ## Primera implementación recomendada (siguiente chat)
 
-Arrancar **Iteración 1**: `botMode = elf_buff_giver` + loop estático en el spot, reutilizando navegación/farm/death/potions, sin lógica de cast todavía. Así el branch queda ejecutable y separado del farm seeker desde el día 1.
+Arrancar **Iteración 3** (party) cuando I2 esté validada en emulador: coords de skill + Cast/timer OK.

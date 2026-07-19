@@ -49,6 +49,23 @@ object RefCoords {
         return scalePoint(refX, refY, frame.width, frame.height)
     }
 
+    fun unscaleX(screenX: Int, screenWidth: Int = activeScreenSize().first): Int {
+        return (screenX.toLong() * REF_WIDTH / screenWidth).toInt()
+    }
+
+    fun unscaleY(screenY: Int, screenHeight: Int = activeScreenSize().second): Int {
+        return (screenY.toLong() * REF_HEIGHT / screenHeight).toInt()
+    }
+
+    fun unscalePoint(screenX: Int, screenY: Int, screenWidth: Int, screenHeight: Int): Pair<Int, Int> {
+        return unscaleX(screenX, screenWidth) to unscaleY(screenY, screenHeight)
+    }
+
+    fun unscalePoint(screenX: Int, screenY: Int): Pair<Int, Int> {
+        val (w, h) = activeScreenSize()
+        return unscalePoint(screenX, screenY, w, h)
+    }
+
     fun scaleRect(refRect: Rect, screenWidth: Int, screenHeight: Int): Rect {
         return Rect(
             scaleX(refRect.left, screenWidth),

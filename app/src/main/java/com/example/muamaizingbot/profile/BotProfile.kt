@@ -15,6 +15,13 @@ data class BotProfile(
     val enablePotionRecovery: Boolean = true,
     val enableElfBuff: Boolean = true,
     val farmEnabled: Boolean = true,
+    /** Buff skill tap in logical 2560×1440 (giver mode). */
+    val elfBuffSkillRefX: Int? = null,
+    val elfBuffSkillRefY: Int? = null,
+    /** Seconds between automatic casts while holding the post. */
+    val elfBuffCastIntervalSec: Int = DEFAULT_ELF_CAST_INTERVAL_SEC,
+    /** When false, only overlay "Cast" / force requests cast. */
+    val elfBuffAutoCast: Boolean = true,
 ) {
     val fileStem: String
         get() = filename.removeSuffix(".json")
@@ -32,6 +39,18 @@ data class BotProfile(
             put("general_config", JSONObject().put("enable_elf_buff", enableElfBuff))
             put("farm_config", JSONObject().put("enabled", farmEnabled))
             put(
+                "elf_giver_config",
+                JSONObject().apply {
+                    elfBuffSkillRefX?.let { put("skill_ref_x", it) }
+                    elfBuffSkillRefY?.let { put("skill_ref_y", it) }
+                    put(
+                        "cast_interval_sec",
+                        elfBuffCastIntervalSec.coerceIn(MIN_ELF_CAST_INTERVAL_SEC, MAX_ELF_CAST_INTERVAL_SEC),
+                    )
+                    put("auto_cast", elfBuffAutoCast)
+                },
+            )
+            put(
                 "kill_bosses_config",
                 JSONObject()
                     .put("enabled", false)
@@ -45,14 +64,19 @@ data class BotProfile(
     }
 
     companion object {
+        const val DEFAULT_ELF_CAST_INTERVAL_SEC = 1
+        const val MIN_ELF_CAST_INTERVAL_SEC = 1
+        const val MAX_ELF_CAST_INTERVAL_SEC = 600
+
         fun fromJson(filename: String, json: JSONObject): BotProfile {
             val general = json.optJSONObject("general_config")
             val farm = json.optJSONObject("farm_config")
+            val giver = json.optJSONObject("elf_giver_config")
             return BotProfile(
                 filename = filename,
                 displayName = json.optString("display_name").ifBlank { filename.removeSuffix(".json") },
                 characterLevel = json.optInt("character_level").takeIf { json.has("character_level") && !json.isNull("character_level") },
-                botMode = json.optString("bot_mode", "farm"),
+                botMode = BotMode.normalize(json.optString("bot_mode", BotMode.FARM)),
                 map = json.optString("map", ""),
                 wire = json.optInt("wire", 1),
                 spot = json.optString("spot", "spot_1"),
@@ -61,6 +85,15 @@ data class BotProfile(
                 enablePotionRecovery = json.optBoolean("enable_potion_recovery", true),
                 enableElfBuff = general?.optBoolean("enable_elf_buff", true) ?: true,
                 farmEnabled = farm?.optBoolean("enabled", true) ?: true,
+                elfBuffSkillRefX = giver?.optInt("skill_ref_x")
+                    ?.takeIf { giver.has("skill_ref_x") && !giver.isNull("skill_ref_x") },
+                elfBuffSkillRefY = giver?.optInt("skill_ref_y")
+                    ?.takeIf { giver.has("skill_ref_y") && !giver.isNull("skill_ref_y") },
+                elfBuffCastIntervalSec = giver
+                    ?.optInt("cast_interval_sec", DEFAULT_ELF_CAST_INTERVAL_SEC)
+                    ?.coerceIn(MIN_ELF_CAST_INTERVAL_SEC, MAX_ELF_CAST_INTERVAL_SEC)
+                    ?: DEFAULT_ELF_CAST_INTERVAL_SEC,
+                elfBuffAutoCast = giver?.optBoolean("auto_cast", true) ?: true,
             )
         }
 

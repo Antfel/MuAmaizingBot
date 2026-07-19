@@ -24,6 +24,9 @@ object LocationRepository {
     private val _elfBuff = MutableStateFlow<FarmLocation?>(null)
     val elfBuff: StateFlow<FarmLocation?> = _elfBuff.asStateFlow()
 
+    private val _warPost = MutableStateFlow<FarmLocation?>(null)
+    val warPost: StateFlow<FarmLocation?> = _warPost.asStateFlow()
+
     fun init(context: Context) {
         if (initialized) {
             return
@@ -35,7 +38,11 @@ object LocationRepository {
         }
         refreshForCurrentProfile()
         initialized = true
-        Log.d(TAG, "[LOCATIONS] init farmSpot=${_farmSpot.value?.id} elfBuff=${_elfBuff.value?.id}")
+        Log.d(
+            TAG,
+            "[LOCATIONS] init farmSpot=${_farmSpot.value?.id} " +
+                "elfBuff=${_elfBuff.value?.id} warPost=${_warPost.value?.id}",
+        )
     }
 
     fun refreshForCurrentProfile() {
@@ -45,10 +52,12 @@ object LocationRepository {
         val profile = ProfileRepository.currentProfile.value ?: run {
             _farmSpot.value = null
             _elfBuff.value = null
+            _warPost.value = null
             return
         }
         _farmSpot.value = getFarmSpot(profile.filename)
         _elfBuff.value = getElfBuff(profile.filename)
+        _warPost.value = getWarPost(profile.filename)
     }
 
     fun getFarmSpot(profileFilename: String): FarmLocation? {
@@ -57,6 +66,10 @@ object LocationRepository {
 
     fun getElfBuff(profileFilename: String): FarmLocation? {
         return findLocation(profileFilename, "elf_buff")
+    }
+
+    fun getWarPost(profileFilename: String): FarmLocation? {
+        return findLocation(profileFilename, "war_post")
     }
 
     fun upsertFarmSpot(
@@ -123,6 +136,42 @@ object LocationRepository {
         return location
     }
 
+    fun upsertWarPost(
+        profileFilename: String,
+        mapId: String,
+        wire: Int,
+        x: Int,
+        y: Int,
+        name: String = "War Post",
+        coordX: Int? = null,
+        coordY: Int? = null,
+    ): FarmLocation {
+        val profile = normalizeProfileName(profileFilename)
+        val existing = getWarPost(profileFilename)
+        val location = FarmLocation(
+            id = existing?.id ?: "${profile.removeSuffix(".json")}_war_post",
+            profile = profile,
+            type = "war_post",
+            name = name,
+            map = mapId,
+            wire = wire,
+            x = x,
+            y = y,
+            coordX = coordX,
+            coordY = coordY,
+        )
+        upsertLocation(location)
+        if (isCurrentProfile(profile)) {
+            _warPost.value = location
+        }
+        Log.d(
+            TAG,
+            "[LOCATIONS] saved war_post profile=$profile map=$mapId " +
+                "pixel=($x,$y) coords=(${coordX},${coordY})",
+        )
+        return location
+    }
+
     fun deleteElfBuff(profileFilename: String) {
         val profile = normalizeProfileName(profileFilename)
         val remaining = loadAll().filterNot {
@@ -143,6 +192,7 @@ object LocationRepository {
         if (isCurrentProfile(profile)) {
             _farmSpot.value = null
             _elfBuff.value = null
+            _warPost.value = null
         }
     }
 

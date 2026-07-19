@@ -27,12 +27,17 @@ class BotAccessibilityService : AccessibilityService() {
     override fun onInterrupt() = Unit
 
     fun performTap(x: Int, y: Int, onResult: (Boolean) -> Unit) {
+        performTap(x, y, TAP_DURATION_MS, onResult)
+    }
+
+    fun performTap(x: Int, y: Int, durationMs: Long, onResult: (Boolean) -> Unit) {
         val path = Path().apply {
             moveTo(x.toFloat(), y.toFloat())
         }
+        val hold = durationMs.coerceIn(30L, 500L)
         dispatchGesture(
             GestureDescription.Builder()
-                .addStroke(GestureDescription.StrokeDescription(path, 0, TAP_DURATION_MS))
+                .addStroke(GestureDescription.StrokeDescription(path, 0, hold))
                 .build(),
             gestureCallback(onResult),
             null,
