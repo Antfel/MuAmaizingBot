@@ -3,7 +3,7 @@
 Bot de farm para **MU Immortal** en BlueStacks (emulador Android). Automatiza navegación al spot, cambio de wire, buff de elf, compra de pociones y combate en auto.
 
 **Hito estable:** Bot Farming Spot / Elf Buff / Potions  
-**Release:** **v1.1.2**  
+**Release:** **v1.1.3**  
 **Tag:** `bot-farming-spot-elf-buff-potions`
 
 ---
@@ -38,6 +38,7 @@ Sin farm spot configurado el bot no puede navegar al punto de farm. Con elf buff
 - Panel compacto; se colapsa solo a burbuja tras ~4s sin uso (tap para expandir).
 - Controles Start/Pause.
 - Si elf seek está activo: estado `Elf: ok` / `Elf: N/3` / timer de cooldown + **Reset**.
+- Tras `ERROR` (salvo captura inactiva): auto-retry a los ~5s (máx. 3/hora); burbuja `R` + texto `Retry N/3`.
 
 ### Visión y captura
 
@@ -64,7 +65,7 @@ Sin farm spot configurado el bot no puede navegar al punto de farm. Con elf buff
 ```bash
 git clone git@github.com:Antfel/MuAmaizingBot.git
 cd MuAmaizingBot
-git checkout bot-farming-spot-elf-buff-potions   # hito estable v1.1.2
+git checkout bot-farming-spot-elf-buff-potions   # hito estable v1.1.3
 ```
 
 ### 2. Conectar BlueStacks por ADB
@@ -95,8 +96,8 @@ APKs del Release:
 
 | APK | Chip |
 |-----|------|
-| `MUAmaizingBot-1.1.2-arm64.apk` | BlueStacks Mac / ARM |
-| `MUAmaizingBot-1.1.2-x86_64.apk` | BlueStacks PC Intel / AMD |
+| `MUAmaizingBot-1.1.3-arm64.apk` | BlueStacks Mac / ARM |
+| `MUAmaizingBot-1.1.3-x86_64.apk` | BlueStacks PC Intel / AMD |
 
 Desinstalar:
 
