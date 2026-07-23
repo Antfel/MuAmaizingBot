@@ -22,6 +22,7 @@ data class BotProfile(
     val elfBuffCastIntervalSec: Int = DEFAULT_ELF_CAST_INTERVAL_SEC,
     /** When false, only overlay "Cast" / force requests cast. */
     val elfBuffAutoCast: Boolean = true,
+    val killBossesConfig: KillBossesConfig = KillBossesConfig(),
 ) {
     val fileStem: String
         get() = filename.removeSuffix(".json")
@@ -50,13 +51,7 @@ data class BotProfile(
                     put("auto_cast", elfBuffAutoCast)
                 },
             )
-            put(
-                "kill_bosses_config",
-                JSONObject()
-                    .put("enabled", false)
-                    .put("maps", org.json.JSONArray())
-                    .put("include_golden_mobs", false)
-            )
+            put("kill_bosses_config", killBossesConfig.toJson())
             put("map", map)
             put("wire", wire)
             put("spot", spot)
@@ -94,6 +89,7 @@ data class BotProfile(
                     ?.coerceIn(MIN_ELF_CAST_INTERVAL_SEC, MAX_ELF_CAST_INTERVAL_SEC)
                     ?: DEFAULT_ELF_CAST_INTERVAL_SEC,
                 elfBuffAutoCast = giver?.optBoolean("auto_cast", true) ?: true,
+                killBossesConfig = KillBossesConfig.fromJson(json.optJSONObject("kill_bosses_config")),
             )
         }
 

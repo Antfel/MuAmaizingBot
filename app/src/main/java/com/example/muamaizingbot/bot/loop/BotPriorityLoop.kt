@@ -2,6 +2,9 @@ package com.example.muamaizingbot.bot.loop
 
 import android.util.Log
 import com.example.muamaizingbot.bot.BotDiagnosticJournal
+import com.example.muamaizingbot.bot.bosses.BossHuntPhase
+import com.example.muamaizingbot.bot.bosses.BossHuntState
+import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
 import com.example.muamaizingbot.bot.farming.FarmingLoop
@@ -16,13 +19,16 @@ import com.example.muamaizingbot.bot.maintenance.ElfBuffWarPostActions
 import com.example.muamaizingbot.bot.maintenance.MapCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
+import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
+import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.profile.normalizedBotMode
 import kotlin.math.abs
 import kotlinx.coroutines.delay
@@ -67,11 +73,22 @@ object BotPriorityLoop {
             if (!DeathActions.recoverIfDead()) {
                 return IterationResult.ERROR
             }
-            return if (profile.isElfBuffWarMode()) {
-                navigateToWarPost("post-revive")
-            } else {
-                navigateToFarm("post-revive")
+            return when {
+                profile.isElfBuffWarMode() -> navigateToWarPost("post-revive")
+                profile.isFarmBossesMode() -> {
+                    val checks = runFarmBossesGeneralChecks(profile, "post-revive")
+                    if (checks != IterationResult.OK) {
+                        return checks
+                    }
+                    navigateToBossCheckpoint("post-revive")
+                }
+                else -> navigateToFarm("post-revive")
             }
+        }
+
+        // Farm Bosses: potions/elf only after a kill (post-kill gate), not mid-fight.
+        if (profile.isFarmBossesMode()) {
+            return runFarmBossesIteration(profile)
         }
 
         if (profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
@@ -200,6 +217,20 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
+        if (profile.isFarmBossesMode()) {
+            Log.d(TAG, "[STARTUP] mode=farm_bosses → general checks then hunt")
+            FarmBossesLoop.reset()
+            if (profile.killBossesConfig.maps.isEmpty()) {
+                Log.w(TAG, "[STARTUP] farm_bosses has no maps configured")
+                return IterationResult.ERROR
+            }
+            val checks = runFarmBossesGeneralChecks(profile, "startup")
+            if (checks != IterationResult.OK) {
+                return checks
+            }
+            return navigateToBossCheckpoint("startup")
+        }
+
         // Elf buff giver: hold farm spot, map skills once, force PK All, then cast loop.
         if (profile.isElfBuffGiverMode()) {
             Log.d(TAG, "[STARTUP] mode=elf_buff_giver → static post")
@@ -319,6 +350,131 @@ object BotPriorityLoop {
         }
     }
 
+    /**
+     * Shared general maintenance for Farm Bosses: potions then elf buff.
+     * Used at startup, post-revive, and post-kill (not mid-fight).
+     * Return to checkpoint is the caller's job.
+     */
+    private suspend fun runFarmBossesGeneralChecks(
+        profile: BotProfile,
+        reason: String,
+    ): IterationResult {
+        Log.d(TAG, "[LOOP] farm_bosses general checks reason=$reason")
+        BotDiagnosticJournal.record(TAG, "farm_bosses_general reason=$reason")
+
+        if (profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
+            Log.d(TAG, "[LOOP] farm_bosses potions empty reason=$reason")
+            if (!PotionPurchaseActions.handleEmptyPotions()) {
+                return recoveryOrError("boss-$reason-potion")
+            }
+        }
+
+        if (ElfBuffSeekGate.shouldAttemptSeek(profile) && !ElfBuffCheckActions.hasElfBuff()) {
+            Log.d(TAG, "[LOOP] farm_bosses elf buff missing reason=$reason")
+            if (!ElfBuffNavigationActions.goToElfBuffAndReturn()) {
+                return recoveryOrError("boss-$reason-elf")
+            }
+            if (!ElfBuffCheckActions.hasElfBuff()) {
+                ElfBuffSeekGate.noteSeekFailed()
+            }
+        }
+
+        return IterationResult.OK
+    }
+
+    private suspend fun runFarmBossesIteration(profile: BotProfile): IterationResult {
+        if (BossHuntState.shouldRunGeneralMaintenance()) {
+            Log.d(TAG, "[LOOP] branch=farm_bosses_post_kill")
+            BotDiagnosticJournal.record(TAG, "branch=farm_bosses_post_kill")
+            consecutiveFarmSoftFails = 0
+
+            val checks = runFarmBossesGeneralChecks(profile, "post-kill")
+            if (checks != IterationResult.OK) {
+                return checks
+            }
+
+            if (!FarmBossesLoop.resumeAfterMaintenance(profile)) {
+                return navigateToBossCheckpoint("post-kill-return")
+            }
+            consecutiveWrongMapSoftFails = 0
+            return IterationResult.OK
+        }
+
+        Log.d(TAG, "[LOOP] branch=farm_bosses")
+        BotDiagnosticJournal.record(TAG, "branch=farm_bosses")
+        return handleFarmBossesCycle(profile)
+    }
+
+    private suspend fun handleFarmBossesCycle(profile: BotProfile): IterationResult {
+        return when (FarmBossesLoop.tick(profile)) {
+            FarmBossesLoop.CycleResult.OK -> {
+                consecutiveFarmSoftFails = 0
+                IterationResult.OK
+            }
+            FarmBossesLoop.CycleResult.DEAD -> {
+                consecutiveFarmSoftFails = 0
+                IterationResult.OK
+            }
+            FarmBossesLoop.CycleResult.NO_MAPS -> {
+                Log.w(TAG, "[LOOP] farm_bosses no maps → ERROR")
+                IterationResult.ERROR
+            }
+            FarmBossesLoop.CycleResult.NEED_MAINTENANCE -> {
+                consecutiveFarmSoftFails = 0
+                // Next iteration runs post-kill gate.
+                IterationResult.OK
+            }
+            FarmBossesLoop.CycleResult.SOFT_FAIL -> {
+                consecutiveFarmSoftFails++
+                Log.d(
+                    TAG,
+                    "[LOOP] farm_bosses soft-fail $consecutiveFarmSoftFails/$FARM_SOFT_FAIL_TOLERANCE",
+                )
+                if (consecutiveFarmSoftFails >= FARM_SOFT_FAIL_TOLERANCE) {
+                    consecutiveFarmSoftFails = 0
+                    return navigateToBossCheckpoint("boss-soft-fail-limit")
+                }
+                IterationResult.OK
+            }
+        }
+    }
+
+    private suspend fun navigateToBossCheckpoint(
+        reason: String,
+        countAsWrongMapSoft: Boolean = false,
+    ): IterationResult {
+        val profile = ProfileRepository.currentProfile.value
+        val cp = profile?.let { FarmBossesLoop.currentCheckpointOrCursor(it) }
+        if (cp == null) {
+            Log.w(TAG, "[LOOP] farm_bosses nav missing checkpoint reason=$reason")
+            return IterationResult.ERROR
+        }
+        val mapDef = MapDefinitionRepository.getById(cp.mapId)
+        if (mapDef == null) {
+            Log.w(TAG, "[LOOP] farm_bosses map missing id=${cp.mapId}")
+            return IterationResult.ERROR
+        }
+        Log.d(TAG, "[LOOP] boss checkpoint nav reason=$reason map=${cp.mapId} W${cp.wireId}")
+        FarmBossesLoop.clearArrivalState()
+        BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
+        if (BotRecoveryActions.isNavCooldownActive()) {
+            val waitMs = BotRecoveryActions.navCooldownRemainingMs()
+                .coerceAtMost(NAV_COOLDOWN_SOFT_WAIT_MS)
+                .coerceAtLeast(500L)
+            delay(waitMs)
+            return noteWrongMapSoftOrOk(countAsWrongMapSoft, reason)
+        }
+        if (NavigationOrchestrator.navigateToMapAndWire(mapDef, cp.wireId, farmSpot = null)) {
+            consecutiveWrongMapSoftFails = 0
+            BossHuntState.phase = BossHuntPhase.HUNT
+            return IterationResult.OK
+        }
+        if (BotRecoveryActions.isNavCooldownActive()) {
+            return noteWrongMapSoftOrOk(countAsWrongMapSoft, reason)
+        }
+        return recoveryOrError("boss-nav-failed-$reason")
+    }
+
     private suspend fun navigateToWarPost(
         reason: String,
         countAsWrongMapSoft: Boolean = false,
@@ -404,6 +560,9 @@ object BotPriorityLoop {
             } else {
                 IterationResult.ERROR
             }
+        }
+        if (profile?.isFarmBossesMode() == true) {
+            return navigateToBossCheckpoint("recovery-$reason")
         }
         return if (BotRecoveryActions.recoverFromLostState(reason)) {
             IterationResult.OK

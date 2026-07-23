@@ -44,6 +44,7 @@ import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.overlay.OverlayManager
 import com.example.muamaizingbot.overlay.OverlayPermission
 
@@ -109,13 +110,20 @@ fun HomeScreen(
 
         StatusCard(
             title = when {
+                currentProfile?.isFarmBossesMode() == true -> "Boss maps"
                 currentProfile?.isElfBuffWarMode() == true -> "Divine map"
                 currentProfile?.isElfBuffGiverMode() == true -> "Buff post"
                 else -> "Farm spot"
             },
-            value = farmSpot?.summaryLabel(
-                MapDefinitionRepository.getById(farmSpot?.map.orEmpty())?.name
-            ) ?: "Sin configurar",
+            value = when {
+                currentProfile?.isFarmBossesMode() == true -> {
+                    val n = currentProfile?.killBossesConfig?.maps?.size ?: 0
+                    if (n == 0) "Sin mapas" else "$n mapa${if (n == 1) "" else "s"}"
+                }
+                else -> farmSpot?.summaryLabel(
+                    MapDefinitionRepository.getById(farmSpot?.map.orEmpty())?.name
+                ) ?: "Sin configurar"
+            },
         )
 
         StatusCard(

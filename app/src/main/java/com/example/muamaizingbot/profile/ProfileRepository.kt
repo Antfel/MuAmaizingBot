@@ -113,14 +113,34 @@ object ProfileRepository {
     }
 
     /**
-     * Seek NPC elf buff only in farm mode, when the toggle is on and a zone is saved.
-     * Elf-buff-giver mode never seeks (this profile *is* the buff post).
+     * Seek NPC elf buff when toggle is on and a zone is saved.
+     * Shared by Farm and Farm Bosses (post-kill). Elf-buff-giver/War never seek.
      */
     fun shouldSeekElfBuff(profile: BotProfile? = currentProfile.value): Boolean {
         if (profile == null || !profile.enableElfBuff || profile.isElfBuffPostMode()) {
             return false
         }
         return LocationRepository.getElfBuff(profile.filename) != null
+    }
+
+    fun setKillBossesConfig(profileFilename: String, config: KillBossesConfig): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(killBossesConfig = config)
+        saveProfile(updated)
+        Log.d(
+            TAG,
+            "[PROFILE] kill_bosses maps=${config.maps.size} " +
+                "golden=${config.includeGoldenMobs} hold=${config.holdSec}s file=$profileFilename",
+        )
+        return updated
+    }
+
+    fun setKillBossesMaps(profileFilename: String, mapIds: List<String>): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        return setKillBossesConfig(
+            profileFilename,
+            profile.killBossesConfig.copy(maps = mapIds.distinct()),
+        )
     }
 
     fun setBotMode(profileFilename: String, mode: String): BotProfile? {

@@ -10,6 +10,7 @@ import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isManaPotion
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
@@ -115,16 +116,24 @@ object PotionPurchaseActions {
         NavigationOrchestrator.cleanGameUi()
 
         if (needsNavigation) {
-            Log.d(TAG, "[POTION] teleport purchase; navigating back to farm")
-            if (!BotRecoveryActions.navigateToFarmWithRetry("post-potion-teleport")) {
-                return BotRecoveryActions.recoverFromLostState("post-potion-nav-failed")
+            val profile = ProfileRepository.currentProfile.value
+            if (profile?.isFarmBossesMode() == true) {
+                // Caller resumes via FarmBossesLoop checkpoint (startup / post-kill / post-revive).
+                Log.d(TAG, "[POTION] teleport purchase; farm_bosses return deferred to checkpoint")
+            } else {
+                Log.d(TAG, "[POTION] teleport purchase; navigating back to farm")
+                if (!BotRecoveryActions.navigateToFarmWithRetry("post-potion-teleport")) {
+                    return BotRecoveryActions.recoverFromLostState("post-potion-nav-failed")
+                }
             }
         } else {
             Log.d(TAG, "[POTION] direct shop purchase; staying at spot")
         }
 
-        if (!GameActions.ensureAutoMode()) {
-            Log.w(TAG, "[POTION] ensureAutoMode failed; farm loop will retry")
+        if (ProfileRepository.currentProfile.value?.isFarmBossesMode() != true) {
+            if (!GameActions.ensureAutoMode()) {
+                Log.w(TAG, "[POTION] ensureAutoMode failed; farm loop will retry")
+            }
         }
 
         Log.d(TAG, "[POTION] recovery completed")

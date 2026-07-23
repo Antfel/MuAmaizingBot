@@ -7,6 +7,7 @@ import com.example.muamaizingbot.bot.maintenance.MapCheckActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
+import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.profile.LocationRepository
 
 /**
@@ -65,6 +66,38 @@ object BotRecoveryActions {
         }
         lastFailedNavigateMs = System.currentTimeMillis()
         Log.w(TAG, "[RECOVERY] navigate failed after retries reason=$reason")
+        return false
+    }
+
+    suspend fun navigateToBossSpotWithRetry(
+        location: FarmLocation,
+        reason: String,
+        ensureAuto: Boolean = false,
+    ): Boolean {
+        if (isNavCooldownActive()) {
+            val waitSec = (navCooldownRemainingMs() + 999L) / 1000L
+            Log.w(TAG, "[RECOVERY] boss nav cooldown ${waitSec}s reason=$reason")
+            return false
+        }
+
+        repeat(MAX_NAV_ATTEMPTS) { attempt ->
+            Log.d(TAG, "[RECOVERY] boss navigate attempt=${attempt + 1}/$MAX_NAV_ATTEMPTS reason=$reason")
+            if (DeathActions.isDead()) {
+                if (!DeathActions.recoverIfDead()) {
+                    return false
+                }
+            }
+            if (NavigationOrchestrator.goToBossSpot(location, ensureAuto = ensureAuto)) {
+                Log.d(TAG, "[RECOVERY] boss navigate ok reason=$reason")
+                lastFailedNavigateMs = 0L
+                return true
+            }
+            if (attempt < MAX_NAV_ATTEMPTS - 1) {
+                NavigationOrchestrator.cleanGameUi()
+            }
+        }
+        lastFailedNavigateMs = System.currentTimeMillis()
+        Log.w(TAG, "[RECOVERY] boss navigate failed after retries reason=$reason")
         return false
     }
 

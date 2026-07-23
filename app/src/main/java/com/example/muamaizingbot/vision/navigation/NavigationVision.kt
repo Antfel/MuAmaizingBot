@@ -47,6 +47,7 @@ object NavigationVision {
             templateName = info.sourceName,
             category = info.category,
             circularMask = wantsCircularMask(assetPath),
+            opaqueMask = wantsOpaqueMask(assetPath),
         )
     }
 
@@ -66,6 +67,7 @@ object NavigationVision {
             category = info.category,
             roi = roi,
             circularMask = wantsCircularMask(assetPath),
+            opaqueMask = wantsOpaqueMask(assetPath),
         )
     }
 
@@ -80,6 +82,45 @@ object NavigationVision {
         } finally {
             frame.recycle()
         }
+    }
+
+    suspend fun findAllTemplates(
+        assetPath: String,
+        threshold: Float,
+        roi: Rect? = null,
+        maxMatches: Int = 20,
+    ): List<PcTemplateMatchResult> {
+        val frame = captureFrame() ?: return emptyList()
+        return try {
+            findAllOnFrame(frame, assetPath, threshold, roi, maxMatches)
+        } finally {
+            frame.recycle()
+        }
+    }
+
+    fun findAllOnFrame(
+        frame: Bitmap,
+        assetPath: String,
+        threshold: Float,
+        roi: Rect? = null,
+        maxMatches: Int = 20,
+    ): List<PcTemplateMatchResult> {
+        val info = TemplateRepository.getByPath(assetPath)
+        if (info == null) {
+            Log.w(TAG, "[VISION] template missing path=$assetPath")
+            return emptyList()
+        }
+        return PcTemplateMatcher.findAllTemplates(
+            source = frame,
+            template = info.bitmap,
+            threshold = threshold,
+            roi = roi,
+            templateName = info.sourceName,
+            category = info.category,
+            circularMask = wantsCircularMask(assetPath),
+            opaqueMask = wantsOpaqueMask(assetPath),
+            maxMatches = maxMatches,
+        )
     }
 
     suspend fun findTemplateWithScroll(
@@ -188,7 +229,10 @@ object NavigationVision {
         }
         try {
             val probe = probeOnFrame(frame, assetPath, roi)
-            val maskNote = if (wantsCircularMask(assetPath)) " circularMask=true" else ""
+            val maskNote = buildString {
+                if (wantsCircularMask(assetPath)) append(" circularMask=true")
+                if (wantsOpaqueMask(assetPath)) append(" opaqueMask=true")
+            }
             Log.w(
                 TAG,
                 "[VISION] best score path=$assetPath score=${"%.3f".format(probe.score)} " +
@@ -377,7 +421,14 @@ object NavigationVision {
         val name = assetPath.substringAfterLast('/')
         return name == "close_x.png" ||
             name == "greater_defense.png" ||
-            name == "greater_damage.png"
+            name == "greater_damage.png" ||
+            name == "boss_focus.png"
+    }
+
+    /** Map icons cropped on black — ignore empty canvas via TM_CCORR_NORMED + luminance mask. */
+    private fun wantsOpaqueMask(assetPath: String): Boolean {
+        val name = assetPath.substringAfterLast('/')
+        return name == "boss_alive.png" || name == "golden_alive.png"
     }
 
     private fun emptyMatch(assetPath: String): PcTemplateMatchResult {
