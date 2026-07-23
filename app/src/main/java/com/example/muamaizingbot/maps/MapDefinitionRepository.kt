@@ -34,16 +34,24 @@ object MapDefinitionRepository {
     fun getById(mapId: String): MapDefinition? = mapsById[mapId]
 
     /**
-     * Maps ready for profile Farm Spot / Elf Buff: maintenance image, affine calibration,
-     * and navigable templates (option + current/modal).
+     * Maps ready for profile Farm Spot / Elf Buff / Farm Bosses picker:
+     * maintenance image + navigable templates. Affine can be filled after calib.
      */
     fun listForPicker(): List<MapDefinition> {
         return mapsById.values
             .filter {
-                it.hasMaintenanceImage() &&
-                    CoordinateMapping.hasMapping(it) &&
-                    it.isNavigable()
+                it.hasMaintenanceImage() && it.isNavigable()
             }
+            .sortedWith(compareBy({ it.order }, { it.name.lowercase(Locale.getDefault()) }))
+    }
+
+    /**
+     * SpotPicker / calibration: any map with a maintenance reference image.
+     * Allows collecting REF pixels before affine + teleport templates exist.
+     */
+    fun listForSpotPicker(): List<MapDefinition> {
+        return mapsById.values
+            .filter { it.hasMaintenanceImage() }
             .sortedWith(compareBy({ it.order }, { it.name.lowercase(Locale.getDefault()) }))
     }
 
