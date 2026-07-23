@@ -5,8 +5,12 @@ import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.vision.opencv.OpenCVInitializer
 import com.example.muamaizingbot.vision.opencv.OpenCvBitmapConverter
+import kotlin.math.min
 import org.opencv.core.Core
+import org.opencv.core.CvType
 import org.opencv.core.Mat
+import org.opencv.core.Point
+import org.opencv.core.Scalar
 import org.opencv.imgproc.Imgproc
 
 /** 1:1 template match against the fixed 1280×720 pack. */
@@ -21,6 +25,7 @@ object PcTemplateMatcher {
         roi: Rect? = null,
         templateName: String = "unknown",
         category: String = "unknown",
+        circularMask: Boolean = false,
     ): PcTemplateMatchResult? {
         val result = matchDebug(
             source = source,
@@ -28,6 +33,7 @@ object PcTemplateMatcher {
             templateName = templateName,
             category = category,
             roi = roi,
+            circularMask = circularMask,
         )
         return if (result.score >= threshold) result else null
     }
@@ -37,8 +43,9 @@ object PcTemplateMatcher {
         template: Bitmap,
         threshold: Float = 0.85f,
         roi: Rect? = null,
+        circularMask: Boolean = false,
     ): Float {
-        return matchDebug(source, template, roi = roi).score
+        return matchDebug(source, template, roi = roi, circularMask = circularMask).score
     }
 
     fun matchDebug(
@@ -47,6 +54,7 @@ object PcTemplateMatcher {
         templateName: String = "unknown",
         category: String = "unknown",
         roi: Rect? = null,
+        circularMask: Boolean = false,
     ): PcTemplateMatchResult {
         require(!source.isRecycled) { "source bitmap is recycled" }
         require(!template.isRecycled) { "template bitmap is recycled" }
@@ -62,6 +70,7 @@ object PcTemplateMatcher {
         var sourceMat: Mat? = null
         var templateMat: Mat? = null
         var resultMat: Mat? = null
+        var maskMat: Mat? = null
 
         return try {
             val sw = searchBitmap.width
@@ -81,7 +90,18 @@ object PcTemplateMatcher {
             sourceMat = OpenCvBitmapConverter.bitmapToBgrMat(searchBitmap)
             templateMat = OpenCvBitmapConverter.bitmapToBgrMat(template)
             resultMat = Mat()
-            Imgproc.matchTemplate(sourceMat, templateMat, resultMat, Imgproc.TM_CCOEFF_NORMED)
+
+            // Circular buttons (close_x): ignore square-corner backdrop noise.
+            // OpenCV only accepts a mask with TM_CCORR_NORMED / TM_SQDIFF.
+            val method: Int
+            if (circularMask) {
+                maskMat = circularMaskMat(tw, th)
+                method = Imgproc.TM_CCORR_NORMED
+                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, method, maskMat)
+            } else {
+                method = Imgproc.TM_CCOEFF_NORMED
+                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, method)
+            }
 
             val minMax = Core.minMaxLoc(resultMat)
             val roiOffsetX = roi?.left ?: 0
@@ -100,6 +120,7 @@ object PcTemplateMatcher {
             Log.e(TAG, "[MATCH] error engine=opencv template=$templateName message=${t.message}")
             emptyResult(templateName, category, template.width, template.height)
         } finally {
+            maskMat?.release()
             resultMat?.release()
             templateMat?.release()
             sourceMat?.release()
@@ -107,6 +128,16 @@ object PcTemplateMatcher {
                 searchBitmap.recycle()
             }
         }
+    }
+
+    /** Filled disk covering the inscribed circle of the template bitmap. */
+    private fun circularMaskMat(width: Int, height: Int): Mat {
+        val mask = Mat.zeros(height, width, CvType.CV_8UC1)
+        val cx = (width - 1) / 2.0
+        val cy = (height - 1) / 2.0
+        val radius = (min(width, height) / 2.0)
+        Imgproc.circle(mask, Point(cx, cy), radius.toInt(), Scalar(255.0), Imgproc.FILLED)
+        return mask
     }
 
     private fun cropToRoi(source: Bitmap, roi: Rect?): Bitmap {

@@ -51,8 +51,7 @@ object GameActions {
             if (detection.isAutoMode) {
                 Log.d(
                     TAG,
-                    "[COMBAT] auto already active autoScore=${detection.autoScore} " +
-                        "manualScore=${detection.manualScore}"
+                    "[COMBAT] auto already active ocr=\"${detection.ocrRaw}\""
                 )
                 return true
             }
@@ -62,13 +61,16 @@ object GameActions {
             if (tapX == null || tapY == null) {
                 Log.w(
                     TAG,
-                    "[COMBAT] ensureAutoMode failed reason=no_manual_match " +
-                        "autoScore=${detection.autoScore} manualScore=${detection.manualScore}"
+                    "[COMBAT] ensureAutoMode failed reason=no_manual_ocr " +
+                        "ocr=\"${detection.ocrRaw}\""
                 )
                 return false
             }
 
-            Log.d(TAG, "[COMBAT] manual detected, tapping auto toggle at ($tapX,$tapY)")
+            Log.d(
+                TAG,
+                "[COMBAT] manual OCR → tap toggle at ($tapX,$tapY) ocr=\"${detection.ocrRaw}\""
+            )
             val tapped = suspendCancellableCoroutine { continuation ->
                 InputController.tap(tapX, tapY) { result ->
                     if (continuation.isActive) {
@@ -94,7 +96,7 @@ object GameActions {
                 Log.d(
                     TAG,
                     "[COMBAT] ensureAutoMode result=${verified.isAutoMode} " +
-                        "autoScore=${verified.autoScore} manualScore=${verified.manualScore}"
+                        "ocr=\"${verified.ocrRaw}\""
                 )
                 verified.isAutoMode
             } finally {

@@ -58,9 +58,6 @@ object NavigationOrchestrator {
 
         if (onMap && atSpot) {
             Log.d(TAG, "[NAV] already on map and at farm spot; ensure auto only")
-            if (!NavigationWaitActions.waitUntilUiSettled()) {
-                Log.w(TAG, "[NAV] UI not settled; continuing")
-            }
             if (ensureAuto) {
                 GameActions.ensureAutoMode()
             }
@@ -84,9 +81,6 @@ object NavigationOrchestrator {
                 Log.w(TAG, "[NAV] tap_visual_location failed (spot-only path)")
                 return false
             }
-            if (!NavigationWaitActions.waitUntilUiSettled()) {
-                Log.w(TAG, "[NAV] UI not settled before auto; continuing")
-            }
             if (ensureAuto) {
                 GameActions.ensureAutoMode()
             }
@@ -109,10 +103,6 @@ object NavigationOrchestrator {
         if (!tapVisualLocation(destX, destY, farmSpot, mapDef)) {
             Log.w(TAG, "[NAV] tap_visual_location failed")
             return false
-        }
-
-        if (!NavigationWaitActions.waitUntilUiSettled()) {
-            Log.w(TAG, "[NAV] UI not settled before auto; continuing")
         }
 
         if (ensureAuto && !GameActions.ensureAutoMode()) {

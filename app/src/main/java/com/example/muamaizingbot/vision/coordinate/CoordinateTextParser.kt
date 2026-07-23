@@ -5,7 +5,7 @@ import com.example.muamaizingbot.maps.CoordinateBounds
 object CoordinateTextParser {
 
     fun parseCoordinates(rawText: String?): Pair<Int, Int>? {
-        val text = rawText.orEmpty()
+        val text = normalizeCoordOcr(rawText.orEmpty())
 
         val parenMatch = Regex("""\(\s*(\d+)\s*,\s*(\d+)\s*\)""").find(text)
         if (parenMatch != null) {
@@ -23,6 +23,26 @@ object CoordinateTextParser {
         }
 
         return null
+    }
+
+    /**
+     * HUD OCR often turns leading `1` into `n`/`N`/`l`/`I`/`|`
+     * (e.g. `n52,95)` → `(152,95)`, `n28,122)` → `(128,122)`).
+     */
+    fun normalizeCoordOcr(raw: String): String {
+        var s = raw.trim()
+            .replace('，', ',')
+            .replace('．', '.')
+            .replace('{', '(')
+            .replace('}', ')')
+            .replace('[', '(')
+            .replace(']', ')')
+        // Letter/pipe that stands in for digit 1 immediately before a digit run.
+        s = s.replace(Regex("""(?<![0-9])[nNilI|](?=\d)"""), "1")
+        // Same for O/o → 0 when glued to digits (less common on this HUD).
+        s = s.replace(Regex("""(?<=\d)[Oo](?=\d|,|\))"""), "0")
+        s = s.replace(Regex("""(?<![0-9])[Oo](?=\d)"""), "0")
+        return s
     }
 
     fun applyCoordinateBounds(coords: Pair<Int, Int>, bounds: CoordinateBounds?): Pair<Int, Int>? {

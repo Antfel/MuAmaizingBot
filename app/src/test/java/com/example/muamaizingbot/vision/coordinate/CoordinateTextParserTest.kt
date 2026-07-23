@@ -28,6 +28,13 @@ class CoordinateTextParserTest {
     }
 
     @Test
+    fun parseCoordinates_leadingOneMisreadAsN() {
+        assertEquals(152 to 95, CoordinateTextParser.parseCoordinates("n52,95)"))
+        assertEquals(128 to 122, CoordinateTextParser.parseCoordinates("n28,122)"))
+        assertEquals(143 to 95, CoordinateTextParser.parseCoordinates("n43,95)"))
+    }
+
+    @Test
     fun applyCoordinateBounds_correctsLeadingOne() {
         val bounds = CoordinateBounds(xMin = 0, xMax = 300, yMin = 0, yMax = 300)
         assertEquals(182 to 115, CoordinateTextParser.applyCoordinateBounds(1182 to 115, bounds))

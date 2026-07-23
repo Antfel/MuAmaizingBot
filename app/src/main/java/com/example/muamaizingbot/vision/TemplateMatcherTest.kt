@@ -77,7 +77,7 @@ object TemplateMatcherTest {
         }
     }
 
-    fun detectAutoMode(frame: android.graphics.Bitmap): AutoModeDetection {
+    suspend fun detectAutoMode(frame: android.graphics.Bitmap): AutoModeDetection {
         return AutoModeDetector.detect(frame)
     }
 }

@@ -17,10 +17,14 @@ import com.example.muamaizingbot.bot.maintenance.MapCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
+import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
+import com.example.muamaizingbot.maps.MapDefinitionRepository
+import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.profile.normalizedBotMode
+import kotlin.math.abs
 import kotlinx.coroutines.delay
 
 object BotPriorityLoop {
@@ -37,6 +41,9 @@ object BotPriorityLoop {
 
     private var consecutiveFarmSoftFails = 0
     private var consecutiveWrongMapSoftFails = 0
+    /** Last confirmed on-spot from valid HUD coords (sticky across OCR misses). */
+    private var lastSpotOk = false
+    private var consecutiveCoordMisses = 0
 
     enum class IterationResult {
         OK,
@@ -55,6 +62,8 @@ object BotPriorityLoop {
             BotDiagnosticJournal.record(TAG, "branch=death_recovery")
             consecutiveFarmSoftFails = 0
             consecutiveWrongMapSoftFails = 0
+            lastSpotOk = false
+            consecutiveCoordMisses = 0
             if (!DeathActions.recoverIfDead()) {
                 return IterationResult.ERROR
             }
@@ -120,6 +129,14 @@ object BotPriorityLoop {
             }
             ElfBuffWarActions.tick(profile)
             return IterationResult.OK
+        }
+
+        // Farm / giver: never Auto or farm cycle until HUD coords confirm farm spot.
+        if (!isAtConfiguredFarmSpot()) {
+            Log.d(TAG, "[LOOP] branch=off_spot")
+            BotDiagnosticJournal.record(TAG, "branch=off_spot")
+            consecutiveFarmSoftFails = 0
+            return navigateToFarm("off_spot")
         }
 
         val farmBranch = if (profile.isElfBuffGiverMode()) "elf_giver_hold" else "farming"
@@ -213,12 +230,54 @@ object BotPriorityLoop {
             Log.d(TAG, "[STARTUP] elf buff skipped (seek cooldown)")
         }
 
-        if (MapCheckActions.isInConfiguredMap()) {
-            Log.d(TAG, "[STARTUP] already on configured map")
-            return ensureAutoOnly("startup-on-map")
+        if (MapCheckActions.isInConfiguredMap() && isAtConfiguredFarmSpot()) {
+            Log.d(TAG, "[STARTUP] already on configured map + farm spot")
+            return ensureAutoOnly("startup-on-spot")
         }
 
         return navigateToFarm("startup")
+    }
+
+    /**
+     * On-spot only when HUD coords parse and dist ≤ [arrivalRadius].
+     * OCR miss / parse fail → sticky [lastSpotOk] (do not reopen map on junk like `YS,95)`).
+     * Off-spot only with valid coords and dist > radius.
+     */
+    private suspend fun isAtConfiguredFarmSpot(): Boolean {
+        val farmSpot = LocationRepository.farmSpot.value
+        if (farmSpot == null) {
+            Log.d(TAG, "[SPOT] no farm spot saved")
+            lastSpotOk = false
+            return false
+        }
+        val targetX = farmSpot.coordX
+        val targetY = farmSpot.coordY
+        if (targetX == null || targetY == null) {
+            Log.w(TAG, "[SPOT] farm spot missing HUD coords — cannot validate arrival")
+            lastSpotOk = false
+            return false
+        }
+        val mapDef = MapDefinitionRepository.getById(farmSpot.map)
+        val current = NavigationWaitActions.readHudGameCoordinates(mapDef)
+        if (current == null) {
+            consecutiveCoordMisses++
+            Log.d(
+                TAG,
+                "[SPOT] OCR miss #$consecutiveCoordMisses sticky=$lastSpotOk " +
+                    "target=($targetX,$targetY) r=${farmSpot.arrivalRadius}",
+            )
+            return lastSpotOk
+        }
+        consecutiveCoordMisses = 0
+        val dist = abs(current.first - targetX) + abs(current.second - targetY)
+        val onSpot = dist <= farmSpot.arrivalRadius
+        lastSpotOk = onSpot
+        Log.d(
+            TAG,
+            "[SPOT] atSpot=$onSpot current=(${current.first},${current.second}) " +
+                "target=($targetX,$targetY) dist=$dist r=${farmSpot.arrivalRadius}",
+        )
+        return onSpot
     }
 
     private suspend fun handleMissingElfBuff(reason: String): IterationResult {
@@ -300,11 +359,10 @@ object BotPriorityLoop {
         }
         if (BotRecoveryActions.navigateToFarmWithRetry(reason, ensureAuto = !skipAuto)) {
             consecutiveWrongMapSoftFails = 0
-            return if (skipAuto) {
-                IterationResult.OK
-            } else {
-                ensureAutoOnly(reason)
-            }
+            // Nav already called ensureAutoMode when ensureAuto=true — avoid a second OCR/tap pass.
+            lastSpotOk = true
+            consecutiveCoordMisses = 0
+            return IterationResult.OK
         }
         if (BotRecoveryActions.isNavCooldownActive()) {
             Log.w(TAG, "[LOOP] navigate failed → cooldown; soft OK reason=$reason")

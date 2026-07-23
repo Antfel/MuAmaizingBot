@@ -17,11 +17,14 @@ import com.example.muamaizingbot.vision.template.TemplateRepository
 import kotlin.coroutines.resume
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 
 object NavigationVision {
 
     private const val TAG = "NavigationVision"
     private const val MAP_LIST_SCROLL_WAIT_MS = 1000L
+    /** Avoid hanging forever if Accessibility never delivers gesture callback. */
+    private const val GESTURE_AWAIT_TIMEOUT_MS = 2_500L
 
     suspend fun captureFrame(): Bitmap? = ScreenCaptureManager.getLatestBitmap()
 
@@ -43,6 +46,7 @@ object NavigationVision {
             roi = roi,
             templateName = info.sourceName,
             category = info.category,
+            circularMask = wantsCircularMask(assetPath),
         )
     }
 
@@ -61,6 +65,7 @@ object NavigationVision {
             templateName = info.sourceName,
             category = info.category,
             roi = roi,
+            circularMask = wantsCircularMask(assetPath),
         )
     }
 
@@ -183,11 +188,12 @@ object NavigationVision {
         }
         try {
             val probe = probeOnFrame(frame, assetPath, roi)
+            val maskNote = if (wantsCircularMask(assetPath)) " circularMask=true" else ""
             Log.w(
                 TAG,
                 "[VISION] best score path=$assetPath score=${"%.3f".format(probe.score)} " +
                     "at=(${probe.bestX},${probe.bestY}) template=${probe.templateWidth}x${probe.templateHeight} " +
-                    "frame=${frame.width}x${frame.height}"
+                    "frame=${frame.width}x${frame.height}$maskNote"
             )
         } finally {
             frame.recycle()
@@ -246,24 +252,38 @@ object NavigationVision {
 
     /** Tap at absolute screen pixels (e.g. template match center). */
     suspend fun tapScreen(x: Int, y: Int, label: String? = null): Boolean {
-        return suspendCancellableCoroutine { continuation ->
-            InputController.tap(x, y, label = label) { result ->
-                if (continuation.isActive) {
-                    continuation.resume(result)
+        val ok = withTimeoutOrNull(GESTURE_AWAIT_TIMEOUT_MS) {
+            suspendCancellableCoroutine { continuation ->
+                InputController.tap(x, y, label = label) { result ->
+                    if (continuation.isActive) {
+                        continuation.resume(result)
+                    }
                 }
             }
         }
+        if (ok == null) {
+            Log.w(TAG, "[VISION] tap timeout x=$x y=$y label=$label")
+            return false
+        }
+        return ok
     }
 
     /** Longer press at absolute pixels (character focus / select). */
     suspend fun tapHoldScreen(x: Int, y: Int, durationMs: Long = 160L, label: String? = null): Boolean {
-        return suspendCancellableCoroutine { continuation ->
-            InputController.tapHold(x, y, durationMs, label = label) { result ->
-                if (continuation.isActive) {
-                    continuation.resume(result)
+        val ok = withTimeoutOrNull(GESTURE_AWAIT_TIMEOUT_MS + durationMs) {
+            suspendCancellableCoroutine { continuation ->
+                InputController.tapHold(x, y, durationMs, label = label) { result ->
+                    if (continuation.isActive) {
+                        continuation.resume(result)
+                    }
                 }
             }
         }
+        if (ok == null) {
+            Log.w(TAG, "[VISION] tapHold timeout x=$x y=$y label=$label")
+            return false
+        }
+        return ok
     }
 
     suspend fun swipe(coords: SwipeCoords): Boolean {
@@ -279,13 +299,20 @@ object NavigationVision {
         y2: Int,
         durationMs: Long = 300L,
     ): Boolean {
-        return suspendCancellableCoroutine { continuation ->
-            InputController.swipe(x1, y1, x2, y2, durationMs) { result ->
-                if (continuation.isActive) {
-                    continuation.resume(result)
+        val ok = withTimeoutOrNull(GESTURE_AWAIT_TIMEOUT_MS + durationMs) {
+            suspendCancellableCoroutine { continuation ->
+                InputController.swipe(x1, y1, x2, y2, durationMs) { result ->
+                    if (continuation.isActive) {
+                        continuation.resume(result)
+                    }
                 }
             }
         }
+        if (ok == null) {
+            Log.w(TAG, "[VISION] swipe timeout ($x1,$y1)->($x2,$y2)")
+            return false
+        }
+        return ok
     }
 
     /** Enter button strip under a wire-list ROI anchored to the Switch Channel title. */
@@ -344,6 +371,13 @@ object NavigationVision {
             maxOf(0, match.bestX - gap),
             minOf(screenHeight, match.bestY + match.templateHeight + padBottom),
         )
+    }
+
+    private fun wantsCircularMask(assetPath: String): Boolean {
+        val name = assetPath.substringAfterLast('/')
+        return name == "close_x.png" ||
+            name == "greater_defense.png" ||
+            name == "greater_damage.png"
     }
 
     private fun emptyMatch(assetPath: String): PcTemplateMatchResult {

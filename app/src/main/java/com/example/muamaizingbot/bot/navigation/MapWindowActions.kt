@@ -87,6 +87,7 @@ object MapWindowActions {
     suspend fun closeMapWindow(): Boolean {
         Log.d(TAG, "[MAP] close started")
         if (!NavigationVision.tapTemplate(CLOSE_X, NavigationTemplateThresholds.closeX())) {
+            NavigationVision.logBestScore(CLOSE_X)
             Log.w(TAG, "[MAP] close_x not found")
             return false
         }
@@ -141,12 +142,15 @@ object MapWindowActions {
         return screenX >= minX && screenY <= maxY
     }
 
-    /** Upper band where the zone map title bar and close button live. */
+    /**
+     * Top band of the map panel: left "Map" tab + title/close chrome.
+     * Must include the left tab — [MAP_WINDOW_OPEN] is the "Map" label there @ 1280×720.
+     */
     private fun mapHeaderRoi(): Rect {
         val (screenW, screenH) = com.example.muamaizingbot.capture.ScreenCaptureManager.peekLatestBitmapSize()
             ?: RefCoords.activeScreenSize()
         return Rect(
-            RefCoords.scaleX(1500, screenW),
+            0,
             0,
             screenW,
             RefCoords.scaleY(420, screenH),

@@ -35,13 +35,17 @@ class BotAccessibilityService : AccessibilityService() {
             moveTo(x.toFloat(), y.toFloat())
         }
         val hold = durationMs.coerceIn(30L, 500L)
-        dispatchGesture(
+        val accepted = dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, hold))
                 .build(),
             gestureCallback(onResult),
             null,
         )
+        if (!accepted) {
+            Log.w(TAG, "[INPUT] dispatchGesture rejected x=$x y=$y")
+            onResult(false)
+        }
     }
 
     /** Single-stroke drag; finger lifts automatically at the end of [durationMs]. */
@@ -57,13 +61,17 @@ class BotAccessibilityService : AccessibilityService() {
             moveTo(x1.toFloat(), y1.toFloat())
             lineTo(x2.toFloat(), y2.toFloat())
         }
-        dispatchGesture(
+        val accepted = dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, durationMs))
                 .build(),
             gestureCallback(onResult),
             null,
         )
+        if (!accepted) {
+            Log.w(TAG, "[INPUT] dispatchGesture rejected swipe ($x1,$y1)->($x2,$y2)")
+            onResult(false)
+        }
     }
 
     private fun gestureCallback(onResult: (Boolean) -> Unit) = object : GestureResultCallback() {

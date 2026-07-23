@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.navigation
 
 import android.graphics.Bitmap
 import android.util.Log
+import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.util.AdaptiveWait
@@ -32,6 +33,12 @@ object NavigationWaitActions {
     private const val STABILITY_INTERVAL_MS = 500L
     private const val STABILITY_THRESHOLD = 0.98f
     private const val STABILITY_TIMEOUT_MS = 5000L
+
+    /**
+     * During spot arrival: if HUD coords stay unchanged this long, probe death screen.
+     * Null OCR reads are ignored (do not reset the timer).
+     */
+    private const val COORD_STUCK_DEATH_CHECK_MS = 3_000L
 
     suspend fun waitUntilMapLoaded(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return false
@@ -281,6 +288,10 @@ object NavigationWaitActions {
         val radius = location.arrivalRadius
         Log.d(TAG, "[COORD_ARRIVAL] target=($targetX,$targetY) radius=$radius")
 
+        var lastCoord: Pair<Int, Int>? = null
+        var stableSinceMs = 0L
+        var lastDeathCheckAtMs = 0L
+
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
             val current = readHudCoordinates(mapDef)
@@ -290,6 +301,41 @@ object NavigationWaitActions {
                 if (dist <= radius) {
                     Log.d(TAG, "[COORD_ARRIVAL] arrived")
                     return true
+                }
+
+                val now = System.currentTimeMillis()
+                if (lastCoord != null &&
+                    current.first == lastCoord.first &&
+                    current.second == lastCoord.second
+                ) {
+                    if (stableSinceMs == 0L) {
+                        stableSinceMs = now
+                    }
+                    val stableFor = now - stableSinceMs
+                    if (stableFor >= COORD_STUCK_DEATH_CHECK_MS &&
+                        now - lastDeathCheckAtMs >= COORD_STUCK_DEATH_CHECK_MS
+                    ) {
+                        lastDeathCheckAtMs = now
+                        Log.d(
+                            TAG,
+                            "[COORD_ARRIVAL] coords unchanged ${stableFor}ms " +
+                                "at=(${current.first},${current.second}) → death check",
+                        )
+                        if (DeathActions.isDead()) {
+                            Log.w(
+                                TAG,
+                                "[COORD_ARRIVAL] dead mid-nav — wait auto-revive " +
+                                    "(${DeathActions.DEATH_LOCKOUT_MS}ms lockout)",
+                            )
+                            DeathActions.waitForAutoRevive()
+                            return false
+                        }
+                        // Alive but stuck: re-arm check every COORD_STUCK_DEATH_CHECK_MS.
+                        stableSinceMs = now
+                    }
+                } else {
+                    lastCoord = current
+                    stableSinceMs = now
                 }
             }
             delay(AdaptiveWait.POLL_MS)

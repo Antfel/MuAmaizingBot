@@ -87,7 +87,9 @@ object ActionExecutor {
                 threshold = threshold,
                 templateName = templateInfo.sourceName,
                 category = templateInfo.category,
-                roi = roi
+                roi = roi,
+                circularMask = templateName.contains("close_x", ignoreCase = true) ||
+                    templateInfo.sourceName.contains("close_x", ignoreCase = true),
             )
             if (match == null) {
                 Log.w(TAG, "[ACTION] tapTemplate not found name=$templateName threshold=$threshold")
