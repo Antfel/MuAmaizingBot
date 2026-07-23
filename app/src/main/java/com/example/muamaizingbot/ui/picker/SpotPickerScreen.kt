@@ -91,7 +91,7 @@ fun SpotPickerScreen(
             LocationPickerType.ELF_BUFF -> LocationRepository.getElfBuff(profileFilename)
         }
     }
-    val maps = remember { MapDefinitionRepository.listForPicker() }
+    val maps = remember { MapDefinitionRepository.listForSpotPicker() }
 
     var enableElfBuff by remember(profileFilename) {
         mutableStateOf(profile?.enableElfBuff ?: true)

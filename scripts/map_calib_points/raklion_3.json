@@ -1,0 +1,27 @@
+{
+  "map_id": "raklion_3",
+  "pixel_space": "ref_2560x1440_from_SpotPicker",
+  "points": [
+    {
+      "label": "point_1",
+      "ref_x": 573,
+      "ref_y": 542,
+      "game_x": 151,
+      "game_y": 15
+    },
+    {
+      "label": "point_2",
+      "ref_x": 593,
+      "ref_y": 323,
+      "game_x": 137,
+      "game_y": 32
+    },
+    {
+      "label": "point_3",
+      "ref_x": 808,
+      "ref_y": 366,
+      "game_x": 155,
+      "game_y": 45
+    }
+  ]
+}
