@@ -2,6 +2,7 @@
   "id": "divine_realm_1",
   "name": "Divine Realm 1",
   "group": "Divine Realm",
+  "is_cross": true,
   "submap": 1,
   "requirements": {
     "min_level": 300

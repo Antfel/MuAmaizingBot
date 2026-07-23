@@ -2,6 +2,7 @@
   "id": "plain_of_four_winds_2",
   "name": "Plain of Four Winds 2",
   "group": "Plain of Four Winds",
+  "is_cross": false,
   "submap": 2,
   "requirements": {
     "min_level": 400

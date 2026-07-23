@@ -2,6 +2,7 @@
   "id": "tarkan_2",
   "name": "Tarkan 2",
   "group": "Tarkan",
+  "is_cross": false,
   "submap": 2,
   "requirements": {
     "min_level": 100

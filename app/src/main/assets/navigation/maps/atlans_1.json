@@ -2,6 +2,7 @@
   "id": "atlans_1",
   "name": "Atlans 1",
   "group": "Atlans",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 60

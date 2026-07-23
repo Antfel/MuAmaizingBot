@@ -2,6 +2,7 @@
   "id": "purgatory_of_misery_1",
   "name": "Purgatory of Misery 1",
   "group": "Purgatory of Misery",
+  "is_cross": true,
   "submap": 1,
   "requirements": {
     "min_level": 300

@@ -2,6 +2,7 @@
   "id": "devias",
   "name": "Devias",
   "group": "Devias",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 20

@@ -2,6 +2,7 @@
   "id": "kanturu_ruins_1",
   "name": "Kanturu Ruins 1",
   "group": "Kanturu Ruins",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 200

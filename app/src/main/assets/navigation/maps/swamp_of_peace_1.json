@@ -2,6 +2,7 @@
   "id": "swamp_of_peace_1",
   "name": "Swamp of Peace 1",
   "group": "Swamp of Peace",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 350

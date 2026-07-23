@@ -22,6 +22,12 @@ data class MapDefinition(
     val order: Int = 999,
     val wireCount: Int? = null,
     val wireKeys: List<Int> = emptyList(),
+    /**
+     * Cross-server (KuaFu) zone: PK Union label is "UnionKuaFu".
+     * Non-cross zones use the shorter "Union" template instead.
+     * SpotPicker can override this per saved location.
+     */
+    val isCross: Boolean = true,
     val maintenance: MapMaintenance?,
     val coordinateMapping: AffineTransform?,
     val coordinateBounds: CoordinateBounds? = null,
@@ -96,6 +102,7 @@ data class MapDefinition(
                 order = json.optInt("order", 999),
                 wireCount = wireCount,
                 wireKeys = wireKeys,
+                isCross = json.optBoolean("is_cross", true),
                 maintenance = maintenance,
                 coordinateMapping = coordinateMapping,
                 coordinateBounds = CoordinateBounds.fromJson(json.optJSONObject("coordinate_bounds")),

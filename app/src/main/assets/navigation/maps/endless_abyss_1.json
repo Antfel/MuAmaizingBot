@@ -2,6 +2,7 @@
   "id": "endless_abyss_1",
   "name": "Endless Abyss 1",
   "group": "Endless Abyss",
+  "is_cross": true,
   "submap": 1,
   "requirements": {
     "min_level": 300

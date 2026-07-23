@@ -2,6 +2,7 @@
   "id": "corrupted_lands",
   "name": "Corrupted Lands",
   "group": "Corrupted Lands",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 450

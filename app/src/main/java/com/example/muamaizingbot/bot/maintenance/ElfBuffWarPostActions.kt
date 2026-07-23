@@ -68,6 +68,9 @@ object ElfBuffWarPostActions {
             y = py,
             coordX = gx,
             coordY = gy,
+            isCross = farmSpot?.isCross
+                ?: MapDefinitionRepository.getById(mapId)?.isCross
+                ?: true,
         )
         Log.i(
             TAG,

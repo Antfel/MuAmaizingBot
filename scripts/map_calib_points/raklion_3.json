@@ -1,27 +1,34 @@
 {
   "map_id": "raklion_3",
-  "pixel_space": "ref_2560x1440_from_SpotPicker",
+  "pixel_space": "png_1280_converted_to_ref",
+  "note": "SpotPicker/calib taps on 1280×720 maintenance PNG (*2 → REF 2560×1440).",
   "points": [
     {
       "label": "point_1",
-      "ref_x": 573,
-      "ref_y": 542,
+      "ref_x": 1146,
+      "ref_y": 1084,
       "game_x": 151,
-      "game_y": 15
+      "game_y": 15,
+      "source_png_x": 573,
+      "source_png_y": 542
     },
     {
       "label": "point_2",
-      "ref_x": 593,
-      "ref_y": 323,
+      "ref_x": 1186,
+      "ref_y": 646,
       "game_x": 137,
-      "game_y": 32
+      "game_y": 32,
+      "source_png_x": 593,
+      "source_png_y": 323
     },
     {
       "label": "point_3",
-      "ref_x": 808,
-      "ref_y": 366,
+      "ref_x": 1616,
+      "ref_y": 732,
       "game_x": 155,
-      "game_y": 45
+      "game_y": 45,
+      "source_png_x": 808,
+      "source_png_y": 366
     }
   ]
 }

@@ -2,6 +2,7 @@
   "id": "lorencia",
   "name": "Lorencia",
   "group": "Lorencia",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 1

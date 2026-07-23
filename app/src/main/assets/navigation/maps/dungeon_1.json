@@ -2,6 +2,7 @@
   "id": "dungeon_1",
   "name": "Dungeon 1",
   "group": "Dungeon",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 30

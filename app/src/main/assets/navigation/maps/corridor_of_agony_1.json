@@ -2,6 +2,7 @@
   "id": "corridor_of_agony_1",
   "name": "Corridor of Agony 1",
   "group": "Corridor of Agony",
+  "is_cross": true,
   "submap": 1,
   "requirements": {
     "min_level": 300

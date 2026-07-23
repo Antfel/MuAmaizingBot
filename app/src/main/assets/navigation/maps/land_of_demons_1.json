@@ -2,6 +2,7 @@
   "id": "land_of_demons_1",
   "name": "Land of Demons 1",
   "group": "Land of Demons",
+  "is_cross": true,
   "submap": 1,
   "requirements": {
     "min_level": 450
