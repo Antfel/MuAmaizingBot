@@ -26,6 +26,7 @@ object PcTemplateMatcher {
         templateName: String = "unknown",
         category: String = "unknown",
         circularMask: Boolean = false,
+        opaqueMask: Boolean = false,
     ): PcTemplateMatchResult? {
         val result = matchDebug(
             source = source,
@@ -34,8 +35,107 @@ object PcTemplateMatcher {
             category = category,
             roi = roi,
             circularMask = circularMask,
+            opaqueMask = opaqueMask,
         )
         return if (result.score >= threshold) result else null
+    }
+
+    /**
+     * All peaks ≥ [threshold], non-max suppressed by roughly one template footprint.
+     * Highest score first.
+     */
+    fun findAllTemplates(
+        source: Bitmap,
+        template: Bitmap,
+        threshold: Float = 0.85f,
+        roi: Rect? = null,
+        templateName: String = "unknown",
+        category: String = "unknown",
+        circularMask: Boolean = false,
+        opaqueMask: Boolean = false,
+        maxMatches: Int = 20,
+    ): List<PcTemplateMatchResult> {
+        require(!source.isRecycled) { "source bitmap is recycled" }
+        require(!template.isRecycled) { "template bitmap is recycled" }
+
+        if (!OpenCVInitializer.isInitialized) {
+            Log.e(TAG, "[MATCH] opencv not initialized template=$templateName")
+            return emptyList()
+        }
+
+        val searchBitmap = cropToRoi(source, roi)
+        val createdSearchBitmap = searchBitmap !== source
+
+        var sourceMat: Mat? = null
+        var templateMat: Mat? = null
+        var resultMat: Mat? = null
+        var maskMat: Mat? = null
+
+        return try {
+            val sw = searchBitmap.width
+            val sh = searchBitmap.height
+            val tw = template.width
+            val th = template.height
+            if (tw > sw || th > sh) {
+                return emptyList()
+            }
+
+            sourceMat = OpenCvBitmapConverter.bitmapToBgrMat(searchBitmap)
+            templateMat = OpenCvBitmapConverter.bitmapToBgrMat(template)
+            resultMat = Mat()
+            runMaskedOrPlainMatch(sourceMat!!, templateMat!!, resultMat!!, circularMask, opaqueMask) { m ->
+                maskMat = m
+            }
+
+            val roiOffsetX = roi?.left ?: 0
+            val roiOffsetY = roi?.top ?: 0
+            val suppressW = (tw * 0.7).toInt().coerceAtLeast(8)
+            val suppressH = (th * 0.7).toInt().coerceAtLeast(8)
+            val hits = ArrayList<PcTemplateMatchResult>(maxMatches.coerceAtMost(8))
+
+            repeat(maxMatches) {
+                val minMax = Core.minMaxLoc(resultMat!!)
+                val score = minMax.maxVal.toFloat()
+                if (score < threshold) {
+                    return@repeat
+                }
+                val lx = minMax.maxLoc.x.toInt()
+                val ly = minMax.maxLoc.y.toInt()
+                hits.add(
+                    PcTemplateMatchResult(
+                        score = score,
+                        bestX = lx + roiOffsetX,
+                        bestY = ly + roiOffsetY,
+                        templateWidth = tw,
+                        templateHeight = th,
+                        templateName = templateName,
+                        category = category,
+                    ),
+                )
+                // Zero neighborhood so next minMaxLoc finds another peak.
+                val x0 = (lx - suppressW / 2).coerceAtLeast(0)
+                val y0 = (ly - suppressH / 2).coerceAtLeast(0)
+                val x1 = (lx + suppressW / 2 + 1).coerceAtMost(resultMat.cols())
+                val y1 = (ly + suppressH / 2 + 1).coerceAtMost(resultMat.rows())
+                if (x1 > x0 && y1 > y0) {
+                    val region = resultMat.submat(y0, y1, x0, x1)
+                    region.setTo(Scalar(-1.0))
+                    region.release()
+                }
+            }
+            hits.sortedByDescending { it.score }
+        } catch (t: Throwable) {
+            Log.e(TAG, "[MATCH] findAll error template=$templateName message=${t.message}")
+            emptyList()
+        } finally {
+            maskMat?.release()
+            resultMat?.release()
+            templateMat?.release()
+            sourceMat?.release()
+            if (createdSearchBitmap) {
+                searchBitmap.recycle()
+            }
+        }
     }
 
     fun match(
@@ -44,8 +144,15 @@ object PcTemplateMatcher {
         threshold: Float = 0.85f,
         roi: Rect? = null,
         circularMask: Boolean = false,
+        opaqueMask: Boolean = false,
     ): Float {
-        return matchDebug(source, template, roi = roi, circularMask = circularMask).score
+        return matchDebug(
+            source,
+            template,
+            roi = roi,
+            circularMask = circularMask,
+            opaqueMask = opaqueMask,
+        ).score
     }
 
     fun matchDebug(
@@ -55,6 +162,7 @@ object PcTemplateMatcher {
         category: String = "unknown",
         roi: Rect? = null,
         circularMask: Boolean = false,
+        opaqueMask: Boolean = false,
     ): PcTemplateMatchResult {
         require(!source.isRecycled) { "source bitmap is recycled" }
         require(!template.isRecycled) { "template bitmap is recycled" }
@@ -90,17 +198,8 @@ object PcTemplateMatcher {
             sourceMat = OpenCvBitmapConverter.bitmapToBgrMat(searchBitmap)
             templateMat = OpenCvBitmapConverter.bitmapToBgrMat(template)
             resultMat = Mat()
-
-            // Circular buttons (close_x): ignore square-corner backdrop noise.
-            // OpenCV only accepts a mask with TM_CCORR_NORMED / TM_SQDIFF.
-            val method: Int
-            if (circularMask) {
-                maskMat = circularMaskMat(tw, th)
-                method = Imgproc.TM_CCORR_NORMED
-                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, method, maskMat)
-            } else {
-                method = Imgproc.TM_CCOEFF_NORMED
-                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, method)
+            runMaskedOrPlainMatch(sourceMat!!, templateMat!!, resultMat!!, circularMask, opaqueMask) { m ->
+                maskMat = m
             }
 
             val minMax = Core.minMaxLoc(resultMat)
@@ -130,6 +229,33 @@ object PcTemplateMatcher {
         }
     }
 
+    private fun runMaskedOrPlainMatch(
+        sourceMat: Mat,
+        templateMat: Mat,
+        resultMat: Mat,
+        circularMask: Boolean,
+        opaqueMask: Boolean,
+        onMask: (Mat?) -> Unit,
+    ) {
+        // OpenCV only accepts a mask with TM_CCORR_NORMED / TM_SQDIFF.
+        when {
+            opaqueMask -> {
+                val mask = opaqueMaskMat(templateMat)
+                onMask(mask)
+                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, Imgproc.TM_CCORR_NORMED, mask)
+            }
+            circularMask -> {
+                val mask = circularMaskMat(templateMat.cols(), templateMat.rows())
+                onMask(mask)
+                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, Imgproc.TM_CCORR_NORMED, mask)
+            }
+            else -> {
+                onMask(null)
+                Imgproc.matchTemplate(sourceMat, templateMat, resultMat, Imgproc.TM_CCOEFF_NORMED)
+            }
+        }
+    }
+
     /** Filled disk covering the inscribed circle of the template bitmap. */
     private fun circularMaskMat(width: Int, height: Int): Mat {
         val mask = Mat.zeros(height, width, CvType.CV_8UC1)
@@ -137,6 +263,16 @@ object PcTemplateMatcher {
         val cy = (height - 1) / 2.0
         val radius = (min(width, height) / 2.0)
         Imgproc.circle(mask, Point(cx, cy), radius.toInt(), Scalar(255.0), Imgproc.FILLED)
+        return mask
+    }
+
+    /** Ignore near-black / empty canvas around map icons (boss_alive, golden_alive). */
+    private fun opaqueMaskMat(templateBgr: Mat): Mat {
+        val gray = Mat()
+        Imgproc.cvtColor(templateBgr, gray, Imgproc.COLOR_BGR2GRAY)
+        val mask = Mat()
+        Imgproc.threshold(gray, mask, 18.0, 255.0, Imgproc.THRESH_BINARY)
+        gray.release()
         return mask
     }
 

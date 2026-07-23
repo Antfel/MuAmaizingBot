@@ -34,11 +34,14 @@ import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotMode
 import com.example.muamaizingbot.profile.BotProfile
+import com.example.muamaizingbot.profile.FarmLocation
+import com.example.muamaizingbot.profile.KillBossesConfig
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isElfBuffPostMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.profile.normalizedBotMode
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,7 +107,7 @@ fun ProfileConfigureScreen(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Farm farmea y puede buscar buff. Elf Buff da buff (mundo abierto o War/APEX).",
+                    text = "Farm farmea y puede buscar buff. Elf Buff da buff. Farm Bosses cicla spots de boss.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -133,88 +136,55 @@ fun ProfileConfigureScreen(
                         enabled = profile != null,
                         label = { Text("Elf Buff") },
                     )
+                    FilterChip(
+                        selected = profile?.isFarmBossesMode() == true,
+                        onClick = {
+                            ProfileRepository.setBotMode(profileFilename, BotMode.FARM_BOSSES)
+                        },
+                        enabled = profile != null,
+                        label = { Text("Bosses") },
+                    )
                 }
             }
         }
 
-        ConfigOptionCard(
-            title = when {
-                profile?.isElfBuffWarMode() == true -> "Mapa Divine (Farm Spot)"
-                profile?.isElfBuffGiverMode() == true -> "Buff post (Farm Spot)"
-                else -> "Farm Spot"
-            },
-            summary = farmSpot?.summaryLabel(
-                MapDefinitionRepository.getById(farmSpot.map)?.name
-            ) ?: "Sin configurar",
-            onClick = onOpenFarmSpot,
-        )
-
-        if (profile?.isElfBuffPostMode() != true) {
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                ),
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text(
-                                text = "Elf buff automático",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = "Desactívalo si la elf está offline o no quieres ir por buff.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = profile?.enableElfBuff == true,
-                            onCheckedChange = { enabled ->
-                                ProfileRepository.setElfBuffEnabled(profileFilename, enabled)
-                            },
-                            enabled = profile != null,
-                        )
-                    }
-
-                    Text(
-                        text = when {
-                            profile?.enableElfBuff != true -> "Desactivado — el bot no buscará elf buff"
-                            elfBuff != null -> elfBuff.summaryLabel(
-                                MapDefinitionRepository.getById(elfBuff.map)?.name
-                            )
-                            else -> "Activo, pero sin zona configurada"
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-
-                    OutlinedButton(
-                        onClick = onOpenElfBuff,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text(
-                            if (elfBuff != null) "Editar zona elf buff" else "Configurar zona elf buff",
-                        )
-                    }
-                }
-            }
-        } else {
-            ElfBuffParamsCard(
+        if (profile?.isFarmBossesMode() == true) {
+            FarmBossesConfigCard(
                 profile = profile,
                 profileFilename = profileFilename,
             )
+            ElfBuffSeekConfigCard(
+                profile = profile,
+                profileFilename = profileFilename,
+                elfBuff = elfBuff,
+                onOpenElfBuff = onOpenElfBuff,
+            )
+        } else {
+            ConfigOptionCard(
+                title = when {
+                    profile?.isElfBuffWarMode() == true -> "Mapa Divine (Farm Spot)"
+                    profile?.isElfBuffGiverMode() == true -> "Buff post (Farm Spot)"
+                    else -> "Farm Spot"
+                },
+                summary = farmSpot?.summaryLabel(
+                    MapDefinitionRepository.getById(farmSpot.map)?.name
+                ) ?: "Sin configurar",
+                onClick = onOpenFarmSpot,
+            )
+
+            if (profile?.isElfBuffPostMode() != true) {
+                ElfBuffSeekConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                    elfBuff = elfBuff,
+                    onOpenElfBuff = onOpenElfBuff,
+                )
+            } else {
+                ElfBuffParamsCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
+            }
         }
 
         ConfigOptionCard(
@@ -267,6 +237,224 @@ fun ProfileConfigureScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun ElfBuffSeekConfigCard(
+    profile: BotProfile?,
+    profileFilename: String,
+    elfBuff: FarmLocation?,
+    onOpenElfBuff: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = "Elf buff automático",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = "Zona compartida entre Farm y Farm Bosses. " +
+                            "Desactívalo si la elf está offline o no quieres ir por buff.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = profile?.enableElfBuff == true,
+                    onCheckedChange = { enabled ->
+                        ProfileRepository.setElfBuffEnabled(profileFilename, enabled)
+                    },
+                    enabled = profile != null,
+                )
+            }
+
+            Text(
+                text = when {
+                    profile?.enableElfBuff != true -> "Desactivado — el bot no buscará elf buff"
+                    elfBuff != null -> elfBuff.summaryLabel(
+                        MapDefinitionRepository.getById(elfBuff.map)?.name
+                    )
+                    else -> "Activo, pero sin zona configurada"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            OutlinedButton(
+                onClick = onOpenElfBuff,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    if (elfBuff != null) "Editar zona elf buff" else "Configurar zona elf buff",
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun FarmBossesConfigCard(
+    profile: BotProfile?,
+    profileFilename: String,
+) {
+    val config = profile?.killBossesConfig ?: KillBossesConfig()
+    val pickerMaps = remember { MapDefinitionRepository.listForPicker() }
+    var selectedMaps by remember(profile?.filename, config.maps) {
+        mutableStateOf(config.maps)
+    }
+    var holdText by remember(profile?.filename, config.holdSec) {
+        mutableStateOf(config.holdSec.toString())
+    }
+    var golden by remember(profile?.filename, config.includeGoldenMobs) {
+        mutableStateOf(config.includeGoldenMobs)
+    }
+
+    LaunchedEffect(config.maps, config.holdSec, config.includeGoldenMobs) {
+        selectedMaps = config.maps
+        holdText = config.holdSec.toString()
+        golden = config.includeGoldenMobs
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = "Farm Bosses",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = "Elegí mapas en orden. El bot teleporta → wires → busca bosses vivos en el mapa → Focus+Auto. " +
+                    "Tras cada kill corre buff/pociones y vuelve al checkpoint.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            if (selectedMaps.isEmpty()) {
+                Text(
+                    text = "Sin mapas — marcá al menos uno",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                Text(
+                    text = "Orden: " + selectedMaps.mapIndexed { i, id ->
+                        val name = MapDefinitionRepository.getById(id)?.name ?: id
+                        "${i + 1}. $name"
+                    }.joinToString(" → "),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+
+            pickerMaps.forEach { map ->
+                val selected = map.id in selectedMaps
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = map.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    )
+                    FilterChip(
+                        selected = selected,
+                        onClick = {
+                            selectedMaps = if (selected) {
+                                selectedMaps.filterNot { it == map.id }
+                            } else {
+                                selectedMaps + map.id
+                            }
+                        },
+                        enabled = profile != null,
+                        label = { Text(if (selected) "On" else "Off") },
+                    )
+                }
+            }
+
+            OutlinedTextField(
+                value = holdText,
+                onValueChange = { holdText = it.filter { ch -> ch.isDigit() }.take(3) },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Timeout pelea (seg)") },
+                supportingText = {
+                    Text("Si el focus no se pierde, rota tras este tiempo. Default ${KillBossesConfig.DEFAULT_HOLD_SEC}s.")
+                },
+                singleLine = true,
+                enabled = profile != null,
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(
+                        text = "Incluir golden mobs",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        text = "También busca iconos golden en el mapa.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(
+                    checked = golden,
+                    onCheckedChange = { golden = it },
+                    enabled = profile != null,
+                )
+            }
+
+            OutlinedButton(
+                onClick = {
+                    val hold = holdText.toIntOrNull()
+                        ?.coerceIn(KillBossesConfig.MIN_HOLD_SEC, KillBossesConfig.MAX_HOLD_SEC)
+                        ?: KillBossesConfig.DEFAULT_HOLD_SEC
+                    ProfileRepository.setKillBossesConfig(
+                        profileFilename,
+                        KillBossesConfig(
+                            includeGoldenMobs = golden,
+                            holdSec = hold,
+                            maps = selectedMaps,
+                        ),
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = profile != null,
+            ) {
+                Text("Guardar")
+            }
+        }
     }
 }
 

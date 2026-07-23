@@ -14,20 +14,30 @@ import kotlinx.coroutines.delay
  * All → spam Focus → Union → (cast) → clear X → All.
  *
  * After tapping All, Immortal opens option boxes **above** the bar (~10s).
- * Union is matched in [pkPopupRoi], not only on the closed bar.
+ * Union in the open menu is matched in [pkPopupRoi]; closed-bar state uses a
+ * separate Local template (button bevel differs from the popup row).
  *
- * Cross maps use UnionKuaFu ([PK_MODE_UNION_CROSS]); local maps use Union ([PK_MODE_UNION_LOCAL]).
+ * Cross maps use UnionKuaFu for both bar and popup until a dedicated bar crop exists.
+ * Local maps: Union popup [PK_MODE_UNION_LOCAL] / bar [PK_MODE_UNION_LOCAL_BAR];
+ * All popup [PK_MODE_ALL_POPUP] / bar [PK_MODE_ALL].
  */
 object ElfBuffTargetingActions {
 
     private const val TAG = "ElfBuffCast"
 
     private const val FOCUS_PLAYER = "templates/mu/ui/targeting/focus_player.png"
+    /** Closed targeting-bar All. */
     private const val PK_MODE_ALL = "templates/mu/ui/targeting/pk_mode_all.png"
+    /** All row inside the open PK popup. */
+    private const val PK_MODE_ALL_POPUP = "templates/mu/ui/targeting/pk_mode_all_popup.png"
     private const val PK_MODE_UNION_CROSS = "templates/mu/ui/targeting/pk_mode_union.png"
+    /** Local Union row inside the open PK popup. */
     private const val PK_MODE_UNION_LOCAL = "templates/mu/ui/targeting/pk_mode_union_local.png"
+    /** Local Union label on the closed targeting bar. */
+    private const val PK_MODE_UNION_LOCAL_BAR = "templates/mu/ui/targeting/pk_mode_union_local_bar.png"
 
-    private const val TEMPLATE_THRESHOLD = 0.68f
+    private const val PK_TEMPLATE_THRESHOLD = 0.85f
+    private const val FOCUS_TEMPLATE_THRESHOLD = 0.68f
     private const val POST_PK_TAP_MS = 250L
     private const val PK_POPUP_WAIT_MS = 2_000L
     private const val POST_FOCUS_TAP_MS = 180L
@@ -55,25 +65,31 @@ object ElfBuffTargetingActions {
         return location.isCross
     }
 
-    private fun unionTemplatePath(isCross: Boolean = resolveIsCross()): String {
+    /** Template for open-menu / popup Union option. */
+    private fun unionPopupTemplatePath(isCross: Boolean = resolveIsCross()): String {
         return if (isCross) PK_MODE_UNION_CROSS else PK_MODE_UNION_LOCAL
+    }
+
+    /** Template for closed targeting-bar Union state. */
+    private fun unionBarTemplatePath(isCross: Boolean = resolveIsCross()): String {
+        return if (isCross) PK_MODE_UNION_CROSS else PK_MODE_UNION_LOCAL_BAR
     }
 
     /** True when closed bar shows All (Union not on closed bar). */
     suspend fun isPkModeAll(): Boolean {
         val bar = barRoi()
-        val all = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
+        val all = NavigationVision.findTemplate(PK_MODE_ALL, PK_TEMPLATE_THRESHOLD, bar)
         if (all == null) return false
-        val union = NavigationVision.findTemplate(unionTemplatePath(), TEMPLATE_THRESHOLD, bar)
+        val union = NavigationVision.findTemplate(unionBarTemplatePath(), PK_TEMPLATE_THRESHOLD, bar)
         return union == null
     }
 
     /** True when closed bar shows Union (All not on closed bar). */
     suspend fun isPkModeUnion(): Boolean {
         val bar = barRoi()
-        val union = NavigationVision.findTemplate(unionTemplatePath(), TEMPLATE_THRESHOLD, bar)
+        val union = NavigationVision.findTemplate(unionBarTemplatePath(), PK_TEMPLATE_THRESHOLD, bar)
         if (union == null) return false
-        val all = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
+        val all = NavigationVision.findTemplate(PK_MODE_ALL, PK_TEMPLATE_THRESHOLD, bar)
         return all == null
     }
 
@@ -84,7 +100,7 @@ object ElfBuffTargetingActions {
         val popup = pkPopupRoi()
         val match = NavigationVision.waitForTemplate(
             assetPath,
-            TEMPLATE_THRESHOLD,
+            PK_TEMPLATE_THRESHOLD,
             timeoutMs = PK_POPUP_WAIT_MS,
             roi = popup,
         )
@@ -107,12 +123,13 @@ object ElfBuffTargetingActions {
             return true
         }
         val bar = barRoi()
-        val unionPath = unionTemplatePath()
-        val allOnBar = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
-        val unionOnBar = NavigationVision.findTemplate(unionPath, TEMPLATE_THRESHOLD, bar)
+        val unionBarPath = unionBarTemplatePath()
+        val unionPopupPath = unionPopupTemplatePath()
+        val allOnBar = NavigationVision.findTemplate(PK_MODE_ALL, PK_TEMPLATE_THRESHOLD, bar)
+        val unionOnBar = NavigationVision.findTemplate(unionBarPath, PK_TEMPLATE_THRESHOLD, bar)
         val popup = pkPopupRoi()
-        val allInPopup = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, popup)
-        val unionInPopup = NavigationVision.findTemplate(unionPath, TEMPLATE_THRESHOLD, popup)
+        val allInPopup = NavigationVision.findTemplate(PK_MODE_ALL_POPUP, PK_TEMPLATE_THRESHOLD, popup)
+        val unionInPopup = NavigationVision.findTemplate(unionPopupPath, PK_TEMPLATE_THRESHOLD, popup)
 
         when {
             allInPopup != null && unionInPopup != null -> {
@@ -128,7 +145,7 @@ object ElfBuffTargetingActions {
                     return false
                 }
                 delay(POST_PK_TAP_MS)
-                val allOpt = waitPkOption(PK_MODE_ALL, "All") ?: return false
+                val allOpt = waitPkOption(PK_MODE_ALL_POPUP, "All") ?: return false
                 if (!NavigationVision.tapScreen(allOpt.centerX, allOpt.centerY, label = "pk_all")) {
                     return false
                 }
@@ -146,7 +163,8 @@ object ElfBuffTargetingActions {
 
     suspend fun switchPkModeUnion(): Boolean {
         val isCross = resolveIsCross()
-        val unionPath = unionTemplatePath(isCross)
+        val unionPopupPath = unionPopupTemplatePath(isCross)
+        val unionBarPath = unionBarTemplatePath(isCross)
         val unionLabel = if (isCross) "UnionKuaFu" else "Union"
         if (isPkModeUnion()) {
             Log.d(TAG, "[ELF_GIVER] pk mode already $unionLabel (isCross=$isCross)")
@@ -154,8 +172,8 @@ object ElfBuffTargetingActions {
         }
         val bar = barRoi()
         val popup = pkPopupRoi()
-        val allOnBar = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
-        val unionInPopup = NavigationVision.findTemplate(unionPath, TEMPLATE_THRESHOLD, popup)
+        val allOnBar = NavigationVision.findTemplate(PK_MODE_ALL, PK_TEMPLATE_THRESHOLD, bar)
+        val unionInPopup = NavigationVision.findTemplate(unionPopupPath, PK_TEMPLATE_THRESHOLD, popup)
 
         when {
             unionInPopup != null -> {
@@ -170,7 +188,7 @@ object ElfBuffTargetingActions {
                     return false
                 }
                 delay(POST_PK_TAP_MS)
-                val unionOpt = waitPkOption(unionPath, unionLabel) ?: return false
+                val unionOpt = waitPkOption(unionPopupPath, unionLabel) ?: return false
                 if (!NavigationVision.tapScreen(unionOpt.centerX, unionOpt.centerY, label = "pk_union")) {
                     return false
                 }
@@ -182,7 +200,11 @@ object ElfBuffTargetingActions {
         }
         delay(POST_PK_TAP_MS)
         val ok = isPkModeUnion()
-        Log.d(TAG, "[ELF_GIVER] switchPkModeUnion ok=$ok isCross=$isCross path=$unionPath")
+        Log.d(
+            TAG,
+            "[ELF_GIVER] switchPkModeUnion ok=$ok isCross=$isCross " +
+                "popup=$unionPopupPath bar=$unionBarPath",
+        )
         return ok
     }
 
@@ -196,7 +218,7 @@ object ElfBuffTargetingActions {
         }
         val roi = barRoi()
         for (attempt in 1..maxAttempts) {
-            val match = NavigationVision.findTemplate(FOCUS_PLAYER, TEMPLATE_THRESHOLD, roi)
+            val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_TEMPLATE_THRESHOLD, roi)
             if (match == null) {
                 Log.w(TAG, "[ELF_GIVER] focus_player miss attempt=$attempt/$maxAttempts")
                 delay(POST_FOCUS_TAP_MS)

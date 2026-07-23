@@ -7,6 +7,7 @@ import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import kotlinx.coroutines.delay
 
 object ElfBuffNavigationActions {
@@ -32,12 +33,16 @@ object ElfBuffNavigationActions {
             return false
         }
 
-        // Death UI often hides the buff icon → false "missing buff". Revive and return to
-        // farm; let the next loop decide whether to seek again.
+        // Death UI often hides the buff icon → false "missing buff". Revive and let the
+        // mode loop return to farm spot / boss checkpoint on the next iteration.
         if (DeathActions.isDead()) {
-            Log.d(TAG, "[ELF] dead before elf route; revive → farm (defer buff)")
+            Log.d(TAG, "[ELF] dead before elf route; revive (defer buff)")
             if (!DeathActions.recoverIfDead()) {
                 return false
+            }
+            if (profile.isFarmBossesMode()) {
+                Log.d(TAG, "[ELF] farm_bosses post-revive; checkpoint return deferred")
+                return true
             }
             return BotRecoveryActions.navigateToFarmWithRetry("post-revive-defer-elf") ||
                 BotRecoveryActions.recoverFromLostState("post-revive-defer-elf")
@@ -46,6 +51,12 @@ object ElfBuffNavigationActions {
         if (!goToElfBuff(elfLocation)) {
             Log.w(TAG, "[ELF] route to buff failed; recovery checkpoint")
             return BotRecoveryActions.recoverFromLostState("elf-route-failed")
+        }
+
+        // Farm Bosses: post-kill resumes via FarmBossesLoop.resumeAfterMaintenance.
+        if (profile.isFarmBossesMode()) {
+            Log.d(TAG, "[ELF] buff pickup done; farm_bosses return deferred to checkpoint")
+            return true
         }
 
         if (!BotRecoveryActions.navigateToFarmWithRetry("post-elf-buff")) {

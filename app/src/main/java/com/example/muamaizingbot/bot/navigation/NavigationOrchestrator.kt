@@ -134,6 +134,64 @@ object NavigationOrchestrator {
     }
 
     /**
+     * Navigate to a boss spot (map/wire/tap). Mirrors farm-spot short paths when already on map.
+     * Does not force Auto — caller runs Focus Boss + ensureAuto.
+     */
+    suspend fun goToBossSpot(location: FarmLocation, ensureAuto: Boolean = false): Boolean {
+        Log.d(
+            TAG,
+            "[NAV] go_to_boss_spot map=${location.map} wire=${location.wire} " +
+                "pixel=(${location.x},${location.y}) ensureAuto=$ensureAuto",
+        )
+        val mapDef = MapDefinitionRepository.getById(location.map)
+        if (mapDef == null) {
+            Log.w(TAG, "[NAV] boss spot map missing id=${location.map}")
+            return false
+        }
+
+        val onMap = NavigationWaitActions.isOnConfiguredMap(mapDef, location)
+        val atSpot = NavigationWaitActions.isAtFarmSpot(location, mapDef)
+
+        if (onMap && atSpot) {
+            Log.d(TAG, "[NAV] already at boss spot")
+            if (ensureAuto) {
+                GameActions.ensureAutoMode()
+            }
+            return true
+        }
+
+        if (onMap) {
+            Log.d(TAG, "[NAV] on boss map; wire + spot tap only")
+            if (!WireSwitchActions.switchToWire(mapDef, location.wire)) {
+                Log.w(TAG, "[NAV] switch_to_wire failed (boss spot-only)")
+                return false
+            }
+            if (!tapVisualLocation(location.x, location.y, location, mapDef)) {
+                Log.w(TAG, "[NAV] boss spot tap failed (spot-only)")
+                return false
+            }
+            if (ensureAuto) {
+                GameActions.ensureAutoMode()
+            }
+            return true
+        }
+
+        if (!navigateToMapAndWire(mapDef, location.wire, location)) {
+            Log.w(TAG, "[NAV] navigate_to_map_and_wire failed for boss spot")
+            return false
+        }
+        if (!tapVisualLocation(location.x, location.y, location, mapDef)) {
+            Log.w(TAG, "[NAV] boss spot tap failed")
+            return false
+        }
+        if (ensureAuto && !GameActions.ensureAutoMode()) {
+            Log.w(TAG, "[NAV] ensure_auto_mode failed after boss nav")
+        }
+        Log.d(TAG, "[NAV] go_to_boss_spot finished=true")
+        return true
+    }
+
+    /**
      * Return to a War/APEX post via open map + affine tap.
      * Skips wire teleport when already on the post's map (Divine).
      * Does **not** force Auto ON.

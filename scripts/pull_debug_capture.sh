@@ -17,6 +17,10 @@ resolve_device() {
     echo "$ADB_DEVICE"
     return
   fi
+  if adb devices | awk '/^emulator-5584\tdevice$/{found=1} END{exit !found}'; then
+    echo "emulator-5584"
+    return
+  fi
   if adb devices | awk '/^emulator-5574\tdevice$/{found=1} END{exit !found}'; then
     echo "emulator-5574"
     return

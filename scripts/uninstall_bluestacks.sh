@@ -4,18 +4,26 @@ set -euo pipefail
 PACKAGE="com.example.muamaizingbot"
 
 resolve_device() {
+  if [[ $# -ge 1 && -n "${1:-}" ]]; then
+    echo "$1"
+    return
+  fi
   if [[ -n "${ADB_DEVICE:-}" ]]; then
     echo "$ADB_DEVICE"
+    return
+  fi
+  if adb devices | awk '/^emulator-5584\tdevice$/{found=1} END{exit !found}'; then
+    echo "emulator-5584"
     return
   fi
   adb devices | awk '/^emulator-[0-9]+\tdevice$/{print $1; exit}'
 }
 
-DEVICE="$(resolve_device)"
+DEVICE="$(resolve_device "$@")"
 if [[ -z "$DEVICE" ]]; then
   adb connect 127.0.0.1:5555 2>/dev/null || true
   sleep 1
-  DEVICE="$(resolve_device)"
+  DEVICE="$(resolve_device "$@")"
 fi
 if [[ -z "$DEVICE" ]]; then
   DEVICE="127.0.0.1:5555"

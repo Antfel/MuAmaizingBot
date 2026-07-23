@@ -5,8 +5,18 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PACKAGE="com.example.muamaizingbot"
 
 resolve_device() {
+  # Positional arg: ./scripts/install_bluestacks.sh emulator-5584
+  if [[ $# -ge 1 && -n "${1:-}" ]]; then
+    echo "$1"
+    return
+  fi
   if [[ -n "${ADB_DEVICE:-}" ]]; then
     echo "$ADB_DEVICE"
+    return
+  fi
+  # Prefer 5584 for Farm Bosses / current work; ignore 5574 when both are up.
+  if adb devices | awk '/^emulator-5584\tdevice$/{found=1} END{exit !found}'; then
+    echo "emulator-5584"
     return
   fi
   local emu
@@ -44,7 +54,7 @@ adb start-server
 adb connect 127.0.0.1:5555 >/dev/null 2>&1 || true
 sleep 2
 
-DEVICE="$(resolve_device)"
+DEVICE="$(resolve_device "$@")"
 if [[ -z "$DEVICE" ]]; then
   echo "ERROR: no hay emulador conectado. Activa ADB en BlueStacks."
   adb devices -l
