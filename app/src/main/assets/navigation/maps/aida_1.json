@@ -2,6 +2,7 @@
   "id": "aida_1",
   "name": "Aida 1",
   "group": "Aida",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 150

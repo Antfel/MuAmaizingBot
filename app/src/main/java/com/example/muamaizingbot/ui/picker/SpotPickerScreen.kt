@@ -129,6 +129,15 @@ fun SpotPickerScreen(
     var coordYText by remember(profileFilename, locationType) {
         mutableStateOf(existingLocation?.coordY?.toString().orEmpty())
     }
+    var isCross by remember(profileFilename, locationType) {
+        mutableStateOf(
+            existingLocation?.isCross
+                ?: MapDefinitionRepository.getById(
+                    existingLocation?.map ?: profile?.map ?: maps.firstOrNull()?.id.orEmpty(),
+                )?.isCross
+                ?: true,
+        )
+    }
     var statusMessage by remember { mutableStateOf("") }
 
     val mapDef = remember(selectedMapId) { MapDefinitionRepository.getById(selectedMapId) }
@@ -151,6 +160,7 @@ fun SpotPickerScreen(
             coordY = spot.coordY
             coordXText = spot.coordX?.toString().orEmpty()
             coordYText = spot.coordY?.toString().orEmpty()
+            isCross = spot.isCross
             spotName = spot.name
         }
     }
@@ -252,8 +262,14 @@ fun SpotPickerScreen(
                 coordY = null
                 coordXText = ""
                 coordYText = ""
+                isCross = MapDefinitionRepository.getById(mapId)?.isCross ?: true
                 statusMessage = ""
             },
+        )
+
+        UnionCrossDropdown(
+            isCross = isCross,
+            onSelected = { isCross = it },
         )
 
         WireDropdown(
@@ -379,6 +395,7 @@ fun SpotPickerScreen(
                             name = trimmedName,
                             coordX = coordX,
                             coordY = coordY,
+                            isCross = isCross,
                         )
                         ProfileRepository.updateProfileMapWire(currentProfile, selectedMapId, selectedWire)
                     }
@@ -392,6 +409,7 @@ fun SpotPickerScreen(
                             name = trimmedName,
                             coordX = coordX,
                             coordY = coordY,
+                            isCross = isCross,
                         )
                         ProfileRepository.saveProfile(currentProfile.copy(enableElfBuff = enableElfBuff))
                     }
@@ -444,13 +462,74 @@ private fun MapDropdown(
         ) {
             maps.forEach { map ->
                 DropdownMenuItem(
-                    text = { Text(map.name) },
+                    text = {
+                        Text(
+                            if (map.isCross) {
+                                "${map.name} · Cross"
+                            } else {
+                                "${map.name} · Local"
+                            },
+                        )
+                    },
                     onClick = {
                         onMapSelected(map.id)
                         expanded = false
                     },
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun UnionCrossDropdown(
+    isCross: Boolean,
+    onSelected: (Boolean) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = if (isCross) {
+        "Cross (UnionKuaFu)"
+    } else {
+        "Local (Union)"
+    }
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = it },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        OutlinedTextField(
+            value = label,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("PK Union template") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+            supportingText = {
+                Text("Cross = mapas kua-fu; Local = mapas normales sin Cross.")
+            },
+            modifier = Modifier
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth(),
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                text = { Text("Cross (UnionKuaFu)") },
+                onClick = {
+                    onSelected(true)
+                    expanded = false
+                },
+            )
+            DropdownMenuItem(
+                text = { Text("Local (Union)") },
+                onClick = {
+                    onSelected(false)
+                    expanded = false
+                },
+            )
         }
     }
 }

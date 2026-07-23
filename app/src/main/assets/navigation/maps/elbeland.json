@@ -2,6 +2,7 @@
   "id": "elbeland",
   "name": "Elbeland",
   "group": "Elbeland",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 1

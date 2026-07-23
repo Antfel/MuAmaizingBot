@@ -2,6 +2,7 @@
   "id": "lost_tower_3",
   "name": "Lost Tower 3",
   "group": "Lost Tower",
+  "is_cross": false,
   "submap": 3,
   "requirements": {
     "min_level": 40

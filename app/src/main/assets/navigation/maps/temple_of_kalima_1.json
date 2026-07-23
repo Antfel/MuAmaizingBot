@@ -2,6 +2,7 @@
   "id": "temple_of_kalima_1",
   "name": "Temple of Kalima 1",
   "group": "Temple of Kalima",
+  "is_cross": true,
   "submap": 1,
   "requirements": {
     "min_level": 350

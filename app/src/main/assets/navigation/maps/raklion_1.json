@@ -2,6 +2,7 @@
   "id": "raklion_1",
   "name": "Raklion 1",
   "group": "Raklion",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 300

@@ -16,6 +16,12 @@ data class FarmLocation(
     val arrivalRadius: Int = 5,
     val farmRadius: Int = 5,
     val lostRadius: Int = 35,
+    /**
+     * PK Union template variant for this spot.
+     * `true` → UnionKuaFu (cross-server); `false` → Union (local).
+     * Defaults to the map's [com.example.muamaizingbot.maps.MapDefinition.isCross] when omitted in JSON.
+     */
+    val isCross: Boolean = true,
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -32,13 +38,15 @@ data class FarmLocation(
             put("arrival_radius", arrivalRadius)
             put("farm_radius", farmRadius)
             put("lost_radius", lostRadius)
+            put("is_cross", isCross)
         }
     }
 
     fun summaryLabel(mapName: String? = null): String {
         val mapLabel = mapName ?: map
         val coordPart = if (coordX != null && coordY != null) " ($coordX,$coordY)" else ""
-        return "$mapLabel W$wire @ ($x,$y)$coordPart"
+        val unionPart = if (isCross) " Cross" else " Local"
+        return "$mapLabel W$wire @ ($x,$y)$coordPart$unionPart"
     }
 
     companion object {
@@ -60,6 +68,17 @@ data class FarmLocation(
                     if (saved == 20) 5 else saved
                 },
                 lostRadius = json.optInt("lost_radius", 35),
+                isCross = when {
+                    json.has("is_cross") -> json.optBoolean("is_cross", true)
+                    else -> {
+                        // Legacy spots: inherit map default when available.
+                        runCatching {
+                            com.example.muamaizingbot.maps.MapDefinitionRepository
+                                .getById(json.getString("map"))
+                                ?.isCross
+                        }.getOrNull() ?: true
+                    }
+                },
             )
         }
     }

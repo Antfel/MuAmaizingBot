@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.graphics.Rect
 import android.util.Log
+import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
@@ -10,10 +11,12 @@ import kotlinx.coroutines.delay
 
 /**
  * PK mode + Focus-button helpers for the UI-driven giver loop:
- * All → spam Focus → UnionKuaFu → (cast) → clear X → All.
+ * All → spam Focus → Union → (cast) → clear X → All.
  *
  * After tapping All, Immortal opens option boxes **above** the bar (~10s).
- * UnionKuaFu is matched in [pkPopupRoi], not only on the closed bar.
+ * Union is matched in [pkPopupRoi], not only on the closed bar.
+ *
+ * Cross maps use UnionKuaFu ([PK_MODE_UNION_CROSS]); local maps use Union ([PK_MODE_UNION_LOCAL]).
  */
 object ElfBuffTargetingActions {
 
@@ -21,7 +24,8 @@ object ElfBuffTargetingActions {
 
     private const val FOCUS_PLAYER = "templates/mu/ui/targeting/focus_player.png"
     private const val PK_MODE_ALL = "templates/mu/ui/targeting/pk_mode_all.png"
-    private const val PK_MODE_UNION = "templates/mu/ui/targeting/pk_mode_union.png"
+    private const val PK_MODE_UNION_CROSS = "templates/mu/ui/targeting/pk_mode_union.png"
+    private const val PK_MODE_UNION_LOCAL = "templates/mu/ui/targeting/pk_mode_union_local.png"
 
     private const val TEMPLATE_THRESHOLD = 0.68f
     private const val POST_PK_TAP_MS = 250L
@@ -40,19 +44,34 @@ object ElfBuffTargetingActions {
         return MuCombatRois.pkModePopupRoi(w, h)
     }
 
+    /**
+     * Active farm/elf spot decides Cross vs Local Union template.
+     * Falls back to Cross (legacy UnionKuaFu) when no location is configured.
+     */
+    fun resolveIsCross(): Boolean {
+        val location = LocationRepository.farmSpot.value
+            ?: LocationRepository.elfBuff.value
+            ?: return true
+        return location.isCross
+    }
+
+    private fun unionTemplatePath(isCross: Boolean = resolveIsCross()): String {
+        return if (isCross) PK_MODE_UNION_CROSS else PK_MODE_UNION_LOCAL
+    }
+
     /** True when closed bar shows All (Union not on closed bar). */
     suspend fun isPkModeAll(): Boolean {
         val bar = barRoi()
         val all = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
         if (all == null) return false
-        val union = NavigationVision.findTemplate(PK_MODE_UNION, TEMPLATE_THRESHOLD, bar)
+        val union = NavigationVision.findTemplate(unionTemplatePath(), TEMPLATE_THRESHOLD, bar)
         return union == null
     }
 
-    /** True when closed bar shows UnionKuaFu (All not on closed bar). */
+    /** True when closed bar shows Union (All not on closed bar). */
     suspend fun isPkModeUnion(): Boolean {
         val bar = barRoi()
-        val union = NavigationVision.findTemplate(PK_MODE_UNION, TEMPLATE_THRESHOLD, bar)
+        val union = NavigationVision.findTemplate(unionTemplatePath(), TEMPLATE_THRESHOLD, bar)
         if (union == null) return false
         val all = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
         return all == null
@@ -88,11 +107,12 @@ object ElfBuffTargetingActions {
             return true
         }
         val bar = barRoi()
+        val unionPath = unionTemplatePath()
         val allOnBar = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
-        val unionOnBar = NavigationVision.findTemplate(PK_MODE_UNION, TEMPLATE_THRESHOLD, bar)
+        val unionOnBar = NavigationVision.findTemplate(unionPath, TEMPLATE_THRESHOLD, bar)
         val popup = pkPopupRoi()
         val allInPopup = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, popup)
-        val unionInPopup = NavigationVision.findTemplate(PK_MODE_UNION, TEMPLATE_THRESHOLD, popup)
+        val unionInPopup = NavigationVision.findTemplate(unionPath, TEMPLATE_THRESHOLD, popup)
 
         when {
             allInPopup != null && unionInPopup != null -> {
@@ -125,41 +145,44 @@ object ElfBuffTargetingActions {
     }
 
     suspend fun switchPkModeUnion(): Boolean {
+        val isCross = resolveIsCross()
+        val unionPath = unionTemplatePath(isCross)
+        val unionLabel = if (isCross) "UnionKuaFu" else "Union"
         if (isPkModeUnion()) {
-            Log.d(TAG, "[ELF_GIVER] pk mode already Union")
+            Log.d(TAG, "[ELF_GIVER] pk mode already $unionLabel (isCross=$isCross)")
             return true
         }
         val bar = barRoi()
         val popup = pkPopupRoi()
         val allOnBar = NavigationVision.findTemplate(PK_MODE_ALL, TEMPLATE_THRESHOLD, bar)
-        val unionInPopup = NavigationVision.findTemplate(PK_MODE_UNION, TEMPLATE_THRESHOLD, popup)
+        val unionInPopup = NavigationVision.findTemplate(unionPath, TEMPLATE_THRESHOLD, popup)
 
         when {
             unionInPopup != null -> {
-                Log.d(TAG, "[ELF_GIVER] pk menu open — tap Union")
+                Log.d(TAG, "[ELF_GIVER] pk menu open — tap $unionLabel")
                 if (!NavigationVision.tapScreen(unionInPopup.centerX, unionInPopup.centerY, label = "pk_union")) {
                     return false
                 }
             }
             allOnBar != null -> {
-                Log.d(TAG, "[ELF_GIVER] pk is All — open menu (Union boxes above)")
+                Log.d(TAG, "[ELF_GIVER] pk is All — open menu ($unionLabel boxes above)")
                 if (!NavigationVision.tapScreen(allOnBar.centerX, allOnBar.centerY, label = "pk_open")) {
                     return false
                 }
                 delay(POST_PK_TAP_MS)
-                val unionOpt = waitPkOption(PK_MODE_UNION, "Union") ?: return false
+                val unionOpt = waitPkOption(unionPath, unionLabel) ?: return false
                 if (!NavigationVision.tapScreen(unionOpt.centerX, unionOpt.centerY, label = "pk_union")) {
                     return false
                 }
             }
             else -> {
-                Log.w(TAG, "[ELF_GIVER] pk All miss — cannot switch Union")
+                Log.w(TAG, "[ELF_GIVER] pk All miss — cannot switch $unionLabel")
                 return false
             }
         }
         delay(POST_PK_TAP_MS)
         val ok = isPkModeUnion()
-        Log.d(TAG, "[ELF_GIVER] switchPkModeUnion ok=$ok")
+        Log.d(TAG, "[ELF_GIVER] switchPkModeUnion ok=$ok isCross=$isCross path=$unionPath")
         return ok
     }
 

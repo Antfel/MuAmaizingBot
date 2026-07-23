@@ -14,12 +14,10 @@ python3 scripts/fit_map_affine.py --points-file scripts/map_calib_points/<map>.j
 For Kalima, calibrate once on `temple_of_kalima_1` then copy `coordinate_mapping` to floors 2–9
 (or run with `--write` once and a small loop).
 
-**Raklion 3:** stub at `scripts/map_calib_points/raklion_3.json` (`wire: 6`). SpotPicker shows it via maintenance reference even before affine. After 3 points:
+**Raklion 3:** points in `scripts/map_calib_points/raklion_3.json`. If you tap on the **1280×720** maintenance PNG, store `source_png_*` and set `ref_* = png * 2` (affine is REF 2560×1440). SpotPicker already reports REF pixels — use those as `ref_*` directly.
 
 ```bash
 python3 scripts/fit_map_affine.py --points-file scripts/map_calib_points/raklion_3.json --write
 ```
-
-Still need `mapsui/raklion_3.png`, `mapsui/raklion_head.png`, and `current/raklion_3_current.png` for teleport (Elf buff / Farm Bosses).
 
 Prefer **in-zone** map-open references (not world teleport list) for Corrupted / Land of Demons.

@@ -2,6 +2,7 @@
   "id": "icarus_1",
   "name": "Icarus 1",
   "group": "Icarus",
+  "is_cross": false,
   "submap": 1,
   "requirements": {
     "min_level": 170

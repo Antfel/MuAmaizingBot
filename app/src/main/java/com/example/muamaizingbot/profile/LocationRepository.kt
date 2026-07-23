@@ -81,6 +81,7 @@ object LocationRepository {
         name: String = "Farm Spot",
         coordX: Int? = null,
         coordY: Int? = null,
+        isCross: Boolean = true,
     ): FarmLocation {
         val profile = normalizeProfileName(profileFilename)
         val existing = getFarmSpot(profileFilename)
@@ -95,12 +96,17 @@ object LocationRepository {
             y = y,
             coordX = coordX,
             coordY = coordY,
+            isCross = isCross,
         )
         upsertLocation(location)
         if (isCurrentProfile(profile)) {
             _farmSpot.value = location
         }
-        Log.d(TAG, "[LOCATIONS] saved farm_spot profile=$profile map=$mapId wire=$wire ($x,$y)")
+        Log.d(
+            TAG,
+            "[LOCATIONS] saved farm_spot profile=$profile map=$mapId wire=$wire ($x,$y) " +
+                "isCross=$isCross",
+        )
         return location
     }
 
@@ -113,6 +119,7 @@ object LocationRepository {
         name: String = "Elf Buff",
         coordX: Int? = null,
         coordY: Int? = null,
+        isCross: Boolean = true,
     ): FarmLocation {
         val profile = normalizeProfileName(profileFilename)
         val existing = getElfBuff(profileFilename)
@@ -127,12 +134,17 @@ object LocationRepository {
             y = y,
             coordX = coordX,
             coordY = coordY,
+            isCross = isCross,
         )
         upsertLocation(location)
         if (isCurrentProfile(profile)) {
             _elfBuff.value = location
         }
-        Log.d(TAG, "[LOCATIONS] saved elf_buff profile=$profile map=$mapId wire=$wire ($x,$y)")
+        Log.d(
+            TAG,
+            "[LOCATIONS] saved elf_buff profile=$profile map=$mapId wire=$wire ($x,$y) " +
+                "isCross=$isCross",
+        )
         return location
     }
 
@@ -145,6 +157,7 @@ object LocationRepository {
         name: String = "War Post",
         coordX: Int? = null,
         coordY: Int? = null,
+        isCross: Boolean = true,
     ): FarmLocation {
         val profile = normalizeProfileName(profileFilename)
         val existing = getWarPost(profileFilename)
@@ -159,6 +172,7 @@ object LocationRepository {
             y = y,
             coordX = coordX,
             coordY = coordY,
+            isCross = isCross,
         )
         upsertLocation(location)
         if (isCurrentProfile(profile)) {
@@ -167,7 +181,7 @@ object LocationRepository {
         Log.d(
             TAG,
             "[LOCATIONS] saved war_post profile=$profile map=$mapId " +
-                "pixel=($x,$y) coords=(${coordX},${coordY})",
+                "pixel=($x,$y) coords=(${coordX},${coordY}) isCross=$isCross",
         )
         return location
     }

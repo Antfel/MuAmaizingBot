@@ -2,6 +2,7 @@
   "id": "kanturu_relics_2",
   "name": "Kanturu Relics 2",
   "group": "Kanturu Relics",
+  "is_cross": false,
   "submap": 2,
   "requirements": {
     "min_level": 250
