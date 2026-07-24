@@ -111,7 +111,7 @@ fun HomeScreen(
         StatusCard(
             title = when {
                 currentProfile?.isFarmBossesMode() == true -> "Boss maps"
-                currentProfile?.isElfBuffWarMode() == true -> "Divine map"
+                currentProfile?.isElfBuffWarMode() == true -> "War event post"
                 currentProfile?.isElfBuffGiverMode() == true -> "Buff post"
                 else -> "Farm spot"
             },

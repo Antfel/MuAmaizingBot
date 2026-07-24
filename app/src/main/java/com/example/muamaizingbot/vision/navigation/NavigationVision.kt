@@ -422,7 +422,8 @@ object NavigationVision {
         return name == "close_x.png" ||
             name == "greater_defense.png" ||
             name == "greater_damage.png" ||
-            name == "boss_focus.png"
+            name == "boss_focus.png" ||
+            name == "inventory_full.png"
     }
 
     /** Map icons cropped on black — ignore empty canvas via TM_CCORR_NORMED + luminance mask. */

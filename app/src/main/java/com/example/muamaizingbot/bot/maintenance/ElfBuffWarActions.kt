@@ -2,16 +2,20 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.graphics.Color
 import android.util.Log
+import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
-import kotlin.random.Random
 
 /**
- * Divine War / APEX elf loop: random world taps → green HP buff → Focus Boss clear.
+ * Divine War / APEX elf loop: grid taps → green HP buff → Focus Boss clear HUD → resume taps.
  * Never touches PK All/Union. Does not force Auto combat.
+ * Death aborts the cycle immediately so the loop can revive + return to post.
+ *
+ * Search: angular round-robin over ~87px cells (1 HUD coord) with MISS/HIT cooldowns.
+ * Each cell: 5-point cross (C+N/E/S/W); aborts early if focus appears mid-cross.
  */
 object ElfBuffWarActions {
 
@@ -19,90 +23,140 @@ object ElfBuffWarActions {
     private const val BETWEEN_SKILLS_MS = 280L
     private const val POST_CAST_MS = 1_000L
     private const val POST_CLEAR_MS = 220L
-    private const val BETWEEN_TAPS_MS = 450L
-    private const val AFTER_BUFF_GAP_MS = 800L
-
-    /** World tap band @ 1280×720 — center playfield, away from HUD clusters. */
-    private const val TAP_LEFT = 280
-    private const val TAP_TOP = 120
-    private const val TAP_RIGHT = 900
-    private const val TAP_BOTTOM = 480
-    private const val BASE_W = 1280
-    private const val BASE_H = 720
+    /** Keep taps aggressive while hunting ally focus. */
+    private const val BETWEEN_TAPS_MS = 40L
 
     private val CAST_ORDER = listOf(
         ElfBuffSkillMapper.SkillId.GREATER_DAMAGE,
         ElfBuffSkillMapper.SkillId.GREATER_DEFENSE,
     )
 
-    suspend fun tick(profile: BotProfile): Boolean {
+    enum class TickResult {
+        OK,
+        DEAD,
+    }
+
+    suspend fun tick(profile: BotProfile): TickResult {
         if (!profile.isElfBuffWarMode()) {
-            return true
+            return TickResult.OK
         }
 
         if (ElfBuffSummonDismiss.dismissIfPresent()) {
             Log.d(TAG, "[WAR] summon dismissed — resume taps next tick")
-            return true
+            return TickResult.OK
         }
 
-        when (ElfBuffFocusHud.classifyUnionFocus()) {
+        val focus = ElfBuffFocusHud.classifyUnionFocus()
+        // Resolve previous tap → HIT/MISS before acting on current focus.
+        when (focus) {
+            ElfBuffFocusHud.HpBarColor.GREEN,
+            ElfBuffFocusHud.HpBarColor.RED,
+            -> ElfBuffWarTapGrid.noteFocusResult(hit = true)
+            null -> ElfBuffWarTapGrid.noteFocusResult(hit = false)
+        }
+
+        when (focus) {
             ElfBuffFocusHud.HpBarColor.GREEN -> {
                 Log.d(TAG, "[WAR] green focus → buff + clear")
-                val castOk = castMappedSkills()
-                delay(POST_CAST_MS)
-                if (!ElfBuffFocusHud.clearFocus()) {
-                    Log.w(TAG, "[WAR] Focus Boss clear failed after buff")
+                if (castMappedSkills() == CastResult.DEAD) {
+                    ElfBuffWarTapGrid.reset("dead-mid-cast")
+                    return TickResult.DEAD
                 }
-                delay(POST_CLEAR_MS)
-                delay(AFTER_BUFF_GAP_MS)
-                return castOk
+                if (DeathActions.isDead()) {
+                    Log.d(TAG, "[WAR] death after cast — abort clear")
+                    ElfBuffWarTapGrid.reset("dead-after-cast")
+                    return TickResult.DEAD
+                }
+                delay(POST_CAST_MS)
+                if (DeathActions.isDead()) {
+                    Log.d(TAG, "[WAR] death during post-cast — abort")
+                    ElfBuffWarTapGrid.reset("dead-post-cast")
+                    return TickResult.DEAD
+                }
+                if (!ElfBuffFocusHud.clearFocusHardTapAndVerify()) {
+                    Log.w(TAG, "[WAR] hard clear failed / green HUD still visible")
+                }
+                return if (DeathActions.isDead()) {
+                    ElfBuffWarTapGrid.reset("dead-after-buff")
+                    TickResult.DEAD
+                } else {
+                    TickResult.OK
+                }
             }
             ElfBuffFocusHud.HpBarColor.RED -> {
                 Log.d(TAG, "[WAR] red focus → clear only")
-                if (!ElfBuffFocusHud.clearFocus()) {
-                    Log.w(TAG, "[WAR] Focus Boss clear failed (red)")
+                if (DeathActions.isDead()) {
+                    ElfBuffWarTapGrid.reset("dead-red")
+                    return TickResult.DEAD
+                }
+                if (!ElfBuffFocusHud.clearFocusHardTapAndVerify()) {
+                    Log.w(TAG, "[WAR] hard clear failed (red)")
                 }
                 delay(POST_CLEAR_MS)
-                return true
+                return if (DeathActions.isDead()) {
+                    ElfBuffWarTapGrid.reset("dead-after-red")
+                    TickResult.DEAD
+                } else {
+                    TickResult.OK
+                }
             }
             null -> {
-                // No focus — random world tap (acquire focus).
-                randomWorldTap()
-                delay(BETWEEN_TAPS_MS)
-                return true
+                // No focus — next free grid cell, probe with 5-point cross.
+                // If all cells were blocked, grid clears CDs and restarts the sweep.
+                val (w, h) = RefCoords.activeScreenSize()
+                val cell = ElfBuffWarTapGrid.nextTapCell(w, h)
+                if (cell == null) {
+                    Log.w(TAG, "[WAR] grid empty — nothing to tap")
+                    return TickResult.OK
+                }
+                val points = ElfBuffWarTapGrid.crossTapPoints(cell, w, h)
+                if (points.isEmpty()) {
+                    Log.w(TAG, "[WAR] cross empty cell=${cell.index} — skip")
+                    return TickResult.OK
+                }
+                for ((i, pt) in points.withIndex()) {
+                    if (DeathActions.isDead()) {
+                        Log.d(TAG, "[WAR] death mid-cross cell=${cell.index} arm=${pt.arm}")
+                        ElfBuffWarTapGrid.reset("dead-mid-cross")
+                        return TickResult.DEAD
+                    }
+                    NavigationVision.tapScreen(
+                        pt.screenX,
+                        pt.screenY,
+                        label = "war_grid_${cell.index}_${pt.arm}",
+                    )
+                    delay(BETWEEN_TAPS_MS)
+                    // Early exit if an arm already acquired focus (next tick buffs/clears).
+                    if (i < points.lastIndex &&
+                        ElfBuffFocusHud.classifyUnionFocus() != null
+                    ) {
+                        Log.d(TAG, "[WAR] focus mid-cross cell=${cell.index} after=${pt.arm}")
+                        return TickResult.OK
+                    }
+                }
+                return TickResult.OK
             }
         }
     }
 
-    private suspend fun randomWorldTap(): Boolean {
-        val (w, h) = RefCoords.activeScreenSize()
-        var x: Int
-        var y: Int
-        var attempts = 0
-        do {
-            x = Random.nextInt(TAP_LEFT * w / BASE_W, TAP_RIGHT * w / BASE_W)
-            y = Random.nextInt(TAP_TOP * h / BASE_H, TAP_BOTTOM * h / BASE_H)
-            attempts++
-        } while (
-            ElfBuffExclusionZones.containsPoint(x, y, w, h) && attempts < 12
-        )
-        if (ElfBuffExclusionZones.containsPoint(x, y, w, h)) {
-            // Fallback: hard center of world band.
-            x = (TAP_LEFT + TAP_RIGHT) / 2 * w / BASE_W
-            y = (TAP_TOP + TAP_BOTTOM) / 2 * h / BASE_H
-        }
-        Log.d(TAG, "[WAR] random tap screen=($x,$y)")
-        return NavigationVision.tapScreen(x, y, label = "war_random")
+    private enum class CastResult {
+        OK,
+        FAILED,
+        DEAD,
     }
 
-    private suspend fun castMappedSkills(): Boolean {
+    private suspend fun castMappedSkills(): CastResult {
         if (!ElfBuffSkillMapper.ensureMapped()) {
             Log.w(TAG, "[WAR] cast skipped — skills not mapped")
-            return false
+            return CastResult.FAILED
         }
         val byId = ElfBuffSkillMapper.mappedSkills().associateBy { it.id }
         var allOk = true
         for ((index, skillId) in CAST_ORDER.withIndex()) {
+            if (DeathActions.isDead()) {
+                Log.d(TAG, "[WAR] death mid-cast — abort remaining skills")
+                return CastResult.DEAD
+            }
             val skill = byId[skillId]
             if (skill == null) {
                 Log.w(TAG, "[WAR] missing mapped skill=${skillId.name}")
@@ -135,6 +189,6 @@ object ElfBuffWarActions {
                 delay(BETWEEN_SKILLS_MS)
             }
         }
-        return allOk
+        return if (allOk) CastResult.OK else CastResult.FAILED
     }
 }

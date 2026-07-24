@@ -16,7 +16,10 @@ import com.example.muamaizingbot.bot.maintenance.ElfBuffSkillMapper
 import com.example.muamaizingbot.bot.maintenance.ElfBuffTargetingActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffWarActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffWarPostActions
+import com.example.muamaizingbot.bot.maintenance.ElfBuffWarTapGrid
 import com.example.muamaizingbot.bot.maintenance.MapCheckActions
+import com.example.muamaizingbot.bot.maintenance.InventoryCheckActions
+import com.example.muamaizingbot.bot.maintenance.InventoryRecycleActions
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
@@ -102,6 +105,17 @@ object BotPriorityLoop {
             }
         }
 
+        if (InventoryCheckActions.isInventoryFull()) {
+            Log.d(TAG, "[LOOP] branch=inventory_full")
+            BotDiagnosticJournal.record(TAG, "branch=inventory_full")
+            consecutiveFarmSoftFails = 0
+            return if (InventoryRecycleActions.handleFullInventory()) {
+                IterationResult.OK
+            } else {
+                recoveryOrError("recycle-failed")
+            }
+        }
+
         // Farm mode only: seek NPC elf. Giver / War stay on post (no seek).
         if (ElfBuffSeekGate.shouldAttemptSeek(profile)) {
             if (!ElfBuffCheckActions.hasElfBuff()) {
@@ -128,11 +142,8 @@ object BotPriorityLoop {
             Log.d(TAG, "[LOOP] branch=wrong_map")
             BotDiagnosticJournal.record(TAG, "branch=wrong_map")
             consecutiveFarmSoftFails = 0
-            return if (profile.isElfBuffWarMode()) {
-                navigateToWarPost("wrong_map", countAsWrongMapSoft = true)
-            } else {
-                navigateToFarm("wrong_map", countAsWrongMapSoft = true)
-            }
+            // War never uses wrong_map (validation skipped); keep farm/giver/bosses path.
+            return navigateToFarm("wrong_map", countAsWrongMapSoft = true)
         }
 
         // On configured map — clear city flap counter.
@@ -144,8 +155,17 @@ object BotPriorityLoop {
             if (!ElfBuffSkillMapper.isReady()) {
                 ElfBuffSkillMapper.calibrate()
             }
-            ElfBuffWarActions.tick(profile)
-            return IterationResult.OK
+            return when (ElfBuffWarActions.tick(profile)) {
+                ElfBuffWarActions.TickResult.DEAD -> {
+                    Log.d(TAG, "[LOOP] war tick → death")
+                    if (!DeathActions.recoverIfDead()) {
+                        IterationResult.ERROR
+                    } else {
+                        navigateToWarPost("post-revive")
+                    }
+                }
+                ElfBuffWarActions.TickResult.OK -> IterationResult.OK
+            }
         }
 
         // Farm / giver: never Auto or farm cycle until HUD coords confirm farm spot.
@@ -199,15 +219,17 @@ object BotPriorityLoop {
             }
         }
 
-        // War / APEX: ensure Divine map, capture HUD post, calibrate skills — no PK, no Auto.
-        if (profile.isElfBuffWarMode()) {
-            Log.d(TAG, "[STARTUP] mode=elf_buff_war → Divine post")
-            if (!MapCheckActions.isInConfiguredMap()) {
-                val nav = navigateToFarm("startup-war", skipAuto = true)
-                if (nav != IterationResult.OK) {
-                    return nav
-                }
+        if (InventoryCheckActions.isInventoryFull()) {
+            Log.d(TAG, "[STARTUP] inventory_full → recycle")
+            if (!InventoryRecycleActions.handleFullInventory()) {
+                return recoveryOrError("startup-recycle-failed")
             }
+        }
+
+        // War / APEX: already inside event — capture HUD post only (no map teleport).
+        if (profile.isElfBuffWarMode()) {
+            Log.d(TAG, "[STARTUP] mode=elf_buff_war → capture war_post only")
+            ElfBuffWarTapGrid.reset("startup")
             if (ElfBuffWarPostActions.captureWarPost() == null) {
                 Log.w(TAG, "[STARTUP] war_post capture failed — will retry on death/loop")
             }
@@ -366,6 +388,13 @@ object BotPriorityLoop {
             Log.d(TAG, "[LOOP] farm_bosses potions empty reason=$reason")
             if (!PotionPurchaseActions.handleEmptyPotions()) {
                 return recoveryOrError("boss-$reason-potion")
+            }
+        }
+
+        if (InventoryCheckActions.isInventoryFull()) {
+            Log.d(TAG, "[LOOP] farm_bosses inventory_full reason=$reason")
+            if (!InventoryRecycleActions.handleFullInventory()) {
+                return recoveryOrError("boss-$reason-recycle")
             }
         }
 

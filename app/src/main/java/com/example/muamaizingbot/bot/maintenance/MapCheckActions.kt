@@ -6,8 +6,8 @@ import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.profile.isFarmBossesMode
-import com.example.muamaizingbot.vision.navigation.NavigationVision
 
 object MapCheckActions {
 
@@ -32,6 +32,12 @@ object MapCheckActions {
             return onMap
         }
 
+        // War / APEX: always inside the event — no map validation.
+        if (profile?.isElfBuffWarMode() == true) {
+            Log.d(TAG, "[MAP_CHECK] war mode — skip map validation")
+            return true
+        }
+
         val farmSpot = LocationRepository.farmSpot.value
         val mapId = farmSpot?.map?.takeIf { it.isNotBlank() }
             ?: profile?.map?.takeIf { it.isNotBlank() }
@@ -49,14 +55,7 @@ object MapCheckActions {
 
         val presence = NavigationWaitActions.detectMapPresence(mapDef, farmSpot)
         val onMap = presence != NavigationWaitActions.MapPresence.NONE
-        if (onMap) {
-            Log.d(TAG, "[MAP_CHECK] expected=$mapId onMap=true via=$presence")
-        } else {
-            mapDef.navigation?.currentMapTemplate?.takeIf { it.isNotBlank() }?.let { path ->
-                NavigationVision.logBestScore(path)
-            }
-            Log.d(TAG, "[MAP_CHECK] expected=$mapId onMap=false")
-        }
+        Log.d(TAG, "[MAP_CHECK] expected=$mapId onMap=$onMap via=$presence name=\"${mapDef.name}\"")
         return onMap
     }
 }

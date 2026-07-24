@@ -192,28 +192,23 @@ object NavigationOrchestrator {
     }
 
     /**
-     * Return to a War/APEX post via open map + affine tap.
-     * Skips wire teleport when already on the post's map (Divine).
+     * Return to a War/APEX post via open map + affine pixel tap only.
+     * No map presence check / teleport — War starts and stays inside the event.
      * Does **not** force Auto ON.
      */
     suspend fun goToWarPost(location: FarmLocation): Boolean {
-        val mapDef = MapDefinitionRepository.getById(location.map)
+        val mapId = location.map.takeIf { it.isNotBlank() } ?: "divine_realm_1"
+        val mapDef = MapDefinitionRepository.getById(mapId)
         if (mapDef == null) {
-            Log.w(TAG, "[NAV] war_post map missing id=${location.map}")
+            Log.w(TAG, "[NAV] war_post map missing id=$mapId")
             return false
         }
 
-        val onMap = NavigationWaitActions.isOnConfiguredMap(mapDef, location)
-        if (!onMap) {
-            Log.d(TAG, "[NAV] war_post off map → teleport to ${mapDef.id}")
-            if (!navigateToMapAndWire(mapDef, location.wire, location)) {
-                Log.w(TAG, "[NAV] war_post navigate_to_map failed")
-                return false
-            }
-        } else {
-            Log.d(TAG, "[NAV] war_post on map → minimap tap only")
-        }
-
+        Log.d(
+            TAG,
+            "[NAV] war_post minimap tap pixel=(${location.x},${location.y}) " +
+                "coords=(${location.coordX},${location.coordY})",
+        )
         if (!tapVisualLocation(location.x, location.y, location, mapDef)) {
             Log.w(TAG, "[NAV] war_post tap failed pixel=(${location.x},${location.y})")
             return false

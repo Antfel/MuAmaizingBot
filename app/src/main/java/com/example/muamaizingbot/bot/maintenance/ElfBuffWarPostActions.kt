@@ -10,15 +10,21 @@ import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 
 /**
- * Capture / return to War (APEX) post using HUD game coords + minimap affine tap.
+ * War / APEX post: capture HUD coords at Start, convert to minimap pixels via Divine affine.
+ *
+ * No map validation / teleport — the bot is started already inside the Divine event.
+ * After death, only open map + tap the saved pixel to return to the start point.
  */
 object ElfBuffWarPostActions {
 
     private const val TAG = "ElfBuffWar"
 
+    /** Affine / bounds source for HUD→pixel (Divine event). */
+    const val WAR_MAP_ID = "divine_realm_1"
+
     /**
-     * Read current HUD X/Y and persist as [war_post] for this profile.
-     * Map/wire come from the configured farm spot (Divine) or profile fallback.
+     * Read current HUD X/Y and persist as [war_post].
+     * Assumes the character is already inside the War event.
      */
     suspend fun captureWarPost(): FarmLocation? {
         val profile = ProfileRepository.currentProfile.value
@@ -27,17 +33,9 @@ object ElfBuffWarPostActions {
             return null
         }
 
-        val farmSpot = LocationRepository.getFarmSpot(profile.filename)
-        val mapId = farmSpot?.map?.takeIf { it.isNotBlank() }
-            ?: profile.map.takeIf { it.isNotBlank() }
-        if (mapId == null) {
-            Log.w(TAG, "[WAR] capture post skipped — no Divine/farm map configured")
-            return null
-        }
-
-        val mapDef = MapDefinitionRepository.getById(mapId)
+        val mapDef = MapDefinitionRepository.getById(WAR_MAP_ID)
         if (mapDef == null) {
-            Log.w(TAG, "[WAR] capture post skipped — map def missing id=$mapId")
+            Log.w(TAG, "[WAR] capture post skipped — map def missing id=$WAR_MAP_ID")
             return null
         }
 
@@ -58,55 +56,55 @@ object ElfBuffWarPostActions {
             return null
         }
         val (px, py) = pixel
-        val wire = farmSpot?.wire ?: profile.wire
+        val existing = LocationRepository.getWarPost(profile.filename)
+        val wire = existing?.wire?.takeIf { it > 0 }
+            ?: mapDef.availableWires().firstOrNull()
+            ?: 1
 
         val saved = LocationRepository.upsertWarPost(
             profileFilename = profile.filename,
-            mapId = mapId,
+            mapId = WAR_MAP_ID,
             wire = wire,
             x = px,
             y = py,
             coordX = gx,
             coordY = gy,
-            isCross = farmSpot?.isCross
-                ?: MapDefinitionRepository.getById(mapId)?.isCross
-                ?: true,
+            isCross = mapDef.isCross,
         )
         Log.i(
             TAG,
-            "[WAR] war_post captured map=$mapId pixel=($px,$py) coords=($gx,$gy)",
+            "[WAR] war_post captured map=$WAR_MAP_ID wire=$wire " +
+                "pixel=($px,$py) coords=($gx,$gy)",
         )
         return saved
     }
 
+    /**
+     * Return to the Start capture point via minimap tap only (no map teleport).
+     * If no post yet (e.g. first start), captures current HUD instead.
+     */
     suspend fun navigateToWarPost(reason: String): Boolean {
         val profile = ProfileRepository.currentProfile.value
         if (profile == null) {
             Log.w(TAG, "[WAR] navigate post skipped reason=$reason — no profile")
             return false
         }
+
         var post = LocationRepository.getWarPost(profile.filename)
             ?: LocationRepository.warPost.value
 
         if (post == null) {
-            Log.w(TAG, "[WAR] no war_post yet reason=$reason — reach map then capture")
-            if (!MapCheckActions.isInConfiguredMap()) {
-                if (!NavigationOrchestrator.goToActiveFarmSpot(ensureAuto = false)) {
-                    Log.w(TAG, "[WAR] reach Divine for capture failed reason=$reason")
-                    return false
-                }
-            }
+            Log.d(TAG, "[WAR] no war_post yet reason=$reason — capture current HUD")
             post = captureWarPost()
             if (post == null) {
                 return false
             }
-            // Already near current position after capture — no minimap hop needed.
             return true
         }
 
         Log.d(
             TAG,
-            "[WAR] navigate post reason=$reason map=${post.map} " +
+            "[WAR] return to post reason=$reason " +
                 "pixel=(${post.x},${post.y}) coords=(${post.coordX},${post.coordY})",
         )
         return NavigationOrchestrator.goToWarPost(post)

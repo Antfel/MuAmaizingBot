@@ -120,7 +120,8 @@ object MapNavigationParser {
         }
         return when {
             navigation.isModalEnter -> navigation.modalOptionTemplate.isNotBlank()
-            navigation.isDirectTeleport -> navigation.currentMapTemplate.isNotBlank()
+            // Zone confirmation is OCR on HUD map name (CurrentMapOcr), not *_current.png.
+            navigation.isDirectTeleport -> true
             else -> false
         }
     }

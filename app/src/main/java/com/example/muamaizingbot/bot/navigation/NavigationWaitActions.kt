@@ -8,6 +8,7 @@ import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.util.AdaptiveWait
 import com.example.muamaizingbot.vision.BitmapRegionSimilarity
 import com.example.muamaizingbot.vision.coordinate.CoordinateReader
+import com.example.muamaizingbot.vision.map.CurrentMapOcr
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.ScaledRoi
 import kotlin.math.abs
@@ -16,9 +17,7 @@ import kotlinx.coroutines.delay
 object NavigationWaitActions {
 
     private const val TAG = "NavWait"
-    /** Min template score to trust OCR coords (avoids Lorencia / wrong zone false positives). */
-    private const val WEAK_MAP_TEMPLATE_FLOOR = 0.35f
-    /** Near spot tolerance when template is a weak match (map check only). */
+    /** Near spot tolerance when HUD OCR failed but farm coords still align (map check only). */
     private const val MAP_CHECK_NEAR_SPOT_TOLERANCE = 25
     private const val AUTO_NAV_TEMPLATE = "templates/mu/ui/common/auto_navigating.png"
     private const val AUTO_NAV_THRESHOLD = 0.70f
@@ -43,13 +42,6 @@ object NavigationWaitActions {
     suspend fun waitUntilMapLoaded(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return false
         val timeoutMs = navigation.enterWaitSeconds * 1000L
-        val template = navigation.currentMapTemplate
-
-        if (template.isBlank()) {
-            Log.w(TAG, "[MAP_LOAD] no current_map_template; waiting up to ${timeoutMs}ms")
-            AdaptiveWait.until(timeoutMs = timeoutMs, label = "map_load_no_template") { false }
-            return true
-        }
 
         val loaded = AdaptiveWait.until(
             timeoutMs = timeoutMs,
@@ -66,15 +58,10 @@ object NavigationWaitActions {
         return loaded
     }
 
-    /** Poll until the in-world map indicator is visible (after teleport / loading). */
+    /** Poll until the in-world map name OCR matches (after teleport / loading). */
     suspend fun waitUntilWorldReady(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return true
         val timeoutMs = navigation.enterWaitSeconds * 1000L
-        val template = navigation.currentMapTemplate
-
-        if (template.isBlank()) {
-            return true
-        }
 
         val ready = AdaptiveWait.until(timeoutMs = timeoutMs, label = "world_ready") {
             isOnConfiguredMap(mapDef, null)
@@ -131,42 +118,51 @@ object NavigationWaitActions {
     }
 
     enum class MapPresence {
+        /** HUD zone-name OCR matches [MapDefinition.name]. */
+        OCR,
+        @Deprecated("Use OCR", ReplaceWith("OCR"))
         TEMPLATE,
         COORDS_AT_SPOT,
         COORDS_NEAR_SPOT,
         NONE,
     }
 
+    /**
+     * True when top-right HUD OCR reads [MapDefinition.name] (digit-safe).
+     * [threshold] is ignored — kept for call-site compatibility.
+     */
+    @Suppress("UNUSED_PARAMETER")
     suspend fun isCurrentMap(mapDef: MapDefinition, threshold: Float? = null): Boolean {
-        val navigation = mapDef.navigation ?: return false
-        val template = navigation.currentMapTemplate
-        if (template.isBlank()) {
-            return false
+        val frame = NavigationVision.captureFrame() ?: return false
+        return try {
+            CurrentMapOcr.isOnMap(frame, mapDef)
+        } finally {
+            frame.recycle()
         }
-        val effectiveThreshold = threshold ?: navigation.currentMapThreshold
-        return NavigationVision.findTemplate(template, effectiveThreshold) != null
     }
 
     suspend fun detectMapPresence(
         mapDef: MapDefinition,
         farmSpot: FarmLocation?,
     ): MapPresence {
-        val navigation = mapDef.navigation
-        val mapThreshold = navigation?.currentMapThreshold?.takeIf { it > 0f } ?: 0.72f
-
-        if (isCurrentMap(mapDef, mapThreshold)) {
-            return MapPresence.TEMPLATE
+        val frame = NavigationVision.captureFrame() ?: return MapPresence.NONE
+        val ocr = try {
+            CurrentMapOcr.read(frame, mapDef)
+        } finally {
+            frame.recycle()
+        }
+        if (ocr.matched) {
+            return MapPresence.OCR
         }
 
-        val templateScore = currentMapTemplateScore(mapDef)
-        if (templateScore < WEAK_MAP_TEMPLATE_FLOOR) {
+        // OCR empty/garbage only: allow farm-spot coords as soft presence.
+        // If OCR clearly read another map name, do not fall back (sibling false path).
+        if (ocr.rawText.isNotBlank()) {
             return MapPresence.NONE
         }
-
         if (farmSpot == null || farmSpot.map != mapDef.id) {
             return MapPresence.NONE
         }
-
         if (isAtFarmSpot(farmSpot, mapDef)) {
             return MapPresence.COORDS_AT_SPOT
         }
@@ -211,19 +207,6 @@ object NavigationWaitActions {
             location.coordX,
             location.coordY,
         )
-    }
-
-    private suspend fun currentMapTemplateScore(mapDef: MapDefinition): Float {
-        val template = mapDef.navigation?.currentMapTemplate ?: return 0f
-        if (template.isBlank()) {
-            return 0f
-        }
-        val frame = NavigationVision.captureFrame() ?: return 0f
-        return try {
-            NavigationVision.probeOnFrame(frame, template, null).score
-        } finally {
-            frame.recycle()
-        }
     }
 
     suspend fun waitUntilNavigationComplete(): Boolean {

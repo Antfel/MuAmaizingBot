@@ -7,11 +7,12 @@ import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
 import com.example.muamaizingbot.vision.roi.ScaledRoi
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
+import kotlinx.coroutines.delay
 
 /**
  * Target-focus HUD (top center).
  * Under PK All the HP bar is red; under Union an ally's bar turns green.
- * Clear focus = tap Focus Boss (skull) button — drops current target HUD.
+ * Giver mode: clear via Focus Boss template. War mode: hard tap @ (516,26).
  */
 object ElfBuffFocusHud {
 
@@ -24,9 +25,15 @@ object ElfBuffFocusHud {
     private const val FOCUS_BOSS = "templates/mu/ui/targeting/focus_elite_skull.png"
     private const val FOCUS_BOSS_THRESHOLD = 0.70f
 
-    /** Fallback Focus Boss tap @ 1280×720 if template miss. */
+    /** Fallback Focus Boss tap @ 1280×720 if template miss (giver). */
     private const val FALLBACK_BOSS_X_1280 = 1115
     private const val FALLBACK_BOSS_Y_720 = 656
+
+    /** War: close focus HUD with hard tap (X button) @ 1280×720. */
+    private const val WAR_CLEAR_X_1280 = 516
+    private const val WAR_CLEAR_Y_720 = 26
+    private const val WAR_CLEAR_VERIFY_ATTEMPTS = 8
+    private const val WAR_CLEAR_VERIFY_POLL_MS = 200L
 
     enum class HpBarColor { RED, GREEN }
 
@@ -100,7 +107,7 @@ object ElfBuffFocusHud {
     }
 
     /**
-     * Drop current focus HUD by tapping Focus Boss (skull).
+     * Drop current focus HUD by tapping Focus Boss (skull). Used by giver mode.
      */
     suspend fun clearFocus(): Boolean {
         val (w, h) = RefCoords.activeScreenSize()
@@ -124,5 +131,29 @@ object ElfBuffFocusHud {
         val y = FALLBACK_BOSS_Y_720 * h / 720
         Log.w(TAG, "[ELF_GIVER] Focus Boss miss — fallback tap=($x,$y)")
         return NavigationVision.tapScreen(x, y, label = "unfocus_boss_fallback")
+    }
+
+    /**
+     * War: close focus HUD with hard tap at (516,26) @ 1280×720 (X on target panel),
+     * then confirm the focus HUD is gone.
+     */
+    suspend fun clearFocusHardTapAndVerify(): Boolean {
+        val (w, h) = RefCoords.activeScreenSize()
+        val x = WAR_CLEAR_X_1280 * w / 1280
+        val y = WAR_CLEAR_Y_720 * h / 720
+        Log.d(TAG, "[WAR] unfocus hard tap screen=($x,$y) ref=($WAR_CLEAR_X_1280,$WAR_CLEAR_Y_720)")
+        if (!NavigationVision.tapScreen(x, y, label = "unfocus_hard")) {
+            Log.w(TAG, "[WAR] unfocus hard tap failed")
+            return false
+        }
+        repeat(WAR_CLEAR_VERIFY_ATTEMPTS) { attempt ->
+            delay(WAR_CLEAR_VERIFY_POLL_MS)
+            if (classifyUnionFocus() == null) {
+                Log.d(TAG, "[WAR] focus HUD cleared after hard tap (poll=${attempt + 1})")
+                return true
+            }
+        }
+        Log.w(TAG, "[WAR] focus HUD still visible after hard tap")
+        return false
     }
 }

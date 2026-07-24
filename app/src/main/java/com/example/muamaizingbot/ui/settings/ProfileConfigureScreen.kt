@@ -162,7 +162,7 @@ fun ProfileConfigureScreen(
         } else {
             ConfigOptionCard(
                 title = when {
-                    profile?.isElfBuffWarMode() == true -> "Mapa Divine (Farm Spot)"
+                    profile?.isElfBuffWarMode() == true -> "War event (post al Start)"
                     profile?.isElfBuffGiverMode() == true -> "Buff post (Farm Spot)"
                     else -> "Farm Spot"
                 },
@@ -511,9 +511,9 @@ private fun ElfBuffParamsCard(
 
             if (war) {
                 Text(
-                    text = "Configura Farm Spot en Divine. Al Start captura tus coords HUD " +
-                        "como war post. Tras morir revive → minimapa → vuelve al post. " +
-                        "No cambia PK ni fuerza Auto.",
+                    text = "Activá el bot ya dentro del evento War. Al Start solo guarda " +
+                        "tus coords HUD (y píxel de minimapa). Tras morir revive y vuelve " +
+                        "a ese punto — sin teleport ni check de mapa. No cambia PK ni Auto.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

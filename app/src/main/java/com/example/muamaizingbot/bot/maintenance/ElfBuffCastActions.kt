@@ -19,7 +19,7 @@ import kotlinx.coroutines.delay
 object ElfBuffCastActions {
 
     private const val TAG = "ElfBuffCast"
-    private const val BETWEEN_SKILLS_MS = 280L
+    private const val BETWEEN_SKILLS_MS = 350L
     private const val POST_UNION_MS = 280L
     /** Wait for both buff cast animations before Focus Boss, or focus drops mid-cast. */
     private const val POST_CAST_MS = 1_000L
