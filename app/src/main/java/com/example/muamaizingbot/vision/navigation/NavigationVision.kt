@@ -429,7 +429,9 @@ object NavigationVision {
     /** Map icons cropped on black — ignore empty canvas via TM_CCORR_NORMED + luminance mask. */
     private fun wantsOpaqueMask(assetPath: String): Boolean {
         val name = assetPath.substringAfterLast('/')
-        return name == "boss_alive.png" || name == "golden_alive.png"
+        return name == "boss_alive.png" ||
+            name == "boss_dead.png" ||
+            name == "golden_alive.png"
     }
 
     private fun emptyMatch(assetPath: String): PcTemplateMatchResult {

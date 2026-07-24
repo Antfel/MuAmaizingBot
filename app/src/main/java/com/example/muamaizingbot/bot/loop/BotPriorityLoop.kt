@@ -89,34 +89,35 @@ object BotPriorityLoop {
             }
         }
 
-        // Farm Bosses: potions/elf only after a kill (post-kill gate), not mid-fight.
-        if (profile.isFarmBossesMode()) {
-            return runFarmBossesIteration(profile)
-        }
-
+        // Potions + inventory: any time (farm, open-world elf, and Farm Bosses mid-hunt).
         if (profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
             Log.d(TAG, "[LOOP] branch=empty_potions")
             BotDiagnosticJournal.record(TAG, "branch=empty_potions")
             consecutiveFarmSoftFails = 0
-            return if (PotionPurchaseActions.handleEmptyPotions()) {
-                IterationResult.OK
-            } else {
-                recoveryOrError("potion-failed")
+            if (!PotionPurchaseActions.handleEmptyPotions()) {
+                return recoveryOrError("potion-failed")
             }
+            // Teleport shop leaves Farm Bosses off-map; return to checkpoint.
+            if (profile.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
+                return navigateToBossCheckpoint("post-potion")
+            }
+            return IterationResult.OK
         }
 
         if (InventoryCheckActions.isInventoryFull()) {
             Log.d(TAG, "[LOOP] branch=inventory_full")
             BotDiagnosticJournal.record(TAG, "branch=inventory_full")
             consecutiveFarmSoftFails = 0
-            return if (InventoryRecycleActions.handleFullInventory()) {
-                IterationResult.OK
-            } else {
-                recoveryOrError("recycle-failed")
+            if (!InventoryRecycleActions.handleFullInventory()) {
+                return recoveryOrError("recycle-failed")
             }
+            if (profile.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
+                return navigateToBossCheckpoint("post-recycle")
+            }
+            return IterationResult.OK
         }
 
-        // Farm mode only: seek NPC elf. Giver / War stay on post (no seek).
+        // Elf buff: any time (farm + Farm Bosses mid-hunt). Giver / War never seek.
         if (ElfBuffSeekGate.shouldAttemptSeek(profile)) {
             if (!ElfBuffCheckActions.hasElfBuff()) {
                 // Death screen can hide the buff icon; prefer revive over seeking.
@@ -128,14 +129,33 @@ object BotPriorityLoop {
                     if (!DeathActions.recoverIfDead()) {
                         return IterationResult.ERROR
                     }
-                    return if (profile.isElfBuffWarMode()) {
-                        navigateToWarPost("post-revive")
-                    } else {
-                        navigateToFarm("post-revive")
+                    return when {
+                        profile.isElfBuffWarMode() -> navigateToWarPost("post-revive")
+                        profile.isFarmBossesMode() -> {
+                            val checks = runFarmBossesGeneralChecks(profile, "post-revive")
+                            if (checks != IterationResult.OK) {
+                                checks
+                            } else {
+                                navigateToBossCheckpoint("post-revive")
+                            }
+                        }
+                        else -> navigateToFarm("post-revive")
                     }
                 }
-                return handleMissingElfBuff("loop")
+                val elfResult = handleMissingElfBuff("loop")
+                if (elfResult != IterationResult.OK) {
+                    return elfResult
+                }
+                if (profile.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
+                    return navigateToBossCheckpoint("post-elf")
+                }
+                return IterationResult.OK
             }
+        }
+
+        // Farm Bosses hunt / post-kill (potions, inventory, elf already checked above).
+        if (profile.isFarmBossesMode()) {
+            return runFarmBossesIteration(profile)
         }
 
         if (!MapCheckActions.isInConfiguredMap()) {
@@ -373,8 +393,9 @@ object BotPriorityLoop {
     }
 
     /**
-     * Shared general maintenance for Farm Bosses: potions then elf buff.
-     * Used at startup, post-revive, and post-kill (not mid-fight).
+     * Shared general maintenance for Farm Bosses: potions, inventory, then elf buff.
+     * Used at startup, post-revive, and post-kill.
+     * Potions / inventory / elf also run every loop tick before the farm-bosses branch.
      * Return to checkpoint is the caller's job.
      */
     private suspend fun runFarmBossesGeneralChecks(

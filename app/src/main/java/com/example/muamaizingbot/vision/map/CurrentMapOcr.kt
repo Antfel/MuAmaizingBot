@@ -21,20 +21,36 @@ import org.opencv.imgproc.Imgproc
  *
  * Replaces `*_current.png` template matching: sibling maps share nearly identical glyphs
  * and false-positive above threshold (e.g. Plains 1 template on Plains 2 @ 0.95).
+ *
+ * When HUD OCR is weak, callers open the zone map and re-read
+ * [openMapNameRoi] (native 1280×720 title band).
  */
 object CurrentMapOcr {
 
     private const val TAG = "CurrentMapOcr"
     private const val OCR_UPSCALE = 3.0
 
+    /** Native capture contract for new ROIs (1280×720). */
+    private const val NATIVE_W = 1280
+    private const val NATIVE_H = 720
+
     /**
      * Top-right map-name band, left of the wire Switch chip.
-     * Calibrated @1280×720 around Plains/Raklion/Kalima HUD labels (~1040–1235 × 0–36).
+     * Still expressed in legacy REF 2560×1440 via [ScaledRoi] until HUD ROI is migrated.
      */
     private const val ROI_REF_LEFT = 2080
     private const val ROI_REF_TOP = 0
     private const val ROI_REF_RIGHT = 2470
     private const val ROI_REF_BOTTOM = 72
+
+    /**
+     * Open-map title band @ 1280×720: (400,90)–(750,120).
+     * Corners given by user: (400,90) (750,90) (400,120) (750,120).
+     */
+    private const val OPEN_MAP_LEFT = 400
+    private const val OPEN_MAP_TOP = 90
+    private const val OPEN_MAP_RIGHT = 750
+    private const val OPEN_MAP_BOTTOM = 120
 
     private val recognizer by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -45,28 +61,48 @@ object CurrentMapOcr {
         val matched: Boolean,
     )
 
+    /** HUD miss / garbage / empty — trigger open-map OCR fallback. */
+    fun isWeak(result: ReadResult): Boolean = !result.matched
+
     suspend fun isOnMap(frame: Bitmap, mapDef: MapDefinition): Boolean {
         return read(frame, mapDef).matched
     }
 
     suspend fun read(frame: Bitmap, mapDef: MapDefinition): ReadResult {
+        return readInRoi(frame, mapDef, mapNameRoi(frame), source = "hud")
+    }
+
+    /** OCR the open zone-map title band (native 1280×720 ROI). */
+    suspend fun readOpenMap(frame: Bitmap, mapDef: MapDefinition): ReadResult {
+        return readInRoi(frame, mapDef, openMapNameRoi(frame), source = "open_map")
+    }
+
+    private suspend fun readInRoi(
+        frame: Bitmap,
+        mapDef: MapDefinition,
+        roi: Rect,
+        source: String,
+    ): ReadResult {
         val expected = mapDef.name.ifBlank { mapDef.id }
-        val raw = readRaw(frame)
+        val raw = readRawInRoi(frame, roi)
         if (raw.isNullOrBlank()) {
-            Log.d(TAG, "[MAP_OCR] empty expected=\"$expected\"")
+            Log.d(TAG, "[MAP_OCR] $source empty expected=\"$expected\"")
             return ReadResult(rawText = "", matched = false)
         }
         val matched = matchesExpected(raw, expected)
         Log.d(
             TAG,
-            "[MAP_OCR] raw=\"${raw.replace('\n', ' ').trim()}\" " +
+            "[MAP_OCR] $source raw=\"${raw.replace('\n', ' ').trim()}\" " +
                 "expected=\"$expected\" matched=$matched",
         )
         return ReadResult(rawText = raw, matched = matched)
     }
 
     suspend fun readRaw(frame: Bitmap): String? {
-        val roi = mapNameRoi(frame)
+        return readRawInRoi(frame, mapNameRoi(frame))
+    }
+
+    private suspend fun readRawInRoi(frame: Bitmap, roi: Rect): String? {
         val crop = crop(frame, roi) ?: run {
             Log.w(TAG, "[MAP_OCR] crop failed roi=$roi")
             return null
@@ -92,6 +128,18 @@ object CurrentMapOcr {
             ROI_REF_BOTTOM,
             frame.width,
             frame.height,
+        )
+    }
+
+    /** Scales native 1280×720 open-map title ROI to the capture frame. */
+    fun openMapNameRoi(frame: Bitmap): Rect {
+        val sx = frame.width.toFloat() / NATIVE_W
+        val sy = frame.height.toFloat() / NATIVE_H
+        return Rect(
+            (OPEN_MAP_LEFT * sx).toInt().coerceIn(0, frame.width),
+            (OPEN_MAP_TOP * sy).toInt().coerceIn(0, frame.height),
+            (OPEN_MAP_RIGHT * sx).toInt().coerceIn(0, frame.width),
+            (OPEN_MAP_BOTTOM * sy).toInt().coerceIn(0, frame.height),
         )
     }
 

@@ -114,7 +114,7 @@ object ProfileRepository {
 
     /**
      * Seek NPC elf buff when toggle is on and a zone is saved.
-     * Shared by Farm and Farm Bosses (post-kill). Elf-buff-giver/War never seek.
+     * Shared by Farm and Farm Bosses (any tick). Elf-buff-giver/War never seek.
      */
     fun shouldSeekElfBuff(profile: BotProfile? = currentProfile.value): Boolean {
         if (profile == null || !profile.enableElfBuff || profile.isElfBuffPostMode()) {

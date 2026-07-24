@@ -15,13 +15,19 @@ import kotlinx.coroutines.delay
 
 /**
  * Open zone map → find alive boss icons → tap → wait HUD arrival via affine coords.
+ *
+ * Dead boss icons look like dimmed copies of alive ones. Candidates must beat a
+ * [BOSS_DEAD] score at the same map spot (alive wins only if clearly brighter match).
  */
 object BossMapHuntActions {
 
     private const val TAG = "FarmBosses"
     const val BOSS_ALIVE = "templates/mu/ui/map/boss_alive.png"
+    const val BOSS_DEAD = "templates/mu/ui/map/boss_dead.png"
     const val GOLDEN_ALIVE = "templates/mu/ui/map/golden_alive.png"
-    private const val THRESHOLD = 0.96f
+    private const val THRESHOLD = 0.90f
+    /** Prefer alive when it outscores dead at the same spot (no extra margin — device deltas are tiny). */
+    private const val ALIVE_OVER_DEAD_MARGIN = 0.0f
     private const val ARRIVAL_RADIUS = 10
     private const val ARRIVAL_TIMEOUT_MS = 90_000L
 
@@ -42,26 +48,71 @@ object BossMapHuntActions {
             }
         }
         delay(400)
-        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
-            ?: RefCoords.activeScreenSize()
-        val roi = zoneMapContentRoi(w, h)
-
-        val alive = NavigationVision.findAllTemplates(BOSS_ALIVE, THRESHOLD, roi)
-        if (alive.isEmpty()) {
-            NavigationVision.logBestScore(BOSS_ALIVE, roi)
+        val frame = ScreenCaptureManager.getLatestBitmap() ?: run {
+            Log.w(TAG, "[HUNT] no frame for boss scan")
+            return emptyList()
         }
-        Log.d(TAG, "[HUNT] boss_alive matches=${alive.size} best=${alive.firstOrNull()?.score}")
-        val golden = if (includeGolden) {
-            NavigationVision.findAllTemplates(GOLDEN_ALIVE, THRESHOLD, roi).also { hits ->
-                if (hits.isEmpty()) {
-                    NavigationVision.logBestScore(GOLDEN_ALIVE, roi)
-                }
-                Log.d(TAG, "[HUNT] golden_alive matches=${hits.size} best=${hits.firstOrNull()?.score}")
+        return try {
+            val roi = zoneMapContentRoi(frame.width, frame.height)
+            val rawAlive = NavigationVision.findAllOnFrame(frame, BOSS_ALIVE, THRESHOLD, roi)
+            if (rawAlive.isEmpty()) {
+                NavigationVision.logBestScore(BOSS_ALIVE, roi)
             }
-        } else {
-            emptyList()
+            val alive = filterAliveVsDead(frame, rawAlive)
+            Log.d(
+                TAG,
+                "[HUNT] boss_alive raw=${rawAlive.size} kept=${alive.size} " +
+                    "best=${alive.firstOrNull()?.score}",
+            )
+            val golden = if (includeGolden) {
+                NavigationVision.findAllOnFrame(frame, GOLDEN_ALIVE, THRESHOLD, roi).also { hits ->
+                    if (hits.isEmpty()) {
+                        NavigationVision.logBestScore(GOLDEN_ALIVE, roi)
+                    }
+                    Log.d(TAG, "[HUNT] golden_alive matches=${hits.size} best=${hits.firstOrNull()?.score}")
+                }
+            } else {
+                emptyList()
+            }
+            (alive + golden).sortedByDescending { it.score }
+        } finally {
+            frame.recycle()
         }
-        return (alive + golden).sortedByDescending { it.score }
+    }
+
+    /**
+     * Keep hits where alive score beats dead score at the same patch (+ margin).
+     * Missing [BOSS_DEAD] template → keep raw alive hits (degraded).
+     */
+    private fun filterAliveVsDead(
+        frame: android.graphics.Bitmap,
+        candidates: List<PcTemplateMatchResult>,
+    ): List<PcTemplateMatchResult> {
+        if (candidates.isEmpty()) {
+            return emptyList()
+        }
+        val kept = ArrayList<PcTemplateMatchResult>(candidates.size)
+        for (hit in candidates) {
+            val pad = 6
+            val local = Rect(
+                (hit.bestX - pad).coerceAtLeast(0),
+                (hit.bestY - pad).coerceAtLeast(0),
+                (hit.bestX + hit.templateWidth + pad).coerceAtMost(frame.width),
+                (hit.bestY + hit.templateHeight + pad).coerceAtMost(frame.height),
+            )
+            val dead = NavigationVision.probeOnFrame(frame, BOSS_DEAD, local)
+            val aliveWins = hit.score >= dead.score + ALIVE_OVER_DEAD_MARGIN
+            Log.d(
+                TAG,
+                "[HUNT] alive_vs_dead at=(${hit.centerX},${hit.centerY}) " +
+                    "alive=${"%.3f".format(hit.score)} dead=${"%.3f".format(dead.score)} " +
+                    "keep=$aliveWins",
+            )
+            if (aliveWins) {
+                kept += hit
+            }
+        }
+        return kept
     }
 
     /**

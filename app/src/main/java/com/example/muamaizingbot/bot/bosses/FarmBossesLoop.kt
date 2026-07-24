@@ -12,7 +12,7 @@ import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
 /**
- * Maps-only Farm Bosses: teleport → wire cycle → open map → boss icon → Focus+Auto → post-kill.
+ * Maps-only Farm Bosses: teleport → wires 1..N in order → open map → boss icon → Focus+Auto → post-kill.
  */
 object FarmBossesLoop {
 
@@ -111,8 +111,9 @@ object FarmBossesLoop {
     private suspend fun ensureLocation(profile: BotProfile): CycleResult {
         val mapId = currentMapId(profile) ?: return CycleResult.NO_MAPS
         val wire = BossHuntState.wireId.coerceAtLeast(1)
+        BossHuntState.wireId = wire
         BossHuntState.saveCheckpoint(mapId, wire)
-        Log.d(TAG, "[BOSS] ensure location map=$mapId wire=$wire")
+        Log.d(TAG, "[BOSS] ensure location map=$mapId wire=$wire (ordered 1..N)")
         if (!navigateToMapWire(mapId, wire)) {
             return CycleResult.SOFT_FAIL
         }

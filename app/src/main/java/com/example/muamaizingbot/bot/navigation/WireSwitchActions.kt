@@ -78,15 +78,11 @@ object WireSwitchActions {
             return false
         }
 
-        if (wire == 1) {
-            Log.d(TAG, "[WIRE] skip wire=1")
-            return true
-        }
-
         val config = mapDef.wireSwitch
         if (config == null || !config.enabled) {
-            Log.w(TAG, "[WIRE] not configured map=${mapDef.id}")
-            return false
+            // Maps with wire:1 (e.g. Divine Realm) infer no wire_switch — already on the only channel.
+            Log.d(TAG, "[WIRE] skip — single/no wire-switch map=${mapDef.id}")
+            return true
         }
 
         Log.d(TAG, "[WIRE] available=${config.availableWires}")
@@ -103,6 +99,7 @@ object WireSwitchActions {
 
         closeChatIfOpen()
 
+        // Wire 1 included: verify HUD or open popup + select (never skip — teleport may land on WX).
         if (config.hudDetection && isAlreadyOnTargetWire(config, wire)) {
             Log.d(TAG, "[WIRE] already on wire $wire (HUD unique)")
             return true
@@ -451,15 +448,27 @@ object WireSwitchActions {
                 layout = activeLayout,
                 attempt = attempt,
             )
-            val dir = if (swipe.y2 > swipe.y1) "toward_start" else "toward_end"
+            val towardStart = swipe.y2 > swipe.y1
+            val dir = if (towardStart) "toward_start" else "toward_end"
+            // Toward list start (wire 1): short travel often fails — swipe twice as hard reset.
+            val swipeCount = if (towardStart) 2 else 1
             Log.d(
                 TAG,
-                "[WIRE] scroll dir=$dir top=$topVisible bottom=$bottomVisible want=$wireId " +
-                    "screen=(${swipe.x1},${swipe.y1})->(${swipe.x2},${swipe.y2}) " +
+                "[WIRE] scroll dir=$dir count=$swipeCount top=$topVisible bottom=$bottomVisible " +
+                    "want=$wireId screen=(${swipe.x1},${swipe.y1})->(${swipe.x2},${swipe.y2}) " +
                     "dur=${swipe.durationMs}ms attempt=${attempt + 1}",
             )
-            NavigationVision.swipeScreen(swipe.x1, swipe.y1, swipe.x2, swipe.y2, swipe.durationMs)
-            delay(SCROLL_WAIT_MS)
+            repeat(swipeCount) { swipeIndex ->
+                Log.d(TAG, "[WIRE] swipe ${swipeIndex + 1}/$swipeCount dir=$dir")
+                NavigationVision.swipeScreen(
+                    swipe.x1,
+                    swipe.y1,
+                    swipe.x2,
+                    swipe.y2,
+                    swipe.durationMs,
+                )
+                delay(SCROLL_WAIT_MS)
+            }
         }
 
         Log.w(TAG, "[WIRE] OCR option not found wire=$wireId")

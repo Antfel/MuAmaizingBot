@@ -19,6 +19,7 @@ object NavigationWaitActions {
     private const val TAG = "NavWait"
     /** Near spot tolerance when HUD OCR failed but farm coords still align (map check only). */
     private const val MAP_CHECK_NEAR_SPOT_TOLERANCE = 25
+    private const val OPEN_MAP_OCR_SETTLE_MS = 500L
     private const val AUTO_NAV_TEMPLATE = "templates/mu/ui/common/auto_navigating.png"
     private const val AUTO_NAV_THRESHOLD = 0.70f
     private const val AUTO_NAV_TIMEOUT_MS = 180_000L
@@ -129,16 +130,24 @@ object NavigationWaitActions {
 
     /**
      * True when top-right HUD OCR reads [MapDefinition.name] (digit-safe).
+     * On weak HUD read, opens the zone map and OCRs the title band.
      * [threshold] is ignored — kept for call-site compatibility.
      */
     @Suppress("UNUSED_PARAMETER")
     suspend fun isCurrentMap(mapDef: MapDefinition, threshold: Float? = null): Boolean {
         val frame = NavigationVision.captureFrame() ?: return false
-        return try {
-            CurrentMapOcr.isOnMap(frame, mapDef)
+        val hud = try {
+            CurrentMapOcr.read(frame, mapDef)
         } finally {
             frame.recycle()
         }
+        if (hud.matched) {
+            return true
+        }
+        if (!CurrentMapOcr.isWeak(hud)) {
+            return false
+        }
+        return confirmViaOpenMapOcr(mapDef)?.matched == true
     }
 
     suspend fun detectMapPresence(
@@ -153,6 +162,18 @@ object NavigationWaitActions {
         }
         if (ocr.matched) {
             return MapPresence.OCR
+        }
+
+        // Weak HUD (empty / garbage / wrong digit) → open zone map title OCR.
+        if (CurrentMapOcr.isWeak(ocr)) {
+            val openOcr = confirmViaOpenMapOcr(mapDef)
+            if (openOcr?.matched == true) {
+                return MapPresence.OCR
+            }
+            // Clear wrong-map text from open panel — do not soft-match coords.
+            if (openOcr != null && openOcr.rawText.isNotBlank()) {
+                return MapPresence.NONE
+            }
         }
 
         // OCR empty/garbage only: allow farm-spot coords as soft presence.
@@ -170,6 +191,31 @@ object NavigationWaitActions {
             return MapPresence.COORDS_NEAR_SPOT
         }
         return MapPresence.NONE
+    }
+
+    /**
+     * Opens the zone map, OCRs native ROI (400,90)–(750,120) @ 1280×720, then closes.
+     * Returns null if the map window could not be opened / no frame.
+     */
+    private suspend fun confirmViaOpenMapOcr(mapDef: MapDefinition): CurrentMapOcr.ReadResult? {
+        Log.d(TAG, "[MAP_OCR] HUD weak — open-map title fallback map=${mapDef.id}")
+        if (!MapWindowActions.ensureMapWindowOpen(retries = 2, timeoutMs = 4_000)) {
+            Log.w(TAG, "[MAP_OCR] open-map fallback: map window failed")
+            return null
+        }
+        delay(OPEN_MAP_OCR_SETTLE_MS)
+        val frame = NavigationVision.captureFrame()
+        if (frame == null) {
+            MapWindowActions.closeMapWindowIfOpen()
+            return null
+        }
+        val result = try {
+            CurrentMapOcr.readOpenMap(frame, mapDef)
+        } finally {
+            frame.recycle()
+            MapWindowActions.closeMapWindowIfOpen()
+        }
+        return result
     }
 
     suspend fun isOnConfiguredMap(mapDef: MapDefinition, farmSpot: FarmLocation?): Boolean {

@@ -37,6 +37,17 @@ class CurrentMapOcrTest {
     }
 
     @Test
+    fun matchesDivineRealmWithoutFloorNumber() {
+        assertTrue(CurrentMapOcr.matchesExpected("Divine Realm", "Divine Realm"))
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Divine Realm( fWirel",
+                "Divine Realm",
+            ),
+        )
+    }
+
+    @Test
     fun toleratesHudJunkButNotWrongDigit() {
         assertTrue(
             CurrentMapOcr.matchesExpected(
@@ -69,5 +80,19 @@ class CurrentMapOcrTest {
     fun rejectsLongerDigitPrefix() {
         assertFalse(CurrentMapOcr.matchesExpected("Raklion 11", "Raklion 1"))
         assertTrue(CurrentMapOcr.matchesExpected("Raklion 1", "Raklion 1"))
+    }
+
+    @Test
+    fun weakWhenNotMatched() {
+        assertTrue(
+            CurrentMapOcr.isWeak(
+                CurrentMapOcr.ReadResult(rawText = "Ploin of Four Winds 2", matched = false),
+            ),
+        )
+        assertFalse(
+            CurrentMapOcr.isWeak(
+                CurrentMapOcr.ReadResult(rawText = "Plain of Four Winds 2", matched = true),
+            ),
+        )
     }
 }
