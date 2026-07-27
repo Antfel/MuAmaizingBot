@@ -160,6 +160,14 @@ object ProfileRepository {
         return updated
     }
 
+    fun setRandomTeleportEnabled(profileFilename: String, enabled: Boolean): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(enableRandomTeleport = enabled)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] enable_random_teleport=$enabled file=$profileFilename")
+        return updated
+    }
+
     fun setElfGiverCastConfig(
         profileFilename: String,
         skillRefX: Int?,

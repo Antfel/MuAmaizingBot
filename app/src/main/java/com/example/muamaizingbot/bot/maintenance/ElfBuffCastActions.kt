@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.graphics.Color
 import android.util.Log
+import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.vision.navigation.NavigationVision
@@ -53,12 +54,20 @@ object ElfBuffCastActions {
             Log.w(TAG, "[ELF_GIVER] cast skipped reason=$reason — skills not mapped")
             return false
         }
+        if (DeathActions.isDead()) {
+            Log.w(TAG, "[ELF_GIVER] cast skipped reason=$reason — dead")
+            return false
+        }
 
         ElfBuffDebugDump.beginSession(reason)
         ElfBuffDebugDump.saveRaw("01_start")
         Log.d(TAG, "[ELF_GIVER] cast start reason=$reason ui_cycle")
 
         for (tryIndex in 1..MAX_FOCUS_TRIES) {
+            if (DeathActions.isDead()) {
+                Log.w(TAG, "[ELF_GIVER] cast aborted mid-cycle — dead")
+                return false
+            }
             Log.d(TAG, "[ELF_GIVER] focus try=$tryIndex/$MAX_FOCUS_TRIES")
 
             // Always start each try from All (startup also does this once).

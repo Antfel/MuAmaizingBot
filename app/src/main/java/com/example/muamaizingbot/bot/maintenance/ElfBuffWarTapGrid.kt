@@ -4,9 +4,10 @@ import android.util.Log
 import kotlin.math.atan2
 
 /**
- * War ally-search grid: ~1 HUD coord per cell (calibrated ~87px @ 1280×720),
- * round-robin angular sweep with short MISS / HIT cooldowns.
- * Each cell is probed with a 5-point cross (center + N/E/S/W).
+ * War ally-search: 3 fixed taps in the **lower half** of the play ellipse
+ * (SW / S / SE), ~2 HUD coords apart (calibrated ~87px @ 1280×720).
+ * Round-robin with MISS / HIT cooldowns. Each cell is probed with a 5-point
+ * cross (center + N/E/S/W).
  */
 object ElfBuffWarTapGrid {
 
@@ -21,6 +22,16 @@ object ElfBuffWarTapGrid {
 
     /** Screen px per HUD coordinate (landmark calibration). */
     const val CELL_PX_BASE = 87
+
+    /**
+     * Lower-ellipse triangle in HUD units from character center (y > 0 = south).
+     * ~2 HUD keeps taps inside the War play ellipse.
+     */
+    private val TRIANGLE_HUD_OFFSETS = listOf(
+        Triple("SW", -2, 1),
+        Triple("S", 0, 2),
+        Triple("SE", 2, 1),
+    )
 
     /** Cross arm offset from cell center (= cell/4 ≈ 22px @ 1280). */
     private const val CROSS_OFFSET_DIV = 4
@@ -44,6 +55,7 @@ object ElfBuffWarTapGrid {
         val screenX: Int,
         val screenY: Int,
         val angle: Double,
+        val label: String = "",
     )
 
     data class TapPoint(
@@ -82,7 +94,12 @@ object ElfBuffWarTapGrid {
         blockedUntilMs.clear()
         pendingCellIndex = null
         awaitingResult = false
-        Log.i(TAG, "[WAR_GRID] built cells=${cells.size} screen=${screenW}x${screenH} cellPx=${cellPx(screenW)}")
+        Log.i(
+            TAG,
+            "[WAR_GRID] built cells=${cells.size} screen=${screenW}x${screenH} " +
+                "cellPx=${cellPx(screenW)} " +
+                "pts=${cells.joinToString { "${it.label}@(${it.screenX},${it.screenY})" }}",
+        )
     }
 
     fun noteFocusResult(hit: Boolean) {
@@ -126,8 +143,8 @@ object ElfBuffWarTapGrid {
             awaitingResult = true
             Log.d(
                 TAG,
-                "[WAR_GRID] cell=$idx/${n - 1} center=(${cell.screenX},${cell.screenY}) " +
-                    "angle=${"%.2f".format(cell.angle)}",
+                "[WAR_GRID] cell=$idx/${n - 1} label=${cell.label} " +
+                    "center=(${cell.screenX},${cell.screenY})",
             )
             return cell
         }
@@ -142,8 +159,8 @@ object ElfBuffWarTapGrid {
         cursor = 1 % n
         Log.d(
             TAG,
-            "[WAR_GRID] cell=0/${n - 1} center=(${cell.screenX},${cell.screenY}) " +
-                "angle=${"%.2f".format(cell.angle)} (fresh sweep)",
+            "[WAR_GRID] cell=0/${n - 1} label=${cell.label} " +
+                "center=(${cell.screenX},${cell.screenY}) (fresh sweep)",
         )
         return cell
     }
@@ -175,7 +192,8 @@ object ElfBuffWarTapGrid {
         }.also { pts ->
             Log.d(
                 TAG,
-                "[WAR_GRID] cross cell=${cell.index} off=$off arms=${pts.joinToString { it.arm }}",
+                "[WAR_GRID] cross cell=${cell.index} label=${cell.label} " +
+                    "off=$off arms=${pts.joinToString { it.arm }}",
             )
         }
     }
@@ -183,41 +201,41 @@ object ElfBuffWarTapGrid {
     private fun cellPx(screenW: Int): Int =
         (CELL_PX_BASE * screenW / BASE_W).coerceAtLeast(24)
 
+    /** Three triangle cells around character center; drop any that hit exclusions. */
     private fun buildCells(screenW: Int, screenH: Int): List<Cell> {
         val cx = ELLIPSE_CX * screenW / BASE_W
         val cy = ELLIPSE_CY * screenH / BASE_H
         val rx = ELLIPSE_RX * screenW / BASE_W
         val ry = ELLIPSE_RY * screenH / BASE_H
-        val cell = cellPx(screenW)
-        val originX = cx - cell / 2
-        val originY = cy - cell / 2
+        val step = cellPx(screenW)
         val excl = warExclusionRects(screenW, screenH)
 
         val raw = ArrayList<Cell>()
-        val span = 8
-        for (j in -span..span) {
-            for (i in -span..span) {
-                val x0 = originX + i * cell
-                val y0 = originY + j * cell
-                val tapX = x0 + cell / 2
-                val tapY = y0 + cell / 2
-                if (tapX !in 0 until screenW || tapY !in 0 until screenH) {
-                    continue
-                }
-                if (!inEllipse(tapX, tapY, cx, cy, rx, ry)) {
-                    continue
-                }
-                if (excl.any { it.contains(tapX, tapY) }) {
-                    continue
-                }
-                val angle = atan2((tapY - cy).toDouble(), (tapX - cx).toDouble())
-                raw += Cell(index = -1, screenX = tapX, screenY = tapY, angle = angle)
+        for ((label, dxHud, dyHud) in TRIANGLE_HUD_OFFSETS) {
+            val tapX = cx + dxHud * step
+            val tapY = cy + dyHud * step
+            if (tapX !in 0 until screenW || tapY !in 0 until screenH) {
+                Log.w(TAG, "[WAR_GRID] skip $label off-screen=($tapX,$tapY)")
+                continue
             }
+            if (!inEllipse(tapX, tapY, cx, cy, rx, ry)) {
+                Log.w(TAG, "[WAR_GRID] skip $label outside ellipse=($tapX,$tapY)")
+                continue
+            }
+            if (excl.any { it.contains(tapX, tapY) }) {
+                Log.w(TAG, "[WAR_GRID] skip $label excluded=($tapX,$tapY)")
+                continue
+            }
+            val angle = atan2((tapY - cy).toDouble(), (tapX - cx).toDouble())
+            raw += Cell(
+                index = -1,
+                screenX = tapX,
+                screenY = tapY,
+                angle = angle,
+                label = label,
+            )
         }
-        // Angular sweep (clock order around elf).
-        return raw
-            .sortedBy { it.angle }
-            .mapIndexed { index, c -> c.copy(index = index) }
+        return raw.mapIndexed { index, c -> c.copy(index = index) }
     }
 
     private fun inEllipse(

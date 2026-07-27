@@ -21,9 +21,14 @@ object FarmBossesLoop {
     private const val FIGHT_POLL_MS = 2_000L
     private const val POST_FOCUS_LOST_WAIT_MS = 5_000L
     private const val FOCUS_FAIL_BEFORE_REHUNT = 4
+    /** Mid-fight focus can flicker under VFX; require several failed re-acquires before kill. */
+    private const val FOCUS_MISS_BEFORE_KILL = 3
 
     @Volatile
     private var consecutiveFocusFails = 0
+
+    @Volatile
+    private var consecutiveFocusMisses = 0
 
     enum class CycleResult {
         OK,
@@ -37,11 +42,13 @@ object FarmBossesLoop {
     fun reset() {
         BossHuntState.reset()
         consecutiveFocusFails = 0
+        consecutiveFocusMisses = 0
     }
 
     fun clearArrivalState() {
         BossHuntState.fightStartedAtMs = 0L
         consecutiveFocusFails = 0
+        consecutiveFocusMisses = 0
         if (BossHuntState.phase == BossHuntPhase.FIGHT) {
             BossHuntState.phase = BossHuntPhase.HUNT
         }
@@ -103,9 +110,15 @@ object FarmBossesLoop {
         BossHuntState.mapIndex = profile.killBossesConfig.maps.indexOf(cp.mapId)
             .takeIf { it >= 0 } ?: BossHuntState.mapIndex
         BossHuntState.wireId = cp.wireId
-        BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
         Log.d(TAG, "[BOSS] resumeAfterMaintenance map=${cp.mapId} wire=${cp.wireId}")
-        return navigateToMapWire(cp.mapId, cp.wireId)
+        if (!navigateToMapWire(cp.mapId, cp.wireId)) {
+            BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
+            return false
+        }
+        // Already at checkpoint — skip a second navigateToMapWire on the next tick.
+        BossHuntState.phase = BossHuntPhase.HUNT
+        consecutiveFocusMisses = 0
+        return true
     }
 
     private suspend fun ensureLocation(profile: BotProfile): CycleResult {
@@ -152,6 +165,7 @@ object FarmBossesLoop {
         BossHuntState.phase = BossHuntPhase.FIGHT
         BossHuntState.fightStartedAtMs = 0L
         consecutiveFocusFails = 0
+        consecutiveFocusMisses = 0
         return CycleResult.OK
     }
 
@@ -161,16 +175,29 @@ object FarmBossesLoop {
         val fightInProgress = BossHuntState.fightStartedAtMs != 0L
 
         if (fightInProgress) {
-            // Mid-fight: one short acquire round; if focus stays gone → boss killed.
+            // Mid-fight: focus HUD flickers under VFX — tolerate a few misses before kill.
             if (!BossTargetingActions.hasBossFocus()) {
                 Log.d(TAG, "[BOSS] focus missing mid-fight — one acquire round")
-                if (!BossTargetingActions.ensureFocusBoss(
+                if (BossTargetingActions.ensureFocusBoss(
                         includeGolden = includeGolden,
                         maxAttempts = 1,
                     )
                 ) {
-                    return finishKillAfterFocusLost(mapId)
+                    consecutiveFocusMisses = 0
+                } else {
+                    consecutiveFocusMisses++
+                    Log.d(
+                        TAG,
+                        "[BOSS] focus miss $consecutiveFocusMisses/$FOCUS_MISS_BEFORE_KILL",
+                    )
+                    if (consecutiveFocusMisses >= FOCUS_MISS_BEFORE_KILL) {
+                        return finishKillAfterFocusLost(mapId)
+                    }
+                    delay(FIGHT_POLL_MS)
+                    return CycleResult.OK
                 }
+            } else {
+                consecutiveFocusMisses = 0
             }
         } else {
             // First acquire after arriving on boss — allow a few soft retries then re-hunt.
@@ -191,6 +218,7 @@ object FarmBossesLoop {
                 return CycleResult.SOFT_FAIL
             }
             consecutiveFocusFails = 0
+            consecutiveFocusMisses = 0
         }
 
         if (!GameActions.ensureAutoMode()) {
@@ -209,26 +237,25 @@ object FarmBossesLoop {
             )
         }
 
+        // Do not re-check focus in the same tick after acquire/auto — VFX made that a false kill.
         val elapsed = now - BossHuntState.fightStartedAtMs
-        if (!BossTargetingActions.hasBossFocus()) {
-            return finishKillAfterFocusLost(mapId)
-        }
-
         Log.d(TAG, "[BOSS] fighting ${elapsed / 1000}s")
         delay(FIGHT_POLL_MS)
         return CycleResult.OK
     }
 
-    /** Wait briefly; if focus does not return, mark post-kill. */
+    /** Confirm focus stays gone before marking post-kill. */
     private suspend fun finishKillAfterFocusLost(mapId: String): CycleResult {
         Log.d(TAG, "[BOSS] boss_focus lost — wait ${POST_FOCUS_LOST_WAIT_MS / 1000}s")
         delay(POST_FOCUS_LOST_WAIT_MS)
         if (BossTargetingActions.hasBossFocus()) {
             Log.d(TAG, "[BOSS] boss_focus returned during wait — keep fighting")
+            consecutiveFocusMisses = 0
             return CycleResult.OK
         }
         Log.d(TAG, "[BOSS] focus gone after wait → post-kill then re-hunt / next map")
         consecutiveFocusFails = 0
+        consecutiveFocusMisses = 0
         BossHuntState.clearBossTarget()
         BossHuntState.markPostKill(mapId, BossHuntState.wireId)
         return CycleResult.NEED_MAINTENANCE

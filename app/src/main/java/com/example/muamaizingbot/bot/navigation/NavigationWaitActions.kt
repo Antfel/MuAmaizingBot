@@ -305,7 +305,7 @@ object NavigationWaitActions {
     suspend fun waitUntilArrivesAtCoord(
         location: FarmLocation,
         mapDef: MapDefinition?,
-        timeoutMs: Long = 120_000L,
+        timeoutMs: Long = RandomSealActions.ARRIVAL_TIMEOUT_WALK_MS,
     ): Boolean {
         if (location.coordX == null || location.coordY == null) {
             Log.w(TAG, "[COORD_ARRIVAL] no coordinates")
@@ -374,10 +374,14 @@ object NavigationWaitActions {
         return false
     }
 
-    suspend fun waitForSpotArrival(location: FarmLocation, mapDef: MapDefinition?): Boolean {
+    suspend fun waitForSpotArrival(
+        location: FarmLocation,
+        mapDef: MapDefinition?,
+        timeoutMs: Long = RandomSealActions.ARRIVAL_TIMEOUT_WALK_MS,
+    ): Boolean {
         if (location.coordX != null && location.coordY != null) {
-            Log.d(TAG, "[SPOT_ARRIVAL] waiting by HUD coordinate OCR")
-            return waitUntilArrivesAtCoord(location, mapDef)
+            Log.d(TAG, "[SPOT_ARRIVAL] waiting by HUD coordinate OCR timeoutMs=$timeoutMs")
+            return waitUntilArrivesAtCoord(location, mapDef, timeoutMs = timeoutMs)
         }
         Log.d(TAG, "[SPOT_ARRIVAL] no coords saved; fallback auto_nav template")
         return waitUntilNavigationComplete()

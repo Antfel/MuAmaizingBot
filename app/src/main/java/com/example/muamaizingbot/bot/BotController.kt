@@ -3,6 +3,7 @@ package com.example.muamaizingbot.bot
 import android.util.Log
 import com.example.muamaizingbot.bot.actions.ActionQueue
 import com.example.muamaizingbot.capture.ScreenCaptureManager
+import com.example.muamaizingbot.license.LicenseGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -12,6 +13,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.isActive
 
 /**
  * Play / Pause / Stop lifecycle.
@@ -21,6 +23,8 @@ import kotlinx.coroutines.launch
  *   and flow auto-restarts (same as error expire).
  * - **Stop**: destroy worker immediately, [IDLE], no auto-restart.
  * - **Error**: dump diagnostics, enter ERROR (pause semantics), then expire → cold restart.
+ *
+ * Cold start requires a successful [LicenseGate.acquire] before [BotWorker.restartCold].
  */
 object BotController {
 
@@ -44,6 +48,7 @@ object BotController {
     private var autoResumeOnExpire: Boolean = false
 
     private var expireJob: Job? = null
+    private var startJob: Job? = null
 
     fun start() {
         BotAutoRestart.cancel("start")
@@ -67,19 +72,39 @@ object BotController {
             "play from=$previous soft=$softResume pauseAgeMs=$pauseAgeMs alive=$workerAlive",
         )
 
-        _state.value = BotRuntimeState.RUNNING
         pausedAtMs = 0L
         autoResumeOnExpire = false
 
         if (softResume) {
+            LicenseGate.clearUserMessage()
+            _state.value = BotRuntimeState.RUNNING
             Log.d(TAG, "[BOT] soft resume (pause was ${pauseAgeMs}ms)")
             // Living worker is waiting on PAUSED; flipping to RUNNING continues the loop.
             return
         }
 
-        coldStartRequired = false
-        Log.d(TAG, "[BOT] cold start from=$previous")
-        BotWorker.restartCold(runStartup = true)
+        startJob?.cancel()
+        startJob = scope.launch {
+            Log.d(TAG, "[BOT] cold start acquire from=$previous")
+            BotDiagnosticJournal.record(TAG, "cold start acquire")
+            val ok = LicenseGate.acquire()
+            if (!ok) {
+                Log.w(TAG, "[BOT] cold start blocked: license acquire failed")
+                BotDiagnosticJournal.record(TAG, "cold start blocked: license")
+                coldStartRequired = true
+                _state.value = BotRuntimeState.IDLE
+                return@launch
+            }
+            if (!isActive) {
+                LicenseGate.releaseAsync("start-cancelled")
+                return@launch
+            }
+            coldStartRequired = false
+            LicenseGate.clearUserMessage()
+            _state.value = BotRuntimeState.RUNNING
+            Log.d(TAG, "[BOT] cold start from=$previous")
+            BotWorker.restartCold(runStartup = true)
+        }
     }
 
     fun pause() {
@@ -102,7 +127,34 @@ object BotController {
         val previous = _state.value
         Log.d(TAG, "[BOT] stop from=$previous")
         BotDiagnosticJournal.record(TAG, "stop")
+        startJob?.cancel()
+        startJob = null
         BotAutoRestart.cancel("stop")
+        cancelExpireWatchdog()
+        autoResumeOnExpire = false
+        pausedAtMs = 0L
+        coldStartRequired = true
+        BotWorker.destroy()
+        ActionQueue.clear()
+        _state.value = BotRuntimeState.IDLE
+        LicenseGate.releaseAsync("stop")
+    }
+
+    /**
+     * Called when the license server rejects the lease (admin kill / expired).
+     * Same as Stop, but does not call release again (already invalid server-side).
+     */
+    fun stopFromLicenseRevoke(reason: String) {
+        val previous = _state.value
+        if (previous == BotRuntimeState.IDLE) {
+            Log.d(TAG, "[BOT] license revoke ignored (already IDLE)")
+            return
+        }
+        Log.w(TAG, "[BOT] stop from license revoke: $reason (was $previous)")
+        BotDiagnosticJournal.record(TAG, "license revoke: $reason")
+        startJob?.cancel()
+        startJob = null
+        BotAutoRestart.cancel("license-revoke")
         cancelExpireWatchdog()
         autoResumeOnExpire = false
         pausedAtMs = 0L
@@ -130,6 +182,8 @@ object BotController {
     fun resetToIdle() {
         Log.d(TAG, "[BOT] reset to=${BotRuntimeState.IDLE}")
         BotDiagnosticJournal.record(TAG, "resetToIdle")
+        startJob?.cancel()
+        startJob = null
         BotAutoRestart.cancel("reset")
         cancelExpireWatchdog()
         autoResumeOnExpire = false
@@ -138,6 +192,7 @@ object BotController {
         BotWorker.destroy()
         ActionQueue.clear()
         _state.value = BotRuntimeState.IDLE
+        LicenseGate.releaseAsync("reset")
     }
 
     fun pauseAgeMs(): Long {
@@ -207,7 +262,7 @@ object BotController {
 
             BotAutoRestart.recordRestartAttempt()
             Log.i(TAG, "[BOT] expire → cold start reason=$reason")
-            // Stay in ERROR/PAUSED until start() flips to RUNNING.
+            // Stay in ERROR/PAUSED until start() flips to RUNNING (or IDLE on license fail).
             start()
         }
     }

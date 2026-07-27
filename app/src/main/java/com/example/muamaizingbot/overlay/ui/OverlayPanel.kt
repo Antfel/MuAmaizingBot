@@ -41,12 +41,15 @@ import com.example.muamaizingbot.accessibility.BotAccessibilityService
 import com.example.muamaizingbot.bot.BotAutoRestart
 import com.example.muamaizingbot.bot.BotController
 import com.example.muamaizingbot.bot.BotRuntimeState
+import com.example.muamaizingbot.bot.bosses.BossHuntState
 import com.example.muamaizingbot.bot.maintenance.ElfBuffCastGate
 import com.example.muamaizingbot.bot.maintenance.ElfBuffSeekGate
 import com.example.muamaizingbot.bot.maintenance.ElfBuffSkillMapper
 import com.example.muamaizingbot.capture.ScreenCaptureManager
+import com.example.muamaizingbot.license.LicenseGate
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
@@ -170,8 +173,11 @@ private fun ExpandedOverlay(
     val seekEnabled = ProfileRepository.shouldSeekElfBuff(profile)
     val seekStatus by ElfBuffSeekGate.status.collectAsState()
     val autoRestart by BotAutoRestart.status.collectAsState()
+    val licenseMessage by LicenseGate.userMessage.collectAsState()
     val giverMode = profile?.isElfBuffGiverMode() == true
     val castStatus by ElfBuffCastGate.status.collectAsState()
+    val farmBossesMode = profile?.isFarmBossesMode() == true
+    val bossesKilled by BossHuntState.bossesKilled.collectAsState()
 
     LaunchedEffect(seekEnabled, seekStatus.isOnCooldown) {
         if (!seekEnabled) return@LaunchedEffect
@@ -229,12 +235,34 @@ private fun ExpandedOverlay(
             fontWeight = FontWeight.Medium,
         )
 
+        if (farmBossesMode) {
+            Text(
+                text = "Bosses killed: $bossesKilled",
+                color = OverlayHudStyle.accentGreen,
+                fontSize = OverlayHudStyle.metaFontSize,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
         if (autoRestart.detail.isNotEmpty()) {
             Text(
                 text = autoRestart.detail,
                 color = OverlayHudStyle.accentOrange,
                 fontSize = OverlayHudStyle.metaFontSize,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+
+        val licenseDetail = licenseMessage.orEmpty()
+        if (licenseDetail.isNotEmpty()) {
+            Text(
+                text = licenseDetail,
+                color = OverlayHudStyle.accentOrange,
+                fontSize = OverlayHudStyle.metaFontSize,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
         }

@@ -392,8 +392,11 @@ object NavigationVision {
     }
 
     /**
-     * Narrow strip immediately left of a modal row label — where the checkbox lives.
-     * Scaled from 2560×1440 logical padding so it stays useful at 1280×720.
+     * Strip left of a modal row label — where the Kalima checkbox lives.
+     * Pads are logical 2560×1440; at 1280×720 that is ~half.
+     *
+     * Must be wide enough for the full ~40×39 checkbox template: a 41px-wide ROI
+     * only allows match origins in a 2px band and clips real unchecked hits (~x=482).
      */
     fun checkboxLeftOfRow(match: PcTemplateMatchResult): Rect {
         val (w, h) = ScreenCaptureManager.peekLatestBitmapSize() ?: RefCoords.activeScreenSize()
@@ -405,14 +408,15 @@ object NavigationVision {
         screenWidth: Int,
         screenHeight: Int,
     ): Rect {
-        val padLeft = RefCoords.scaleX(90, screenWidth)
-        val padTop = RefCoords.scaleY(20, screenHeight)
-        val padBottom = RefCoords.scaleY(20, screenHeight)
-        val gap = RefCoords.scaleX(8, screenWidth)
+        val padLeft = RefCoords.scaleX(180, screenWidth)
+        val padTop = RefCoords.scaleY(30, screenHeight)
+        val padBottom = RefCoords.scaleY(40, screenHeight)
+        // Overlap slightly into the label so a ~40px-wide template still fits.
+        val rightPad = RefCoords.scaleX(24, screenWidth)
         return Rect(
             maxOf(0, match.bestX - padLeft),
             maxOf(0, match.bestY - padTop),
-            maxOf(0, match.bestX - gap),
+            minOf(screenWidth, match.bestX + rightPad),
             minOf(screenHeight, match.bestY + match.templateHeight + padBottom),
         )
     }

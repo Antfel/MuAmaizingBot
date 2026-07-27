@@ -4,10 +4,12 @@ import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
+import com.example.muamaizingbot.bot.navigation.RandomSealActions
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.maps.CoordinateMapping
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.profile.FarmLocation
+import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
@@ -29,7 +31,6 @@ object BossMapHuntActions {
     /** Prefer alive when it outscores dead at the same spot (no extra margin — device deltas are tiny). */
     private const val ALIVE_OVER_DEAD_MARGIN = 0.0f
     private const val ARRIVAL_RADIUS = 10
-    private const val ARRIVAL_TIMEOUT_MS = 90_000L
 
     /** Parchment map canvas @ 1280×720 (excludes left teleport list + chrome). */
     fun zoneMapContentRoi(frameWidth: Int, frameHeight: Int): Rect {
@@ -153,8 +154,20 @@ object BossMapHuntActions {
         if (!NavigationVision.tapScreen(best.centerX, best.centerY, label = "boss_map_icon")) {
             return false
         }
-        delay(500)
-        if (!MapWindowActions.closeMapWindow()) {
+        // Path paints while map is open → Far path may use Random Teleport Seal.
+        val randomEnabled =
+            ProfileRepository.currentProfile.value?.enableRandomTeleport != false
+        val sealsUsed = if (randomEnabled) {
+            RandomSealActions.maybeUseRandomIfFarPath()
+        } else {
+            Log.d(TAG, "[HUNT] Random Teleport disabled in profile — walk only")
+            0
+        }
+        val arrivalTimeoutMs = RandomSealActions.arrivalTimeoutMs(sealsUsed)
+        // Let the game start Auto Navigating; it often closes the map by itself.
+        // Only tap close_x if the panel is still open — a blind close cancels pathing.
+        delay(400)
+        if (!MapWindowActions.closeMapWindowIfOpen()) {
             Log.w(TAG, "[HUNT] close map after boss tap failed — continuing")
         }
 
@@ -176,12 +189,12 @@ object BossMapHuntActions {
             Log.d(
                 TAG,
                 "[HUNT] wait arrival game=(${gameCoords.first},${gameCoords.second}) " +
-                    "r=$ARRIVAL_RADIUS",
+                    "r=$ARRIVAL_RADIUS sealsUsed=$sealsUsed timeoutMs=$arrivalTimeoutMs",
             )
             val arrived = NavigationWaitActions.waitUntilArrivesAtCoord(
                 target,
                 mapDef,
-                timeoutMs = ARRIVAL_TIMEOUT_MS,
+                timeoutMs = arrivalTimeoutMs,
             )
             if (!arrived) {
                 Log.w(TAG, "[HUNT] arrival timeout — will still try Focus on next tick")

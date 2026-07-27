@@ -28,15 +28,19 @@ import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.ui.home.HomeScreen
 import com.example.muamaizingbot.ui.picker.LocationPickerType
 import com.example.muamaizingbot.ui.picker.SpotPickerScreen
+import com.example.muamaizingbot.ui.settings.LicenseSettingsScreen
 import com.example.muamaizingbot.ui.settings.PotionConfigScreen
 import com.example.muamaizingbot.ui.settings.ProfileConfigureScreen
 import com.example.muamaizingbot.ui.settings.ProfileListScreen
+import com.example.muamaizingbot.ui.settings.SystemSettingsScreen
 import com.example.muamaizingbot.ui.shell.ConfigDrawerContent
 import kotlinx.coroutines.launch
 
 object Routes {
     const val HOME = "home"
     const val PROFILES = "profiles"
+    const val LICENSE = "license"
+    const val SYSTEM = "system"
     const val PROFILE_CONFIGURE = "profile_configure/{profileStem}"
     const val SPOT_PICKER = "spot_picker/{profileStem}/{locationType}"
     const val POTION_CONFIG = "potion_config/{profileStem}"
@@ -81,6 +85,18 @@ fun AppNavigation(
                             navController.navigate(Routes.PROFILES)
                         }
                     },
+                    onOpenLicense = {
+                        scope.launch {
+                            drawerState.close()
+                            navController.navigate(Routes.LICENSE)
+                        }
+                    },
+                    onOpenSystem = {
+                        scope.launch {
+                            drawerState.close()
+                            navController.navigate(Routes.SYSTEM)
+                        }
+                    },
                 )
             }
         },
@@ -113,6 +129,16 @@ fun AppNavigation(
                         onConfigureProfile = { profileStem ->
                             navController.navigate(Routes.profileConfigure(profileStem))
                         },
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.LICENSE) {
+                    LicenseSettingsScreen(
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.SYSTEM) {
+                    SystemSettingsScreen(
                         onBack = { navController.popBackStack() },
                     )
                 }

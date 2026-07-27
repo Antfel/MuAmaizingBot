@@ -20,7 +20,8 @@ object BossTargetingActions {
     /** Top boss-bar circular emblem — stays while HP drops. */
     const val BOSS_FOCUS = "templates/mu/ui/targeting/boss_focus.png"
     private const val FOCUS_BOSS_THRESHOLD = 0.70f
-    private const val BOSS_FOCUS_THRESHOLD = 0.90f
+    /** Slightly below 0.90 — mid-fight VFX dips the circular emblem score. */
+    private const val BOSS_FOCUS_THRESHOLD = 0.85f
     private const val FALLBACK_BOSS_X_1280 = 1115
     private const val FALLBACK_BOSS_Y_720 = 656
     private const val MAX_ATTEMPTS = 4

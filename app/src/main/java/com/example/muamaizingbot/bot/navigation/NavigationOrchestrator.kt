@@ -209,7 +209,7 @@ object NavigationOrchestrator {
             "[NAV] war_post minimap tap pixel=(${location.x},${location.y}) " +
                 "coords=(${location.coordX},${location.coordY})",
         )
-        if (!tapVisualLocation(location.x, location.y, location, mapDef)) {
+        if (!tapVisualLocation(location.x, location.y, location, mapDef, allowRandomSeal = false)) {
             Log.w(TAG, "[NAV] war_post tap failed pixel=(${location.x},${location.y})")
             return false
         }
@@ -268,6 +268,7 @@ object NavigationOrchestrator {
         y: Int,
         location: FarmLocation?,
         mapDef: MapDefinition,
+        allowRandomSeal: Boolean = true,
     ): Boolean {
         if (!ensureMapOpenForSpotTap()) {
             Log.w(TAG, "[NAV] failed to open map for spot tap")
@@ -279,13 +280,34 @@ object NavigationOrchestrator {
             return false
         }
 
+        val randomEnabled =
+            allowRandomSeal &&
+                ProfileRepository.currentProfile.value?.enableRandomTeleport != false
+        val sealsUsed = if (randomEnabled) {
+            RandomSealActions.maybeUseRandomIfFarPath()
+        } else {
+            if (allowRandomSeal) {
+                Log.d(TAG, "[NAV] Random Teleport disabled in profile — walk only")
+            }
+            0
+        }
+        val arrivalTimeoutMs = RandomSealActions.arrivalTimeoutMs(sealsUsed)
+
         if (!MapWindowActions.closeMapWindow()) {
             Log.w(TAG, "[NAV] failed to close map after spot tap")
             return false
         }
 
         if (location != null) {
-            return NavigationWaitActions.waitForSpotArrival(location, mapDef)
+            Log.d(
+                TAG,
+                "[NAV] wait arrival sealsUsed=$sealsUsed timeoutMs=$arrivalTimeoutMs",
+            )
+            return NavigationWaitActions.waitForSpotArrival(
+                location,
+                mapDef,
+                timeoutMs = arrivalTimeoutMs,
+            )
         }
 
         return NavigationWaitActions.waitUntilNavigationComplete()

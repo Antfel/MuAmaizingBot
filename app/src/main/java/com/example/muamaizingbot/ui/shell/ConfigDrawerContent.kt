@@ -19,6 +19,8 @@ fun ConfigDrawerContent(
     profileLabel: String,
     farmSpotLabel: String,
     onOpenProfiles: () -> Unit,
+    onOpenLicense: () -> Unit,
+    onOpenSystem: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -51,6 +53,16 @@ fun ConfigDrawerContent(
             label = { Text("Perfiles") },
             selected = false,
             onClick = onOpenProfiles,
+        )
+        NavigationDrawerItem(
+            label = { Text("Sistema") },
+            selected = false,
+            onClick = onOpenSystem,
+        )
+        NavigationDrawerItem(
+            label = { Text("Licencia") },
+            selected = false,
+            onClick = onOpenLicense,
         )
 
         Spacer(modifier = Modifier.height(16.dp))

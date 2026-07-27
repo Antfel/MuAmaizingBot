@@ -1,5 +1,10 @@
 package com.example.muamaizingbot.bot.bosses
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.concurrent.atomic.AtomicInteger
+
 /**
  * Runtime hunt cursor for Farm Bosses (maps-only).
  * Checkpoint is the map+wire to resume after post-kill maintenance or death.
@@ -43,6 +48,11 @@ object BossHuntState {
     @Volatile
     var targetCoordY: Int? = null
 
+    private val bossesKilledCount = AtomicInteger(0)
+    private val _bossesKilled = MutableStateFlow(0)
+    /** Session kills since last Farm Bosses start (overlay). */
+    val bossesKilled: StateFlow<Int> = _bossesKilled.asStateFlow()
+
     fun reset() {
         mapIndex = 0
         wireId = 1
@@ -51,6 +61,8 @@ object BossHuntState {
         awaitingGeneralMaintenance = false
         fightStartedAtMs = 0L
         clearBossTarget()
+        bossesKilledCount.set(0)
+        _bossesKilled.value = 0
     }
 
     fun setBossTarget(coordX: Int, coordY: Int) {
@@ -72,6 +84,7 @@ object BossHuntState {
         awaitingGeneralMaintenance = true
         phase = BossHuntPhase.POST_KILL
         fightStartedAtMs = 0L
+        _bossesKilled.value = bossesKilledCount.incrementAndGet()
     }
 
     fun clearMaintenanceFlag() {

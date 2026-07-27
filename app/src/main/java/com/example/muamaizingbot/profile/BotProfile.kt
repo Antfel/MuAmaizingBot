@@ -14,6 +14,11 @@ data class BotProfile(
     val mpPotionStacks: Int = 10,
     val enablePotionRecovery: Boolean = true,
     val enableElfBuff: Boolean = true,
+    /**
+     * When true, open-map navigation may use Random Teleport Seal on Far green paths.
+     * Arrival wait shortens to 30s if at least one seal was used (else 90s).
+     */
+    val enableRandomTeleport: Boolean = true,
     val farmEnabled: Boolean = true,
     /** Buff skill tap in logical 2560×1440 (giver mode). */
     val elfBuffSkillRefX: Int? = null,
@@ -37,7 +42,13 @@ data class BotProfile(
             put("enable_potion_recovery", enablePotionRecovery)
             put("enable_death_recovery", true)
             put("enable_auto_attack", true)
-            put("general_config", JSONObject().put("enable_elf_buff", enableElfBuff))
+            put(
+                "general_config",
+                JSONObject().apply {
+                    put("enable_elf_buff", enableElfBuff)
+                    put("enable_random_teleport", enableRandomTeleport)
+                },
+            )
             put("farm_config", JSONObject().put("enabled", farmEnabled))
             put(
                 "elf_giver_config",
@@ -79,6 +90,7 @@ data class BotProfile(
                 mpPotionStacks = json.optInt("mp_potion_stacks", 10).coerceIn(1, 99),
                 enablePotionRecovery = json.optBoolean("enable_potion_recovery", true),
                 enableElfBuff = general?.optBoolean("enable_elf_buff", true) ?: true,
+                enableRandomTeleport = general?.optBoolean("enable_random_teleport", true) ?: true,
                 farmEnabled = farm?.optBoolean("enabled", true) ?: true,
                 elfBuffSkillRefX = giver?.optInt("skill_ref_x")
                     ?.takeIf { giver.has("skill_ref_x") && !giver.isNull("skill_ref_x") },

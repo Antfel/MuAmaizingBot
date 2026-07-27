@@ -14,6 +14,7 @@ import com.example.muamaizingbot.vision.roi.ScaledRoi
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
 import com.example.muamaizingbot.vision.template.TemplateRepository
 import com.example.muamaizingbot.vision.wire.WireChannelOcr
+import com.example.muamaizingbot.vision.wire.WireHudOcr
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
@@ -33,7 +34,8 @@ object WireSwitchActions {
     private const val TAG = "WireSwitch"
     private const val WIRE_THRESHOLD = 0.75f
     private const val WIRE_HUD_THRESHOLD = 0.82f
-    private const val WIRE_SAME_ROW_MARGIN = 0.03f
+    /** Contenders within this of the best HUD score trigger OCR desempate. */
+    private const val WIRE_HUD_TIE_MARGIN = 0.05f
     private const val WIRE_ENTER_THRESHOLD = 0.52f
     private const val CHAT_THRESHOLD = 0.70f
     /** PC bot tap on Switch Line @ 2560×1440 (log: tap 1279 1102). */
@@ -144,6 +146,8 @@ object WireSwitchActions {
 
     /**
      * HUD labels share "[Wire …]"; only skip the popup when [wireId] is the unique best HUD match.
+     * When several [wire_N_hud] templates score within [WIRE_HUD_TIE_MARGIN] of the best,
+     * OCR on the HUD crop breaks the tie.
      */
     private suspend fun isAlreadyOnTargetWire(
         config: WireSwitchConfig,
@@ -151,44 +155,84 @@ object WireSwitchActions {
     ): Boolean {
         val frame = NavigationVision.captureFrame() ?: return false
         return try {
-            val probes = config.availableWires.mapNotNull { id ->
-                val path = hudTemplate(config, id) ?: return@mapNotNull null
-                WireProbe(id, NavigationVision.probeOnFrame(frame, path))
-            }
-            if (probes.isEmpty()) {
+            val current = resolveCurrentWireFromHud(frame, config)
+            if (current == null) {
                 return false
             }
-            val scores = probes.joinToString { "${it.wireId}=${"%.3f".format(it.match.score)}" }
-            Log.d(TAG, "[WIRE] HUD probe scores=[$scores] want=$wireId")
-
-            val qualified = probes.filter { it.match.score >= WIRE_HUD_THRESHOLD }
-            if (qualified.isEmpty()) {
-                return false
-            }
-            val best = qualified.maxBy { it.match.score }
-            if (best.wireId != wireId) {
-                Log.d(
-                    TAG,
-                    "[WIRE] HUD best is wire=${best.wireId} score=${best.match.score} " +
-                        "(want $wireId) — will open switch",
-                )
-                return false
-            }
-            val second = qualified
-                .filter { it.wireId != wireId }
-                .maxOfOrNull { it.match.score }
-                ?: 0f
-            if (best.match.score < second + WIRE_SAME_ROW_MARGIN) {
-                Log.d(
-                    TAG,
-                    "[WIRE] HUD ambiguous target=${best.match.score} second=$second — will open switch",
-                )
-                return false
-            }
-            true
+            current == wireId
         } finally {
             frame.recycle()
         }
+    }
+
+    /**
+     * @return current wire id from HUD templates, with OCR desempate when scores cluster;
+     * null if HUD is unread / ambiguous without OCR.
+     */
+    private suspend fun resolveCurrentWireFromHud(
+        frame: android.graphics.Bitmap,
+        config: WireSwitchConfig,
+    ): Int? {
+        val probes = config.availableWires.mapNotNull { id ->
+            val path = hudTemplate(config, id) ?: return@mapNotNull null
+            WireProbe(id, NavigationVision.probeOnFrame(frame, path))
+        }
+        if (probes.isEmpty()) {
+            return null
+        }
+        val scores = probes.joinToString { "${it.wireId}=${"%.3f".format(it.match.score)}" }
+        Log.d(TAG, "[WIRE] HUD probe scores=[$scores]")
+
+        val qualified = probes.filter { it.match.score >= WIRE_HUD_THRESHOLD }
+        if (qualified.isEmpty()) {
+            return null
+        }
+        val best = qualified.maxBy { it.match.score }
+        val contenders = qualified.filter {
+            it.match.score >= best.match.score - WIRE_HUD_TIE_MARGIN
+        }
+
+        if (contenders.size == 1) {
+            Log.d(
+                TAG,
+                "[WIRE] HUD unique wire=${best.wireId} score=${best.match.score}",
+            )
+            return best.wireId
+        }
+
+        val contenderIds = contenders.map { it.wireId }.sorted()
+        Log.d(
+            TAG,
+            "[WIRE] HUD ambiguous contenders=$contenderIds " +
+                "best=${best.wireId}@${"%.3f".format(best.match.score)} — OCR desempate",
+        )
+        val roi = hudOcrRoi(best.match, frame.width, frame.height)
+        val ocrWire = WireHudOcr.readWireId(frame, roi)
+        if (ocrWire != null && ocrWire in config.availableWires) {
+            Log.d(TAG, "[WIRE] HUD OCR desempate → wire=$ocrWire")
+            return ocrWire
+        }
+        Log.w(
+            TAG,
+            "[WIRE] HUD OCR desempate failed (ocr=$ocrWire) — treating as unread",
+        )
+        return null
+    }
+
+    /** Pad around the winning [Wire N] template box for digit OCR. */
+    private fun hudOcrRoi(
+        match: PcTemplateMatchResult,
+        frameWidth: Int,
+        frameHeight: Int,
+    ): Rect {
+        val padX = max(8, match.templateWidth / 4)
+        val padY = max(4, match.templateHeight / 2)
+        return Rect(
+            max(0, match.bestX - padX),
+            max(0, match.bestY - padY),
+            min(frameWidth, match.bestX + match.templateWidth + padX),
+            min(frameHeight, match.bestY + match.templateHeight + padY),
+        )
     }
 
     private suspend fun openWirePopup(config: WireSwitchConfig): PopupLayout? {

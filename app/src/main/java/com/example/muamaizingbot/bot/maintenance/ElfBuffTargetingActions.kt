@@ -17,7 +17,7 @@ import kotlinx.coroutines.delay
  * Union in the open menu is matched in [pkPopupRoi]; closed-bar state uses a
  * separate Local template (button bevel differs from the popup row).
  *
- * Cross maps use UnionKuaFu for both bar and popup until a dedicated bar crop exists.
+ * Cross maps use UnionKuaFu popup [PK_MODE_UNION_CROSS] / bar [PK_MODE_UNION_CROSS_BAR].
  * Local maps: Union popup [PK_MODE_UNION_LOCAL] / bar [PK_MODE_UNION_LOCAL_BAR];
  * All popup [PK_MODE_ALL_POPUP] / bar [PK_MODE_ALL].
  */
@@ -31,6 +31,8 @@ object ElfBuffTargetingActions {
     /** All row inside the open PK popup. */
     private const val PK_MODE_ALL_POPUP = "templates/mu/ui/targeting/pk_mode_all_popup.png"
     private const val PK_MODE_UNION_CROSS = "templates/mu/ui/targeting/pk_mode_union.png"
+    /** Closed targeting-bar UnionKuaFu (bevel differs from popup row). */
+    private const val PK_MODE_UNION_CROSS_BAR = "templates/mu/ui/targeting/pk_mode_union_cross_bar.png"
     /** Local Union row inside the open PK popup. */
     private const val PK_MODE_UNION_LOCAL = "templates/mu/ui/targeting/pk_mode_union_local.png"
     /** Local Union label on the closed targeting bar. */
@@ -38,8 +40,8 @@ object ElfBuffTargetingActions {
 
     private const val PK_TEMPLATE_THRESHOLD = 0.85f
     private const val FOCUS_TEMPLATE_THRESHOLD = 0.68f
-    private const val POST_PK_TAP_MS = 250L
-    private const val PK_POPUP_WAIT_MS = 2_000L
+    private const val POST_PK_TAP_MS = 350L
+    private const val PK_POPUP_WAIT_MS = 3_500L
     private const val POST_FOCUS_TAP_MS = 180L
     private const val FOCUS_SPAM_MAX = 10
 
@@ -72,7 +74,7 @@ object ElfBuffTargetingActions {
 
     /** Template for closed targeting-bar Union state. */
     private fun unionBarTemplatePath(isCross: Boolean = resolveIsCross()): String {
-        return if (isCross) PK_MODE_UNION_CROSS else PK_MODE_UNION_LOCAL_BAR
+        return if (isCross) PK_MODE_UNION_CROSS_BAR else PK_MODE_UNION_LOCAL_BAR
     }
 
     /** True when closed bar shows All (Union not on closed bar). */

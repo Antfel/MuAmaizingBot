@@ -1,7 +1,10 @@
 package com.example.muamaizingbot.ui.settings
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -9,11 +12,16 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotMode
 import com.example.muamaizingbot.profile.BotProfile
@@ -38,13 +47,12 @@ import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.profile.KillBossesConfig
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
-import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isElfBuffPostMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.profile.normalizedBotMode
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ProfileConfigureScreen(
     profileStem: String,
@@ -87,6 +95,24 @@ fun ProfileConfigureScreen(
             text = "Auto ataque y revive siempre activos para todos los perfiles.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        SectionHeader("Generales del PJ")
+
+        ConfigOptionCard(
+            title = "Config Pociones",
+            summary = buildString {
+                append(if (profile?.enablePotionRecovery == true) "Activo" else "Desactivado")
+                profile?.let {
+                    append(" | HP ${it.hpPotionStacks} | MP ${it.mpPotionStacks}")
+                }
+            },
+            onClick = onOpenPotionConfig,
+        )
+
+        RandomTeleportConfigCard(
+            profile = profile,
+            profileFilename = profileFilename,
         )
 
         Card(
@@ -148,55 +174,53 @@ fun ProfileConfigureScreen(
             }
         }
 
-        if (profile?.isFarmBossesMode() == true) {
-            FarmBossesConfigCard(
-                profile = profile,
-                profileFilename = profileFilename,
-            )
-            ElfBuffSeekConfigCard(
-                profile = profile,
-                profileFilename = profileFilename,
-                elfBuff = elfBuff,
-                onOpenElfBuff = onOpenElfBuff,
-            )
-        } else {
-            ConfigOptionCard(
-                title = when {
-                    profile?.isElfBuffWarMode() == true -> "War event (post al Start)"
-                    profile?.isElfBuffGiverMode() == true -> "Buff post (Farm Spot)"
-                    else -> "Farm Spot"
-                },
-                summary = farmSpot?.summaryLabel(
-                    MapDefinitionRepository.getById(farmSpot.map)?.name
-                ) ?: "Sin configurar",
-                onClick = onOpenFarmSpot,
-            )
+        SectionHeader("Este modo")
 
-            if (profile?.isElfBuffPostMode() != true) {
+        when {
+            profile?.isFarmBossesMode() == true -> {
+                FarmBossesConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
                 ElfBuffSeekConfigCard(
                     profile = profile,
                     profileFilename = profileFilename,
                     elfBuff = elfBuff,
                     onOpenElfBuff = onOpenElfBuff,
                 )
-            } else {
+            }
+            profile?.isElfBuffPostMode() == true -> {
+                ConfigOptionCard(
+                    title = when {
+                        profile.isElfBuffWarMode() -> "War event (post al Start)"
+                        else -> "Buff post (Farm Spot)"
+                    },
+                    summary = farmSpot?.summaryLabel(
+                        MapDefinitionRepository.getById(farmSpot.map)?.name
+                    ) ?: "Sin configurar",
+                    onClick = onOpenFarmSpot,
+                )
                 ElfBuffParamsCard(
                     profile = profile,
                     profileFilename = profileFilename,
                 )
             }
+            else -> {
+                ConfigOptionCard(
+                    title = "Farm Spot",
+                    summary = farmSpot?.summaryLabel(
+                        MapDefinitionRepository.getById(farmSpot.map)?.name
+                    ) ?: "Sin configurar",
+                    onClick = onOpenFarmSpot,
+                )
+                ElfBuffSeekConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                    elfBuff = elfBuff,
+                    onOpenElfBuff = onOpenElfBuff,
+                )
+            }
         }
-
-        ConfigOptionCard(
-            title = "Config Pociones",
-            summary = buildString {
-                append(if (profile?.enablePotionRecovery == true) "Activo" else "Desactivado")
-                profile?.let {
-                    append(" | HP ${it.hpPotionStacks} | MP ${it.mpPotionStacks}")
-                }
-            },
-            onClick = onOpenPotionConfig,
-        )
 
         OutlinedButton(
             onClick = { showDeleteDialog = true },
@@ -237,6 +261,64 @@ fun ProfileConfigureScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun SectionHeader(title: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        HorizontalDivider()
+    }
+}
+
+@Composable
+private fun RandomTeleportConfigCard(
+    profile: BotProfile?,
+    profileFilename: String,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                Text(
+                    text = "Random Teleport Seal",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = "Si el path verde es largo, usa Random en el mapa hasta acercarse. " +
+                        "Con seal usado, la espera de llegada es 30s (sin seal, 90s).",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Switch(
+                checked = profile?.enableRandomTeleport != false,
+                onCheckedChange = { enabled ->
+                    ProfileRepository.setRandomTeleportEnabled(profileFilename, enabled)
+                },
+                enabled = profile != null,
+            )
+        }
     }
 }
 
@@ -310,6 +392,7 @@ private fun ElfBuffSeekConfigCard(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun FarmBossesConfigCard(
     profile: BotProfile?,
@@ -326,11 +409,64 @@ private fun FarmBossesConfigCard(
     var golden by remember(profile?.filename, config.includeGoldenMobs) {
         mutableStateOf(config.includeGoldenMobs)
     }
+    var searchQuery by remember { mutableStateOf("") }
 
     LaunchedEffect(config.maps, config.holdSec, config.includeGoldenMobs) {
         selectedMaps = config.maps
         holdText = config.holdSec.toString()
         golden = config.includeGoldenMobs
+    }
+
+    fun persist(
+        maps: List<String> = selectedMaps,
+        holdOverride: Int? = null,
+        goldenOverride: Boolean? = null,
+    ) {
+        if (profile == null) return
+        val hold = holdOverride
+            ?: holdText.toIntOrNull()
+                ?.coerceIn(KillBossesConfig.MIN_HOLD_SEC, KillBossesConfig.MAX_HOLD_SEC)
+            ?: KillBossesConfig.DEFAULT_HOLD_SEC
+        ProfileRepository.setKillBossesConfig(
+            profileFilename,
+            KillBossesConfig(
+                includeGoldenMobs = goldenOverride ?: golden,
+                holdSec = hold,
+                maps = maps,
+            ),
+        )
+    }
+
+    fun addMap(map: MapDefinition) {
+        if (map.id in selectedMaps) {
+            searchQuery = ""
+            return
+        }
+        val next = selectedMaps + map.id
+        selectedMaps = next
+        searchQuery = ""
+        persist(maps = next)
+    }
+
+    fun removeMap(mapId: String) {
+        val next = selectedMaps.filterNot { it == mapId }
+        selectedMaps = next
+        persist(maps = next)
+    }
+
+    val suggestions = remember(searchQuery, selectedMaps, pickerMaps) {
+        val q = searchQuery.trim()
+        if (q.isEmpty()) {
+            emptyList()
+        } else {
+            pickerMaps
+                .filter { map ->
+                    map.id !in selectedMaps &&
+                        (map.name.contains(q, ignoreCase = true) ||
+                            map.id.contains(q, ignoreCase = true))
+                }
+                .take(8)
+        }
     }
 
     Card(
@@ -351,53 +487,77 @@ private fun FarmBossesConfigCard(
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Elegí mapas en orden. El bot teleporta → wires → busca bosses vivos en el mapa → Focus+Auto. " +
-                    "Tras cada kill corre buff/pociones y vuelve al checkpoint.",
+                text = "Agregá mapas en el orden del ciclo. El bot teleporta → wires → " +
+                    "busca bosses vivos → Focus+Auto. Tras cada kill corre buff/pociones " +
+                    "y vuelve al checkpoint.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             if (selectedMaps.isEmpty()) {
                 Text(
-                    text = "Sin mapas — marcá al menos uno",
+                    text = "Sin mapas — buscá y agregá al menos uno",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
             } else {
-                Text(
-                    text = "Orden: " + selectedMaps.mapIndexed { i, id ->
-                        val name = MapDefinitionRepository.getById(id)?.name ?: id
-                        "${i + 1}. $name"
-                    }.joinToString(" → "),
-                    style = MaterialTheme.typography.bodySmall,
-                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    selectedMaps.forEachIndexed { index, mapId ->
+                        val name = MapDefinitionRepository.getById(mapId)?.name ?: mapId
+                        InputChip(
+                            selected = false,
+                            onClick = { },
+                            enabled = profile != null,
+                            label = { Text("${index + 1}. $name") },
+                            trailingIcon = {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Quitar $name",
+                                    modifier = Modifier.clickable(enabled = profile != null) {
+                                        removeMap(mapId)
+                                    },
+                                )
+                            },
+                        )
+                    }
+                }
             }
 
-            pickerMaps.forEach { map ->
-                val selected = map.id in selectedMaps
-                Row(
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Buscar mapa") },
+                placeholder = { Text("Ej. Kalima, Atlans…") },
+                singleLine = true,
+                enabled = profile != null,
+            )
+
+            if (suggestions.isNotEmpty()) {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                 ) {
-                    Text(
-                        text = map.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f).padding(end = 8.dp),
-                    )
-                    FilterChip(
-                        selected = selected,
-                        onClick = {
-                            selectedMaps = if (selected) {
-                                selectedMaps.filterNot { it == map.id }
-                            } else {
-                                selectedMaps + map.id
-                            }
-                        },
-                        enabled = profile != null,
-                        label = { Text(if (selected) "On" else "Off") },
-                    )
+                    suggestions.forEach { map ->
+                        Text(
+                            text = map.name,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(enabled = profile != null) { addMap(map) }
+                                .padding(vertical = 10.dp, horizontal = 4.dp),
+                        )
+                    }
                 }
+            } else if (searchQuery.isNotBlank()) {
+                Text(
+                    text = "Sin coincidencias",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             OutlinedTextField(
@@ -406,7 +566,10 @@ private fun FarmBossesConfigCard(
                 modifier = Modifier.fillMaxWidth(),
                 label = { Text("Timeout pelea (seg)") },
                 supportingText = {
-                    Text("Si el focus no se pierde, rota tras este tiempo. Default ${KillBossesConfig.DEFAULT_HOLD_SEC}s.")
+                    Text(
+                        "Si el focus no se pierde, rota tras este tiempo. " +
+                            "Default ${KillBossesConfig.DEFAULT_HOLD_SEC}s.",
+                    )
                 },
                 singleLine = true,
                 enabled = profile != null,
@@ -430,7 +593,10 @@ private fun FarmBossesConfigCard(
                 }
                 Switch(
                     checked = golden,
-                    onCheckedChange = { golden = it },
+                    onCheckedChange = { enabled ->
+                        golden = enabled
+                        persist(goldenOverride = enabled)
+                    },
                     enabled = profile != null,
                 )
             }
@@ -440,19 +606,13 @@ private fun FarmBossesConfigCard(
                     val hold = holdText.toIntOrNull()
                         ?.coerceIn(KillBossesConfig.MIN_HOLD_SEC, KillBossesConfig.MAX_HOLD_SEC)
                         ?: KillBossesConfig.DEFAULT_HOLD_SEC
-                    ProfileRepository.setKillBossesConfig(
-                        profileFilename,
-                        KillBossesConfig(
-                            includeGoldenMobs = golden,
-                            holdSec = hold,
-                            maps = selectedMaps,
-                        ),
-                    )
+                    holdText = hold.toString()
+                    persist(holdOverride = hold)
                 },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = profile != null,
             ) {
-                Text("Guardar")
+                Text("Guardar timeout")
             }
         }
     }
