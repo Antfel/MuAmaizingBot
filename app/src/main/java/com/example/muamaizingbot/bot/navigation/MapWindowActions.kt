@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.navigation
 
 import android.graphics.Rect
 import android.util.Log
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
@@ -20,6 +21,7 @@ object MapWindowActions {
         retries: Int = 3,
         timeoutMs: Long = 5000,
     ): Boolean {
+        DisconnectDetector.markBusy("map-window")
         if (waitForWorldReady != null) {
             NavigationWaitActions.waitUntilWorldReady(waitForWorldReady)
         }
@@ -47,6 +49,7 @@ object MapWindowActions {
         timeoutMs: Long = 5000,
         waitForWorldReady: MapDefinition? = null,
     ): Boolean {
+        DisconnectDetector.markBusy("map-window")
         if (waitForWorldReady != null) {
             NavigationWaitActions.waitUntilWorldReady(waitForWorldReady)
         }

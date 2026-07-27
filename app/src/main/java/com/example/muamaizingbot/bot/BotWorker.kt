@@ -1,6 +1,7 @@
 package com.example.muamaizingbot.bot
 
 import android.util.Log
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.loop.BotPriorityLoop
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import kotlinx.coroutines.CoroutineScope
@@ -53,6 +54,20 @@ object BotWorker {
         }
 
         workerJob = scope.launch {
+            val disconnectMonitor = launch {
+                Log.d(TAG, "[BOT] disconnect monitor started")
+                // First probe soon so we don't wait a full interval after Play.
+                delay(5_000L)
+                while (isActive) {
+                    val state = BotController.state.value
+                    if (state == BotRuntimeState.RUNNING) {
+                        DisconnectDetector.check()
+                    } else {
+                        Log.d(TAG, "[BOT] disconnect skip state=$state")
+                    }
+                    delay(DisconnectDetector.CHECK_INTERVAL_MS)
+                }
+            }
             Log.d(TAG, "[BOT] worker started runStartup=$runStartup")
             BotDiagnosticJournal.record(TAG, "started runStartup=$runStartup")
             try {
@@ -83,7 +98,6 @@ object BotWorker {
                         BotRuntimeState.RUNNING -> {
                             if (!ensureCaptureReady("loop")) {
                                 BotController.setError("Captura inactiva")
-                                // setError parks us in ERROR; keep job alive for expire/resume.
                                 continue
                             }
                             iteration++
@@ -111,6 +125,7 @@ object BotWorker {
                     }
                 }
             } finally {
+                disconnectMonitor.cancel()
                 Log.d(TAG, "[BOT] worker stopped")
                 BotDiagnosticJournal.record(TAG, "stopped")
             }

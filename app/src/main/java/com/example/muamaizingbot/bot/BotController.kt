@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot
 
 import android.util.Log
 import com.example.muamaizingbot.bot.actions.ActionQueue
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.license.LicenseGate
 import kotlinx.coroutines.CoroutineScope
@@ -101,6 +102,7 @@ object BotController {
             }
             coldStartRequired = false
             LicenseGate.clearUserMessage()
+            DisconnectDetector.reset()
             _state.value = BotRuntimeState.RUNNING
             Log.d(TAG, "[BOT] cold start from=$previous")
             BotWorker.restartCold(runStartup = true)
@@ -170,7 +172,7 @@ object BotController {
         BotDiagnosticJournal.dumpError(reason)
         ActionQueue.clear()
         BotAutoRestart.cancel("error")
-        // Pause semantics: keep worker alive briefly, then expire → cold restart.
+        scope.launch { DisconnectDetector.notifyRepeatedErrors(reason) }
         enterSuspended(
             next = BotRuntimeState.ERROR,
             autoResume = true,

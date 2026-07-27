@@ -5,6 +5,7 @@ import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isHpPotionEmpty
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isManaPotionEmpty
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
@@ -46,6 +47,7 @@ object PotionPurchaseActions {
     private const val REFILL_TIMEOUT_MS = 10_000L
 
     suspend fun handleEmptyPotions(): Boolean {
+        DisconnectDetector.markBusy("potion-shop")
         val profile = ProfileRepository.currentProfile.value
         if (profile == null) {
             Log.w(TAG, "[POTION] no active profile")

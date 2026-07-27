@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.util.Log
 import com.example.muamaizingbot.bot.combat.DeathActions
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.profile.FarmLocation
@@ -16,6 +17,7 @@ object ElfBuffNavigationActions {
     private const val BUFF_PICKUP_WAIT_MS = 5000L
 
     suspend fun goToElfBuffAndReturn(): Boolean {
+        DisconnectDetector.markBusy("elf-buff-nav")
         val profile = ProfileRepository.currentProfile.value
         if (profile == null) {
             Log.w(TAG, "[ELF] no active profile")

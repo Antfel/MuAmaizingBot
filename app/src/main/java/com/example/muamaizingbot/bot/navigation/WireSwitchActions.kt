@@ -4,6 +4,7 @@ import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.bot.BotController
 import com.example.muamaizingbot.bot.BotRuntimeState
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.SwipeCoords
@@ -73,6 +74,7 @@ object WireSwitchActions {
     )
 
     suspend fun switchToWire(mapDef: MapDefinition, wireId: Int): Boolean {
+        DisconnectDetector.markBusy("wire-switch")
         val wire = wireId.coerceAtLeast(1)
         Log.d(TAG, "[WIRE] requested wire=$wire map=${mapDef.id}")
 

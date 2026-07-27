@@ -3,6 +3,7 @@ package com.example.muamaizingbot
 import android.app.Application
 import com.example.muamaizingbot.license.LicenseGate
 import com.example.muamaizingbot.license.LicenseStore
+import com.example.muamaizingbot.telegram.TelegramStore
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
@@ -21,6 +22,7 @@ class MuBotApplication : Application() {
         LocationRepository.refreshForCurrentProfile()
         LicenseStore.init(this)
         LicenseGate.init(this)
+        TelegramStore.init(this)
         com.example.muamaizingbot.bot.BotDiagnosticJournal.init(this)
         com.example.muamaizingbot.bot.maintenance.ElfBuffDebugDump.init(this)
     }

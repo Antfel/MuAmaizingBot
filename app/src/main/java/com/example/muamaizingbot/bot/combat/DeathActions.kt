@@ -1,6 +1,7 @@
 package com.example.muamaizingbot.bot.combat
 
 import android.util.Log
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
 import kotlinx.coroutines.delay
@@ -56,6 +57,7 @@ object DeathActions {
     }
 
     suspend fun recoverIfDead(): Boolean {
+        DisconnectDetector.markBusy("death-revive")
         repeat(REVIVE_MAX_ATTEMPTS) { attempt ->
             if (!isDead()) {
                 Log.d(TAG, "[DEATH] alive attempt=${attempt + 1}")

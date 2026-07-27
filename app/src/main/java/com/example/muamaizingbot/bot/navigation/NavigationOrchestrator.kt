@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.navigation
 
 import android.util.Log
 import com.example.muamaizingbot.bot.combat.GameActions
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.FarmLocation
@@ -17,6 +18,7 @@ object NavigationOrchestrator {
     private const val PRE_WIRE_SETTLE_MS = 2500L
 
     suspend fun goToActiveFarmSpot(ensureAuto: Boolean = true): Boolean {
+        DisconnectDetector.markBusy("nav-farm-spot")
         Log.d(TAG, "[NAV] go_to_active_farm_spot started ensureAuto=$ensureAuto")
 
         val profile = ProfileRepository.currentProfile.value
@@ -114,6 +116,7 @@ object NavigationOrchestrator {
     }
 
     suspend fun goToVisualLocation(location: FarmLocation): Boolean {
+        DisconnectDetector.markBusy("nav-visual")
         val mapDef = MapDefinitionRepository.getById(location.map)
         if (mapDef == null) {
             Log.w(TAG, "[NAV] map definition missing id=${location.map}")
@@ -138,6 +141,7 @@ object NavigationOrchestrator {
      * Does not force Auto — caller runs Focus Boss + ensureAuto.
      */
     suspend fun goToBossSpot(location: FarmLocation, ensureAuto: Boolean = false): Boolean {
+        DisconnectDetector.markBusy("nav-boss-spot")
         Log.d(
             TAG,
             "[NAV] go_to_boss_spot map=${location.map} wire=${location.wire} " +
@@ -197,6 +201,7 @@ object NavigationOrchestrator {
      * Does **not** force Auto ON.
      */
     suspend fun goToWarPost(location: FarmLocation): Boolean {
+        DisconnectDetector.markBusy("nav-war-post")
         val mapId = location.map.takeIf { it.isNotBlank() } ?: "divine_realm_1"
         val mapDef = MapDefinitionRepository.getById(mapId)
         if (mapDef == null) {
@@ -223,6 +228,7 @@ object NavigationOrchestrator {
         wireId: Int,
         farmSpot: FarmLocation? = LocationRepository.farmSpot.value,
     ): Boolean {
+        DisconnectDetector.markBusy("nav-map-wire")
         Log.d(TAG, "[NAV] navigate map=${mapDef.name} wire=$wireId")
 
         if (!mapDef.isNavigable()) {
@@ -338,6 +344,7 @@ object NavigationOrchestrator {
     }
 
     suspend fun cleanGameUi() {
+        DisconnectDetector.markBusy("nav-clean-ui", holdMs = 60_000L)
         Log.d(TAG, "[NAV] cleaning UI")
         repeat(3) {
             if (!MapWindowActions.isMapWindowOpen()) {

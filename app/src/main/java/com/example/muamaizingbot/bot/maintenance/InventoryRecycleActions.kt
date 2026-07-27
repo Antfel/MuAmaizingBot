@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.util.Log
 import com.example.muamaizingbot.bot.combat.DeathActions
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationTemplateThresholds
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
@@ -30,6 +31,7 @@ object InventoryRecycleActions {
     private const val POST_RECYCLE_MS = 800L
 
     suspend fun handleFullInventory(): Boolean {
+        DisconnectDetector.markBusy("inventory-recycle")
         if (DeathActions.isDead()) {
             Log.d(TAG, "[RECYCLE] dead before recycle; reviving first")
             if (!DeathActions.recoverIfDead()) {
