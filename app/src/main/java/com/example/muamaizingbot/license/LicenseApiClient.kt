@@ -136,6 +136,9 @@ object LicenseApiClient {
                 doOutput = true
                 setRequestProperty("Content-Type", "application/json; charset=utf-8")
                 setRequestProperty("Accept", "application/json")
+                if (url.contains(".ngrok-free.dev/")) {
+                    setRequestProperty("ngrok-skip-browser-warning", "true")
+                }
             }
             val bytes = body.toString().toByteArray(StandardCharsets.UTF_8)
             conn.outputStream.use { it.write(bytes) }
