@@ -11,3 +11,6 @@ local.properties
 debug_capture/
 dist/
 .venv_img/
+keystore.properties
+*.jks
+*.keystore

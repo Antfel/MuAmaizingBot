@@ -1,7 +1,19 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+val signingProperties = Properties()
+val signingPropertiesFile = rootProject.file("keystore.properties")
+if (signingPropertiesFile.exists()) {
+    signingPropertiesFile.inputStream().use(signingProperties::load)
+}
+
+fun signingValue(environmentName: String, propertyName: String): String? =
+    System.getenv(environmentName)
+        ?: signingProperties.getProperty(propertyName)
 
 android {
     namespace = "com.example.muamaizingbot"
@@ -15,8 +27,8 @@ android {
         applicationId = "com.example.muamaizingbot"
         minSdk = 28
         targetSdk = 36
-        versionCode = 19
-        versionName = "1.3.1-rc1"
+        versionCode = 20
+        versionName = "1.3.1-rc2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -44,8 +56,21 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            val keystorePath = signingValue("MUA_KEYSTORE_PATH", "storeFile")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+            }
+            storePassword = signingValue("MUA_KEYSTORE_PASSWORD", "storePassword")
+            keyAlias = signingValue("MUA_KEY_ALIAS", "keyAlias")
+            keyPassword = signingValue("MUA_KEY_PASSWORD", "keyPassword")
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             optimization {
                 enable = false
             }

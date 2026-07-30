@@ -28,27 +28,44 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      - name: Build debug APKs (arm32 + arm64 + x86_64)
-        run: ./gradlew assembleArm32Debug assembleArm64Debug assembleX86_64Debug --no-daemon --stacktrace
+      - name: Restore release signing key
+        env:
+          SIGNING_KEY_BASE64: ${{ secrets.ANDROID_SIGNING_KEY }}
+          STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          test -n "$SIGNING_KEY_BASE64"
+          printf '%s' "$SIGNING_KEY_BASE64" | base64 --decode > "$RUNNER_TEMP/muamaizingbot-release.jks"
+          {
+            echo "MUA_KEYSTORE_PATH=$RUNNER_TEMP/muamaizingbot-release.jks"
+            echo "MUA_KEYSTORE_PASSWORD=$STORE_PASSWORD"
+            echo "MUA_KEY_ALIAS=$KEY_ALIAS"
+            echo "MUA_KEY_PASSWORD=$KEY_PASSWORD"
+          } >> "$GITHUB_ENV"
+
+      - name: Build signed release APKs (arm32 + arm64 + x86_64)
+        run: ./gradlew assembleArm32Release assembleArm64Release assembleX86_64Release --no-daemon --stacktrace
 
       - name: Prepare release artifacts
         run: |
           VERSION=$(grep versionName app/build.gradle.kts | head -1 | sed 's/.*"\(.*\)".*/\1/')
-          cp app/build/outputs/apk/arm32/debug/app-arm32-debug.apk "MuAmaizingBot-${VERSION}-arm32-debug.apk"
-          cp app/build/outputs/apk/arm64/debug/app-arm64-debug.apk "MuAmaizingBot-${VERSION}-arm64-debug.apk"
-          cp app/build/outputs/apk/x86_64/debug/app-x86_64-debug.apk "MuAmaizingBot-${VERSION}-x86_64-debug.apk"
+          cp app/build/outputs/apk/arm32/release/app-arm32-release.apk "MuAmaizingBot-${VERSION}-arm32.apk"
+          cp app/build/outputs/apk/arm64/release/app-arm64-release.apk "MuAmaizingBot-${VERSION}-arm64.apk"
+          cp app/build/outputs/apk/x86_64/release/app-x86_64-release.apk "MuAmaizingBot-${VERSION}-x86_64.apk"
 
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
           name: MuAmaizingBot-apk
-          path: MuAmaizingBot-*-debug.apk
+          path: MuAmaizingBot-*.apk
           retention-days: 90
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: MuAmaizingBot-*-debug.apk
+          files: MuAmaizingBot-*.apk
           generate_release_notes: true
           draft: false
+          prerelease: ${{ contains(github.ref_name, '-rc') }}
