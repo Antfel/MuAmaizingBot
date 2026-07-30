@@ -34,9 +34,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.accessibility.BotAccessibilityService
 import com.example.muamaizingbot.bot.BotAutoRestart
 import com.example.muamaizingbot.bot.BotController
@@ -209,7 +211,7 @@ private fun ExpandedOverlay(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                text = "MU Bot",
+                text = stringResource(R.string.overlay_title),
                 color = OverlayHudStyle.textPrimary,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = OverlayHudStyle.titleFontSize,
@@ -229,7 +231,7 @@ private fun ExpandedOverlay(
         }
 
         Text(
-            text = botState.label,
+            text = stringResource(botState.labelRes()),
             color = stateColor(botState),
             fontSize = OverlayHudStyle.statusFontSize,
             fontWeight = FontWeight.Medium,
@@ -237,7 +239,7 @@ private fun ExpandedOverlay(
 
         if (farmBossesMode) {
             Text(
-                text = "Bosses killed: $bossesKilled",
+                text = stringResource(R.string.overlay_bosses_killed, bossesKilled),
                 color = OverlayHudStyle.accentGreen,
                 fontSize = OverlayHudStyle.metaFontSize,
                 fontWeight = FontWeight.Medium,
@@ -270,10 +272,10 @@ private fun ExpandedOverlay(
         val ready = inputConnected && captureReady
         Text(
             text = when {
-                !inputConnected -> "Input off"
-                !captureActive -> "Captura off"
-                !captureReady -> "Captura…"
-                else -> "Listo"
+                !inputConnected -> stringResource(R.string.overlay_input_off)
+                !captureActive -> stringResource(R.string.overlay_capture_off)
+                !captureReady -> stringResource(R.string.overlay_capture_wait)
+                else -> stringResource(R.string.overlay_ready)
             },
             color = if (ready) OverlayHudStyle.accentGreen else OverlayHudStyle.textSecondary,
             fontSize = OverlayHudStyle.metaFontSize,
@@ -324,7 +326,7 @@ private fun ExpandedOverlay(
             ) {
                 Icon(
                     imageVector = Icons.Default.PlayArrow,
-                    contentDescription = "Play",
+                    contentDescription = stringResource(R.string.overlay_play),
                     modifier = Modifier.size(OverlayHudStyle.controlIconSize),
                 )
             }
@@ -342,7 +344,7 @@ private fun ExpandedOverlay(
             ) {
                 Icon(
                     imageVector = Icons.Default.Pause,
-                    contentDescription = "Pause",
+                    contentDescription = stringResource(R.string.overlay_pause),
                     modifier = Modifier.size(OverlayHudStyle.controlIconSize),
                 )
             }
@@ -360,7 +362,7 @@ private fun ExpandedOverlay(
             ) {
                 Icon(
                     imageVector = Icons.Default.Stop,
-                    contentDescription = "Stop",
+                    contentDescription = stringResource(R.string.overlay_stop),
                     modifier = Modifier.size(OverlayHudStyle.controlIconSize),
                 )
             }
@@ -394,7 +396,7 @@ private fun ElfCastRow(
             modifier = Modifier.weight(1f),
         )
         Text(
-            text = "Map",
+            text = stringResource(R.string.overlay_map),
             color = if (mapEnabled) OverlayHudStyle.accentOrange else OverlayHudStyle.textSecondary,
             fontWeight = FontWeight.SemiBold,
             fontSize = OverlayHudStyle.metaFontSize,
@@ -404,7 +406,7 @@ private fun ElfCastRow(
                 .padding(horizontal = 4.dp, vertical = 1.dp),
         )
         Text(
-            text = "Cast",
+            text = stringResource(R.string.overlay_cast),
             color = if (castEnabled) OverlayHudStyle.accentGreen else OverlayHudStyle.textSecondary,
             fontWeight = FontWeight.SemiBold,
             fontSize = OverlayHudStyle.metaFontSize,
@@ -440,7 +442,7 @@ private fun ElfSeekRow(
         )
         if (status.isOnCooldown) {
             Text(
-                text = "Reset",
+                text = stringResource(R.string.overlay_reset),
                 color = OverlayHudStyle.accentGreen,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = OverlayHudStyle.metaFontSize,

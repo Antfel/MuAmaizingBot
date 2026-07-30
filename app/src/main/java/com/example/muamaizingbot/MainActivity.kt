@@ -1,5 +1,6 @@
 package com.example.muamaizingbot
 
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -10,6 +11,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
 import com.example.muamaizingbot.capture.ScreenCapturePermission
+import com.example.muamaizingbot.settings.LocaleHelper
 import com.example.muamaizingbot.ui.navigation.AppNavigation
 import com.example.muamaizingbot.ui.theme.MUAmaizingBotTheme
 
@@ -23,6 +25,10 @@ class MainActivity : ComponentActivity() {
             resultCode = result.resultCode,
             data = result.data
         )
+    }
+
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(LocaleHelper.wrap(newBase))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {

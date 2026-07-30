@@ -1,6 +1,8 @@
 package com.example.muamaizingbot.license
 
 import android.util.Log
+import com.example.muamaizingbot.R
+import com.example.muamaizingbot.settings.UiStrings
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -46,7 +48,11 @@ object LicenseApiClient {
             if (code in 200..299) {
                 val sessionId = json.optString("session_id")
                 if (sessionId.isBlank()) {
-                    LicenseApiResult.Failed("INVALID_RESPONSE", "Respuesta sin session_id", code)
+                    LicenseApiResult.Failed(
+                        "INVALID_RESPONSE",
+                        UiStrings.get(R.string.license_err_no_session_id),
+                        code,
+                    )
                 } else {
                     LicenseApiResult.Acquired(
                         sessionId = sessionId,
@@ -104,14 +110,15 @@ object LicenseApiClient {
 
     fun userMessageForCode(code: String): String {
         return when (code) {
-            "NO_SESSIONS" -> "No cuenta con sesiones disponibles para ejecución"
-            "INVALID_LICENSE" -> "Licencia inválida"
-            "REVOKED" -> "Licencia revocada"
-            "EXPIRED" -> "Licencia expirada"
-            "SESSION_EXPIRED", "SESSION_NOT_FOUND" -> "Sesión liberada desde el panel — bot detenido"
-            "MISSING_KEY" -> "Configura tu licencia en el menú Licencia"
-            "NETWORK" -> "No se pudo conectar al servidor de licencias"
-            else -> "Error de licencia ($code)"
+            "NO_SESSIONS" -> UiStrings.get(R.string.license_err_no_sessions)
+            "INVALID_LICENSE" -> UiStrings.get(R.string.license_err_invalid)
+            "REVOKED" -> UiStrings.get(R.string.license_err_revoked)
+            "EXPIRED" -> UiStrings.get(R.string.license_err_expired)
+            "SESSION_EXPIRED", "SESSION_NOT_FOUND" ->
+                UiStrings.get(R.string.license_err_session_released)
+            "MISSING_KEY" -> UiStrings.get(R.string.license_err_missing_key)
+            "NETWORK" -> UiStrings.get(R.string.license_err_network)
+            else -> UiStrings.get(R.string.license_err_generic, code)
         }
     }
 

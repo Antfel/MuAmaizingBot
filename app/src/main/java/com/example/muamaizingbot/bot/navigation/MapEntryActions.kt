@@ -8,18 +8,18 @@ import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.navigation.ScrollSettleWait
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
+import kotlin.math.abs
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 
 object MapEntryActions {
 
     private const val TAG = "MapEntry"
     private const val MAP_HEAD_CANDIDATE_THRESHOLD = 0.38f
-    /** Lower bar when match is low on screen (past Lorencia / early zones). */
-    private const val MAP_HEAD_DEEP_CANDIDATE_THRESHOLD = 0.55f
+    /** Verified heads in incident logs score >=0.83; unrelated-zone hits peak around 0.65. */
+    private const val MAP_HEAD_DEEP_CANDIDATE_THRESHOLD = 0.80f
     private const val MAP_OPTION_THRESHOLD = 0.68f
     private const val MAP_SUB_OPTION_THRESHOLD = 0.55f
-    /** Same-row only: sibling score must beat target by this to block (digit templates share "Winds"). */
-    private const val MAP_SUB_SAME_ROW_MARGIN = 0.03f
     private const val SUB_LIST_WAIT_MS = 2000L
     private const val SUB_HEAD_VERIFY_MS = 3000L
     private const val SUB_HEAD_COLLAPSE_MS = 600L
@@ -114,11 +114,7 @@ object MapEntryActions {
 
             val minHeadY = minHeadYForOrder(mapDef.order, frame.height)
             val deepEnough = minHeadY == 0 || probe.bestY >= minHeadY
-            val threshold = if (deepEnough) {
-                MAP_HEAD_DEEP_CANDIDATE_THRESHOLD
-            } else {
-                MAP_HEAD_CANDIDATE_THRESHOLD
-            }
+            val threshold = headThresholdFor(deepEnough)
 
             Log.d(
                 TAG,
@@ -236,15 +232,32 @@ object MapEntryActions {
                         .filter { it.first != targetPath }
                         .filter { isSameMapRow(it.second, target, frame.height) }
                         .maxByOrNull { it.second.score }
-                    if (sameRowRival == null ||
-                        target.score + MAP_SUB_SAME_ROW_MARGIN >= sameRowRival.second.score
-                    ) {
+                    if (sameRowRival == null || target.score >= sameRowRival.second.score) {
                         Log.d(
                             TAG,
                             "[MAP_ENTRY] sub accept target=${"%.3f".format(target.score)} " +
                                 "at=(${target.centerX},${target.centerY}) probes=[$bestLogged]",
                         )
                         return target
+                    }
+                    val resolvedCenterY = resolveAmbiguousFloorRow(
+                        targetPath = targetPath,
+                        target = target,
+                        probes = probes,
+                        screenHeight = frame.height,
+                    )
+                    if (resolvedCenterY != null) {
+                        val resolved = target.copy(
+                            bestY = (resolvedCenterY - target.templateHeight / 2)
+                                .coerceIn(0, frame.height - target.templateHeight),
+                        )
+                        Log.d(
+                            TAG,
+                            "[MAP_ENTRY] sub geometric accept target=${"%.3f".format(target.score)} " +
+                                "resolvedY=$resolvedCenterY rival=${"%.3f".format(sameRowRival.second.score)} " +
+                                "probes=[$bestLogged]",
+                        )
+                        return resolved
                     }
                     Log.d(
                         TAG,
@@ -262,13 +275,91 @@ object MapEntryActions {
         return null
     }
 
+    internal fun headThresholdFor(deepEnough: Boolean): Float {
+        return if (deepEnough) {
+            MAP_HEAD_DEEP_CANDIDATE_THRESHOLD
+        } else {
+            MAP_HEAD_CANDIDATE_THRESHOLD
+        }
+    }
+
+    internal data class FloorProbe(
+        val floor: Int,
+        val score: Float,
+        val centerY: Int,
+    )
+
+    /**
+     * Resolve numbered sibling rows geometrically when two templates peak on the same row.
+     * Row spacing is stable at roughly 22–38 px on a 720p capture.
+     */
+    internal fun resolveFloorRow(
+        targetFloor: Int,
+        targetCenterY: Int,
+        probes: List<FloorProbe>,
+        screenHeight: Int,
+    ): Int? {
+        val strong = probes.filter {
+            it.floor != targetFloor && it.score >= MAP_SUB_OPTION_THRESHOLD
+        }
+        val minStep = RefCoords.scaleY(44, screenHeight).toFloat()
+        val maxStep = RefCoords.scaleY(76, screenHeight).toFloat()
+
+        val targetHasValidAnchor = strong.any { probe ->
+            val floorDelta = abs(targetFloor - probe.floor)
+            val perFloorStep = abs(targetCenterY - probe.centerY).toFloat() / floorDelta
+            perFloorStep in minStep..maxStep
+        }
+        if (targetHasValidAnchor) {
+            return targetCenterY
+        }
+
+        return strong
+            .flatMapIndexed { index, left ->
+                strong.drop(index + 1).map { right -> left to right }
+            }
+            .mapNotNull { (left, right) ->
+                val floorDelta = right.floor - left.floor
+                if (floorDelta == 0) return@mapNotNull null
+                val step = (right.centerY - left.centerY).toFloat() / floorDelta
+                if (step !in minStep..maxStep) return@mapNotNull null
+                val projected = left.centerY + step * (targetFloor - left.floor)
+                if (projected !in 0f..<screenHeight.toFloat()) return@mapNotNull null
+                Triple(projected.roundToInt(), minOf(left.score, right.score), abs(floorDelta))
+            }
+            .maxWithOrNull(compareBy<Triple<Int, Float, Int>> { it.second }.thenBy { it.third })
+            ?.first
+    }
+
+    private fun resolveAmbiguousFloorRow(
+        targetPath: String,
+        target: PcTemplateMatchResult,
+        probes: List<Pair<String, PcTemplateMatchResult>>,
+        screenHeight: Int,
+    ): Int? {
+        val targetFloor = floorFromTemplatePath(targetPath) ?: return null
+        val floorProbes = probes.mapNotNull { (path, match) ->
+            floorFromTemplatePath(path)?.let { floor ->
+                FloorProbe(floor = floor, score = match.score, centerY = match.centerY)
+            }
+        }
+        return resolveFloorRow(targetFloor, target.centerY, floorProbes, screenHeight)
+    }
+
+    private fun floorFromTemplatePath(path: String): Int? {
+        return Regex("""_(\d+)\.png$""").find(path)
+            ?.groupValues
+            ?.getOrNull(1)
+            ?.toIntOrNull()
+    }
+
     private fun isSameMapRow(
         a: PcTemplateMatchResult,
         b: PcTemplateMatchResult,
         screenHeight: Int,
     ): Boolean {
         val tol = RefCoords.scaleY(36, screenHeight)
-        return kotlin.math.abs(a.centerY - b.centerY) <= tol
+        return abs(a.centerY - b.centerY) <= tol
     }
 
     private suspend fun enterModalEnter(mapDef: MapDefinition, navigation: MapNavigation): Boolean {

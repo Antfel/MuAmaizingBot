@@ -1,6 +1,8 @@
 package com.example.muamaizingbot.vision.map
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -45,6 +47,23 @@ class CurrentMapOcrTest {
                 "Divine Realm",
             ),
         )
+    }
+
+    @Test
+    fun toleratesOneCharacterHudTypoForFloorlessMap() {
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Corrupled Lands Wirel",
+                "Corrupted Lands",
+            ),
+        )
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Corrupled Lands NAire11",
+                "Corrupted Lands",
+            ),
+        )
+        assertFalse(CurrentMapOcr.matchesExpected("Corrupted Sand", "Corrupted Lands"))
     }
 
     @Test
@@ -94,5 +113,27 @@ class CurrentMapOcrTest {
                 CurrentMapOcr.ReadResult(rawText = "Plain of Four Winds 2", matched = true),
             ),
         )
+    }
+
+    @Test
+    fun resolvesRecognizedOtherMapWithoutTreatingGarbageAsKnown() {
+        val maps = listOf(
+            "noria" to "Noria",
+            "corrupted_lands" to "Corrupted Lands",
+            "plains_1" to "Plain of Four Winds 1",
+            "plains_2" to "Plain of Four Winds 2",
+        )
+
+        assertEquals("noria", CurrentMapOcr.resolveKnownMapId("Noria", maps))
+        assertEquals(
+            "corrupted_lands",
+            CurrentMapOcr.resolveKnownMapId("Corrupled Lands Wirel", maps),
+        )
+        assertEquals(
+            "plains_2",
+            CurrentMapOcr.resolveKnownMapId("Plain of Four Winds 2-6Switch", maps),
+        )
+        assertNull(CurrentMapOcr.resolveKnownMapId("DUON,", maps))
+        assertNull(CurrentMapOcr.resolveKnownMapId("", maps))
     }
 }

@@ -49,7 +49,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import com.example.muamaizingbot.R
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -96,6 +98,15 @@ fun SpotPickerScreen(
     var enableElfBuff by remember(profileFilename) {
         mutableStateOf(profile?.enableElfBuff ?: true)
     }
+    val defaultFarmName = stringResource(R.string.spot_default_farm)
+    val defaultElfName = stringResource(R.string.spot_default_elf)
+    val msgUncalibratedSave = stringResource(R.string.spot_uncalibrated_save)
+    val msgUncalibratedLocate = stringResource(R.string.spot_uncalibrated_locate)
+    val msgAffineFail = stringResource(R.string.spot_affine_fail)
+    val msgProfileMissing = stringResource(R.string.potion_profile_missing)
+    val msgSelectMap = stringResource(R.string.spot_select_map_required)
+    val msgMarkPoint = stringResource(R.string.spot_mark_point)
+    val msgSaved = stringResource(R.string.spot_saved)
 
     var selectedMapId by remember(profileFilename, locationType) {
         mutableStateOf(existingLocation?.map ?: profile?.map ?: maps.firstOrNull()?.id.orEmpty())
@@ -106,8 +117,8 @@ fun SpotPickerScreen(
     var spotName by remember(profileFilename, locationType) {
         mutableStateOf(
             existingLocation?.name ?: when (locationType) {
-                LocationPickerType.FARM_SPOT -> "Farm Spot"
-                LocationPickerType.ELF_BUFF -> "Elf Buff"
+                LocationPickerType.FARM_SPOT -> defaultFarmName
+                LocationPickerType.ELF_BUFF -> defaultElfName
             }
         )
     }
@@ -180,7 +191,7 @@ fun SpotPickerScreen(
             coordY = null
             coordXText = ""
             coordYText = ""
-            statusMessage = "Mapa sin calibrar: se guardará el pixel; añade coordinate_mapping para coords de juego."
+            statusMessage = msgUncalibratedSave
         }
     }
 
@@ -193,12 +204,12 @@ fun SpotPickerScreen(
             return
         }
         if (!CoordinateMapping.hasMapping(mapDef)) {
-            statusMessage = "Mapa sin calibrar: no se puede ubicar el punto desde coords."
+            statusMessage = msgUncalibratedLocate
             return
         }
         val pixel = CoordinateMapping.mapCoordToPixel(mapDef!!, gx, gy)
         if (pixel == null) {
-            statusMessage = "No se pudo invertir el mapeo (affine singular)."
+            statusMessage = msgAffineFail
             return
         }
         selectedX = pixel.first
@@ -217,8 +228,8 @@ fun SpotPickerScreen(
     ) {
         Text(
             text = when (locationType) {
-                LocationPickerType.FARM_SPOT -> "Farm Spot"
-                LocationPickerType.ELF_BUFF -> "Elf Buff Zone"
+                LocationPickerType.FARM_SPOT -> stringResource(R.string.spot_title_farm)
+                LocationPickerType.ELF_BUFF -> stringResource(R.string.spot_title_elf)
             },
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
@@ -237,9 +248,9 @@ fun SpotPickerScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(text = "Elf buff automático", fontWeight = FontWeight.Medium)
+                    Text(text = stringResource(R.string.profile_elf_auto), fontWeight = FontWeight.Medium)
                     Text(
-                        text = "El bot irá a esta zona si el buff no está activo.",
+                        text = stringResource(R.string.spot_elf_zone_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -281,7 +292,7 @@ fun SpotPickerScreen(
         OutlinedTextField(
             value = spotName,
             onValueChange = { spotName = it },
-            label = { Text("Nombre del spot") },
+            label = { Text(stringResource(R.string.spot_name)) },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true,
         )
@@ -293,7 +304,7 @@ fun SpotPickerScreen(
             OutlinedTextField(
                 value = coordXText,
                 onValueChange = { applyGameCoordTexts(it, coordYText) },
-                label = { Text("Coord X (juego)") },
+                label = { Text(stringResource(R.string.spot_coord_x)) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 enabled = hasMapping,
@@ -301,7 +312,7 @@ fun SpotPickerScreen(
             OutlinedTextField(
                 value = coordYText,
                 onValueChange = { applyGameCoordTexts(coordXText, it) },
-                label = { Text("Coord Y (juego)") },
+                label = { Text(stringResource(R.string.spot_coord_y)) },
                 modifier = Modifier.weight(1f),
                 singleLine = true,
                 enabled = hasMapping,
@@ -310,7 +321,7 @@ fun SpotPickerScreen(
 
         if (!hasMapping && mapDef?.hasMaintenanceImage() == true) {
             Text(
-                text = "Mapa sin calibrar: toca para marcar pixel; las coords de juego no están disponibles hasta añadir coordinate_mapping.",
+                text = stringResource(R.string.spot_uncalibrated),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -328,29 +339,30 @@ fun SpotPickerScreen(
             )
         } else {
             Text(
-                text = "Este mapa no tiene imagen de mantenimiento.",
+                text = stringResource(R.string.spot_no_image),
                 color = MaterialTheme.colorScheme.error,
             )
         }
 
+        val pixelPart = if (selectedX >= 0 && selectedY >= 0) {
+            "($selectedX, $selectedY)"
+        } else {
+            "-"
+        }
+        val pixelStatus = stringResource(R.string.spot_pixel_label, pixelPart)
+        val coordStatus = if (coordX != null && coordY != null) {
+            "  |  " + stringResource(R.string.spot_coord_label, coordX!!, coordY!!)
+        } else {
+            ""
+        }
         Text(
-            text = buildString {
-                append("Pixel: ")
-                if (selectedX >= 0 && selectedY >= 0) {
-                    append("($selectedX, $selectedY)")
-                } else {
-                    append("-")
-                }
-                if (coordX != null && coordY != null) {
-                    append("  |  Coord: ($coordX, $coordY)")
-                }
-            },
+            text = pixelStatus + coordStatus,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
         )
 
         Text(
-            text = "Usa el slider para zoom. Arrastra el mapa para mover. Toca para marcar el spot.",
+            text = stringResource(R.string.spot_zoom_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -367,21 +379,21 @@ fun SpotPickerScreen(
             onClick = {
                 val currentProfile = profile
                 if (currentProfile == null) {
-                    statusMessage = "Perfil no encontrado"
+                    statusMessage = msgProfileMissing
                     return@Button
                 }
                 if (selectedMapId.isBlank()) {
-                    statusMessage = "Selecciona un mapa"
+                    statusMessage = msgSelectMap
                     return@Button
                 }
                 if (selectedX < 0 || selectedY < 0) {
-                    statusMessage = "Marca un punto en el mapa"
+                    statusMessage = msgMarkPoint
                     return@Button
                 }
                 val trimmedName = spotName.trim().ifBlank {
                     when (locationType) {
-                        LocationPickerType.FARM_SPOT -> "Farm Spot"
-                        LocationPickerType.ELF_BUFF -> "Elf Buff"
+                        LocationPickerType.FARM_SPOT -> defaultFarmName
+                        LocationPickerType.ELF_BUFF -> defaultElfName
                     }
                 }
                 when (locationType) {
@@ -414,19 +426,19 @@ fun SpotPickerScreen(
                         ProfileRepository.saveProfile(currentProfile.copy(enableElfBuff = enableElfBuff))
                     }
                 }
-                statusMessage = "Ubicación guardada"
+                statusMessage = msgSaved
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = profile != null,
         ) {
-            Text("Guardar")
+            Text(stringResource(R.string.action_save))
         }
 
         OutlinedButton(
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Volver")
+            Text(stringResource(R.string.action_back))
         }
     }
 }
@@ -439,7 +451,7 @@ private fun MapDropdown(
     onMapSelected: (String) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val selectedName = maps.firstOrNull { it.id == selectedMapId }?.name ?: "Seleccionar mapa"
+    val selectedName = maps.firstOrNull { it.id == selectedMapId }?.name ?: stringResource(R.string.spot_select_map)
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -450,7 +462,7 @@ private fun MapDropdown(
             value = selectedName,
             onValueChange = {},
             readOnly = true,
-            label = { Text("Mapa") },
+            label = { Text(stringResource(R.string.spot_map)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
@@ -489,9 +501,9 @@ private fun UnionCrossDropdown(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val label = if (isCross) {
-        "Cross (UnionKuaFu)"
+        stringResource(R.string.spot_pk_cross)
     } else {
-        "Local (Union)"
+        stringResource(R.string.spot_pk_local)
     }
 
     ExposedDropdownMenuBox(
@@ -503,10 +515,10 @@ private fun UnionCrossDropdown(
             value = label,
             onValueChange = {},
             readOnly = true,
-            label = { Text("PK Union template") },
+            label = { Text(stringResource(R.string.spot_pk_template)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             supportingText = {
-                Text("Cross = mapas kua-fu; Local = mapas normales sin Cross.")
+                Text(stringResource(R.string.spot_pk_hint))
             },
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
@@ -517,14 +529,14 @@ private fun UnionCrossDropdown(
             onDismissRequest = { expanded = false },
         ) {
             DropdownMenuItem(
-                text = { Text("Cross (UnionKuaFu)") },
+                text = { Text(stringResource(R.string.spot_pk_cross)) },
                 onClick = {
                     onSelected(true)
                     expanded = false
                 },
             )
             DropdownMenuItem(
-                text = { Text("Local (Union)") },
+                text = { Text(stringResource(R.string.spot_pk_local)) },
                 onClick = {
                     onSelected(false)
                     expanded = false
@@ -549,10 +561,10 @@ private fun WireDropdown(
         modifier = Modifier.fillMaxWidth(),
     ) {
         OutlinedTextField(
-            value = "Wire $selectedWire",
+            value = stringResource(R.string.spot_wire_n, selectedWire),
             onValueChange = {},
             readOnly = true,
-            label = { Text("Wire") },
+            label = { Text(stringResource(R.string.spot_wire)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
@@ -564,7 +576,7 @@ private fun WireDropdown(
         ) {
             wires.forEach { wire ->
                 DropdownMenuItem(
-                    text = { Text("Wire $wire") },
+                    text = { Text(stringResource(R.string.spot_wire_n, wire)) },
                     onClick = {
                         onWireSelected(wire)
                         expanded = false
@@ -622,7 +634,7 @@ private fun ZoomableMapPicker(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "Zoom",
+                text = stringResource(R.string.spot_zoom),
                 style = MaterialTheme.typography.labelMedium,
                 modifier = Modifier.width(44.dp),
             )
@@ -651,7 +663,7 @@ private fun ZoomableMapPicker(
                 },
                 enabled = zoom > MIN_ZOOM || panX != 0f || panY != 0f,
             ) {
-                Text("Reset")
+                Text(stringResource(R.string.spot_reset))
             }
         }
 

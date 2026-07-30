@@ -1,6 +1,8 @@
 package com.example.muamaizingbot.bot
 
 import android.util.Log
+import com.example.muamaizingbot.R
+import com.example.muamaizingbot.settings.UiStrings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -55,9 +57,9 @@ object BotAutoRestart {
             usedInWindow = used,
             secondsLeft = seconds,
             detail = if (autoResume) {
-                "Retry en ${seconds}s"
+                UiStrings.get(R.string.overlay_retry_in, seconds)
             } else {
-                "Expire en ${seconds}s"
+                UiStrings.get(R.string.overlay_expire_in, seconds)
             },
         )
         Log.d(TAG, "[BOT] expire countdown ${seconds}s autoResume=$autoResume reason=$reason")
@@ -74,7 +76,7 @@ object BotAutoRestart {
                 isPending = autoResume,
                 usedInWindow = used,
                 secondsLeft = 0,
-                detail = if (autoResume) "Reiniciando…" else "",
+                detail = if (autoResume) UiStrings.get(R.string.overlay_restarting) else "",
             )
             return
         }
@@ -83,9 +85,9 @@ object BotAutoRestart {
             usedInWindow = used,
             secondsLeft = seconds,
             detail = if (autoResume) {
-                "Retry en ${seconds}s"
+                UiStrings.get(R.string.overlay_retry_in, seconds)
             } else {
-                "Expire en ${seconds}s"
+                UiStrings.get(R.string.overlay_expire_in, seconds)
             },
         )
     }
@@ -94,7 +96,11 @@ object BotAutoRestart {
         val used = pruneAndCount()
         _status.value = Status(
             usedInWindow = used,
-            detail = "Auto-retry agotado ($used/$MAX_RESTARTS_PER_WINDOW)",
+            detail = UiStrings.get(
+                R.string.overlay_retry_exhausted,
+                used,
+                MAX_RESTARTS_PER_WINDOW,
+            ),
         )
         Log.w(TAG, "[BOT] auto-restart exhausted used=$used")
     }
@@ -102,7 +108,7 @@ object BotAutoRestart {
     fun markCaptureBlocked() {
         _status.value = Status(
             usedInWindow = pruneAndCount(),
-            detail = "Retry falló (captura)",
+            detail = UiStrings.get(R.string.overlay_retry_capture_fail),
         )
     }
 

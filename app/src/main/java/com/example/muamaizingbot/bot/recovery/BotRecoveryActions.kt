@@ -1,20 +1,31 @@
 package com.example.muamaizingbot.bot.recovery
 
 import android.util.Log
+import com.example.muamaizingbot.bot.bosses.BossHuntPhase
+import com.example.muamaizingbot.bot.bosses.BossHuntState
+import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
+import com.example.muamaizingbot.bot.maintenance.ElfBuffWarPostActions
 import com.example.muamaizingbot.bot.maintenance.MapCheckActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
+import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.profile.LocationRepository
+import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isElfBuffWarMode
+import com.example.muamaizingbot.profile.isFarmBossesMode
+import com.example.muamaizingbot.profile.normalizedBotMode
 
 /**
- * Control point to resume navigation after interrupted sequences (elf buff, potions, combat).
+ * Control point to resume after interrupted sequences (elf buff, potions, combat).
  *
- * Skip full re-navigation only when on the configured farm map **and** within farm-spot
- * coordinates. Same map but off-spot (typical after revive) still re-routes to the spot.
+ * Destination follows the active profile mode:
+ * - farm / elf_buff_giver → farm map + spot
+ * - farm_bosses → current boss checkpoint (map + wire)
+ * - elf_buff_war → war post
  */
 object BotRecoveryActions {
 
@@ -118,7 +129,9 @@ object BotRecoveryActions {
     }
 
     suspend fun recoverFromLostState(reason: String): Boolean {
-        Log.w(TAG, "[RECOVERY] checkpoint reason=$reason")
+        val profile = ProfileRepository.currentProfile.value
+        val mode = profile?.normalizedBotMode() ?: "unknown"
+        Log.w(TAG, "[RECOVERY] checkpoint reason=$reason mode=$mode")
 
         if (DeathActions.isDead()) {
             Log.d(TAG, "[RECOVERY] dead during recovery")
@@ -129,6 +142,16 @@ object BotRecoveryActions {
 
         NavigationOrchestrator.cleanGameUi()
 
+        if (profile?.isElfBuffWarMode() == true) {
+            return recoverToWarPost(reason)
+        }
+        if (profile?.isFarmBossesMode() == true) {
+            return recoverToBossCheckpoint(profile, reason)
+        }
+        return recoverToFarmSpot(reason)
+    }
+
+    private suspend fun recoverToFarmSpot(reason: String): Boolean {
         if (isAlreadyAtFarmPost(reason)) {
             Log.d(TAG, "[RECOVERY] on farm map+spot; light recovery only reason=$reason")
             if (!GameActions.ensureAutoMode()) {
@@ -155,10 +178,93 @@ object BotRecoveryActions {
         return true
     }
 
+    private suspend fun recoverToBossCheckpoint(
+        profile: BotProfile,
+        reason: String,
+    ): Boolean {
+        // Already on the boss hunt map: do not pull toward the Farm Exp spot.
+        if (MapCheckActions.isInConfiguredMap()) {
+            Log.d(TAG, "[RECOVERY] on boss checkpoint map; light recovery only reason=$reason")
+            FarmBossesLoop.clearArrivalState()
+            if (BossHuntState.phase == BossHuntPhase.FIGHT) {
+                BossHuntState.phase = BossHuntPhase.HUNT
+            }
+            Log.d(TAG, "[RECOVERY] checkpoint completed (boss-map) reason=$reason")
+            return true
+        }
+
+        val cp = FarmBossesLoop.currentCheckpointOrCursor(profile)
+        if (cp == null) {
+            Log.w(TAG, "[RECOVERY] farm_bosses missing checkpoint reason=$reason")
+            return false
+        }
+        val mapDef = MapDefinitionRepository.getById(cp.mapId)
+        if (mapDef == null) {
+            Log.w(TAG, "[RECOVERY] farm_bosses map missing id=${cp.mapId} reason=$reason")
+            return false
+        }
+
+        if (isNavCooldownActive()) {
+            Log.w(TAG, "[RECOVERY] boss checkpoint deferred (nav cooldown) reason=$reason")
+            return true
+        }
+
+        Log.d(
+            TAG,
+            "[RECOVERY] boss checkpoint nav reason=$reason map=${cp.mapId} W${cp.wireId}",
+        )
+        FarmBossesLoop.clearArrivalState()
+        BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
+
+        repeat(MAX_NAV_ATTEMPTS) { attempt ->
+            Log.d(
+                TAG,
+                "[RECOVERY] boss navigate attempt=${attempt + 1}/$MAX_NAV_ATTEMPTS reason=$reason",
+            )
+            if (DeathActions.isDead()) {
+                if (!DeathActions.recoverIfDead()) {
+                    return false
+                }
+            }
+            if (NavigationOrchestrator.navigateToMapAndWire(mapDef, cp.wireId, farmSpot = null)) {
+                lastFailedNavigateMs = 0L
+                BossHuntState.phase = BossHuntPhase.HUNT
+                Log.d(TAG, "[RECOVERY] checkpoint completed (boss) reason=$reason")
+                return true
+            }
+            if (attempt < MAX_NAV_ATTEMPTS - 1) {
+                NavigationOrchestrator.cleanGameUi()
+            }
+        }
+        lastFailedNavigateMs = System.currentTimeMillis()
+        if (isNavCooldownActive()) {
+            Log.w(TAG, "[RECOVERY] boss checkpoint deferred after fail reason=$reason")
+            return true
+        }
+        Log.w(TAG, "[RECOVERY] boss checkpoint failed reason=$reason")
+        return false
+    }
+
+    private suspend fun recoverToWarPost(reason: String): Boolean {
+        if (isNavCooldownActive()) {
+            Log.w(TAG, "[RECOVERY] war post deferred (nav cooldown) reason=$reason")
+            return true
+        }
+        if (ElfBuffWarPostActions.navigateToWarPost(reason)) {
+            Log.d(TAG, "[RECOVERY] checkpoint completed (war_post) reason=$reason")
+            return true
+        }
+        if (isNavCooldownActive()) {
+            Log.w(TAG, "[RECOVERY] war post deferred after fail reason=$reason")
+            return true
+        }
+        Log.w(TAG, "[RECOVERY] war post failed reason=$reason")
+        return false
+    }
+
     /**
-     * Skip navigate only when map matches **and** HUD coords are within [FarmLocation.arrivalRadius]
-     * (same tight radius used for spot arrival; farmRadius default is also 5).
-     * No saved coords / OCR miss → do not skip (force return to spot; needed after revive).
+     * Farm / giver only: skip navigate when map matches **and** HUD coords are within
+     * [FarmLocation.arrivalRadius]. No saved coords / OCR miss → force return to spot.
      */
     private suspend fun isAlreadyAtFarmPost(reason: String): Boolean {
         if (!MapCheckActions.isInConfiguredMap()) {

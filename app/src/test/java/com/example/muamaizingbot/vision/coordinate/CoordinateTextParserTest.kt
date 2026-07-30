@@ -45,4 +45,29 @@ class CoordinateTextParserTest {
         val bounds = CoordinateBounds(xMin = 0, xMax = 300, yMin = 0, yMax = 300)
         assertNull(CoordinateTextParser.applyCoordinateBounds(999 to 50, bounds))
     }
+
+    @Test
+    fun looksLikeTruncatedAxis_commonHudDrops() {
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedAxis(61, 161))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedAxis(16, 161))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedAxis(6, 161))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedAxis(17, 171))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedAxis(161, 161))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedAxis(190, 171))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedAxis(200, 161))
+    }
+
+    @Test
+    fun looksLikeTruncatedHudRead_matchesIncidentSamples() {
+        val target = 161 to 171
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedHudRead(61 to 171, target, 5))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedHudRead(16 to 171, target, 5))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedHudRead(6 to 171, target, 5))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedHudRead(161 to 17, target, 5))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedHudRead(16 to 17, target, 5))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(1 to 190, target, 5))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(16 to 200, target, 5))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(161 to 171, target, 5))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(200 to 200, target, 5))
+    }
 }

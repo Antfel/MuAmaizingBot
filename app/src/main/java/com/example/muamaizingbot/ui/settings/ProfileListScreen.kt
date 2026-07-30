@@ -27,8 +27,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.LocationRepository
@@ -53,13 +55,13 @@ fun ProfileListScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Perfiles",
+            text = stringResource(R.string.profiles_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
 
         Text(
-            text = "Selecciona el perfil activo. Usa Configurar para farm spot, elf buff y pociones.",
+            text = stringResource(R.string.profiles_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -103,7 +105,7 @@ fun ProfileListScreen(
                 onClick = { showCreateDialog = true },
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Nuevo perfil")
+                Text(stringResource(R.string.profiles_new))
             }
 
             OutlinedButton(
@@ -113,7 +115,7 @@ fun ProfileListScreen(
                 modifier = Modifier.weight(1f),
                 enabled = currentProfile != null,
             ) {
-                Text("Duplicar")
+                Text(stringResource(R.string.profiles_duplicate))
             }
         }
 
@@ -121,19 +123,19 @@ fun ProfileListScreen(
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Volver")
+            Text(stringResource(R.string.action_back))
         }
     }
 
     if (showCreateDialog) {
         AlertDialog(
             onDismissRequest = { showCreateDialog = false },
-            title = { Text("Nuevo perfil") },
+            title = { Text(stringResource(R.string.profiles_create_title)) },
             text = {
                 OutlinedTextField(
                     value = newProfileName,
                     onValueChange = { newProfileName = it },
-                    label = { Text("Nombre") },
+                    label = { Text(stringResource(R.string.profiles_name)) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -150,12 +152,12 @@ fun ProfileListScreen(
                         }
                     },
                 ) {
-                    Text("Crear")
+                    Text(stringResource(R.string.profiles_create))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showCreateDialog = false }) {
-                    Text("Cancelar")
+                    Text(stringResource(R.string.profiles_cancel))
                 }
             },
         )
@@ -197,33 +199,40 @@ private fun ProfileCard(
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Mapa: ${profile.map.ifBlank { "-" }} | Wire ${profile.wire}",
+                    text = stringResource(
+                        R.string.profiles_map_wire,
+                        profile.map.ifBlank { "-" },
+                        profile.wire,
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                 )
                 farmSummary?.let {
                     Text(
-                        text = "Farm: $it",
+                        text = stringResource(R.string.profiles_farm, it),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 elfSummary?.let {
                     Text(
-                        text = "Elf: $it",
+                        text = stringResource(R.string.profiles_elf, it),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 if (profile.enableElfBuff && elfSummary == null) {
                     Text(
-                        text = "Elf buff: sin configurar",
+                        text = stringResource(
+                            R.string.profiles_elf,
+                            stringResource(R.string.profiles_unset),
+                        ),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.error,
                     )
                 }
             }
             TextButton(onClick = onConfigure) {
-                Text("Configurar")
+                Text(stringResource(R.string.profiles_configure))
             }
         }
     }

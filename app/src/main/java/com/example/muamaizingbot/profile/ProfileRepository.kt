@@ -2,6 +2,7 @@ package com.example.muamaizingbot.profile
 
 import android.content.Context
 import android.util.Log
+import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,6 +63,18 @@ object ProfileRepository {
         val profile = _profiles.value.firstOrNull { it.filename == filename }
             ?: loadProfileFile(File(profilesDir, filename))
             ?: return
+        val previous = _currentProfile.value
+        if (previous != null &&
+            (previous.filename != profile.filename || previous.botMode != profile.botMode)
+        ) {
+            TrustedCurrentMapMemory.invalidate()
+            Log.d(
+                TAG,
+                "[MAP_MEMORY] invalidate reason=profile_context " +
+                    "from=${previous.filename}/${previous.botMode} " +
+                    "to=${profile.filename}/${profile.botMode}",
+            )
+        }
 
         if (persistCopy) {
             val source = File(profilesDir, filename)

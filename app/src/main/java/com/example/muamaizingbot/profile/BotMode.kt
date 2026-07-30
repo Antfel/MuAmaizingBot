@@ -1,5 +1,7 @@
 package com.example.muamaizingbot.profile
 
+import com.example.muamaizingbot.R
+
 /**
  * Bot operating modes stored in [BotProfile.botMode].
  *
@@ -23,6 +25,14 @@ object BotMode {
         }
     }
 
+    fun labelRes(mode: String): Int = when (normalize(mode)) {
+        ELF_BUFF_GIVER -> R.string.mode_elf_buff_giver
+        ELF_BUFF_WAR -> R.string.mode_elf_buff_war
+        FARM_BOSSES -> R.string.mode_farm_bosses
+        else -> R.string.mode_farm
+    }
+
+    /** Fallback Spanish label for non-UI contexts. Prefer [labelRes] + stringResource in Compose. */
     fun label(mode: String): String = when (normalize(mode)) {
         ELF_BUFF_GIVER -> "Elf Buff · Mundo abierto"
         ELF_BUFF_WAR -> "Elf Buff · War / APEX"

@@ -1,5 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">MU Amaizing Bot</string>
+
+    <!-- Notifications / accessibility -->
     <string name="overlay_notification_channel">Overlay del bot</string>
     <string name="overlay_notification_title">MU Bot activo</string>
     <string name="overlay_notification_body">Overlay en ejecución</string>
@@ -7,4 +10,266 @@
     <string name="capture_notification_title">Captura activa</string>
     <string name="capture_notification_body">El bot está capturando la pantalla</string>
     <string name="accessibility_service_description">Permite a MU Amaizing Bot enviar taps y swipes al juego.</string>
+
+    <!-- Common -->
+    <string name="action_back">Volver</string>
+    <string name="action_save">Guardar</string>
+    <string name="action_menu">Menú</string>
+    <string name="label_none">Ninguno</string>
+    <string name="label_em_dash">—</string>
+    <string name="saved">Guardado</string>
+
+    <!-- Drawer / navigation -->
+    <string name="drawer_title">Configuración</string>
+    <string name="drawer_home">Inicio</string>
+    <string name="drawer_profiles">Perfiles</string>
+    <string name="drawer_system">Sistema</string>
+    <string name="drawer_license">Licencia</string>
+    <string name="drawer_dpi_note">Contrato fijo: emulador 1280×720 @ 240 DPI.</string>
+    <string name="nav_no_active_profile">Sin perfil activo</string>
+    <string name="nav_farm_spot_unset">Farm spot sin configurar</string>
+
+    <!-- Home -->
+    <string name="home_title">Inicio</string>
+    <string name="home_hint">Usa el menú lateral (☰) para perfiles y farm spot. Emulador: 1280×720 @ 240 DPI.</string>
+    <string name="home_profile">Perfil</string>
+    <string name="home_mode">Modo</string>
+    <string name="home_farm_spot">Farm spot</string>
+    <string name="home_boss_maps">Boss maps</string>
+    <string name="home_war_post">War event post</string>
+    <string name="home_buff_post">Buff post</string>
+    <string name="home_maps_configured">%1$d mapas configurados</string>
+    <string name="home_not_configured">Sin configurar</string>
+    <string name="home_overlay">Overlay</string>
+    <string name="home_overlay_granted">Permiso concedido</string>
+    <string name="home_overlay_denied">Permiso pendiente</string>
+    <string name="home_overlay_running">Activo</string>
+    <string name="home_overlay_stopped">Inactivo</string>
+    <string name="home_accessibility">Accesibilidad</string>
+    <string name="home_accessibility_on">Servicio activo</string>
+    <string name="home_accessibility_off">Servicio inactivo</string>
+    <string name="home_accessibility_connected">Conectado</string>
+    <string name="home_accessibility_restart">Activado (reinicia servicio)</string>
+    <string name="home_accessibility_pending">Pendiente</string>
+    <string name="home_capture">Captura</string>
+    <string name="home_capture_on">Activa</string>
+    <string name="home_capture_off">Inactiva</string>
+    <string name="home_bot">Bot</string>
+    <string name="home_bot_state">Estado del bot</string>
+    <string name="home_bot_idle">Inactivo</string>
+    <string name="home_bot_running">En ejecución</string>
+    <string name="home_bot_paused">Pausado</string>
+    <string name="home_bot_error">Error</string>
+    <string name="home_grant_overlay">Conceder permiso overlay</string>
+    <string name="home_start_overlay">Mostrar overlay</string>
+    <string name="home_stop_overlay">Ocultar overlay</string>
+    <string name="home_open_accessibility">Activar accesibilidad</string>
+    <string name="home_request_capture">Iniciar captura</string>
+    <string name="home_capture_active">Captura activa</string>
+    <string name="home_stop_capture">Detener captura</string>
+    <string name="home_steps">1) Configura perfil y spot en el menú.\n2) Activa accesibilidad y captura.\n3) Overlay → Start para farm.</string>
+
+    <!-- System -->
+    <string name="system_title">Sistema</string>
+    <string name="system_language">Idioma</string>
+    <string name="system_language_hint">Cambia el idioma de la interfaz de configuración. El juego no se modifica.</string>
+    <string name="system_telegram_title">Alertas Telegram</string>
+    <string name="system_telegram_hint">Avisos si el juego se desconecta o entra en mantenimiento. El token del bot va embebido en la app; solo configuras tu Chat ID.</string>
+    <string name="system_telegram_steps">1. Abre @MuAmaizingAlertBot en Telegram\n2. Toca Start — el bot te responderá tu Chat ID\n3. Pégalo abajo y usa «Probar Telegram»</string>
+    <string name="system_alerts_enabled">Alertas activas</string>
+    <string name="system_chat_id">Chat ID</string>
+    <string name="system_save_chat_id">Guardar Chat ID</string>
+    <string name="system_test_telegram">Probar Telegram</string>
+    <string name="system_testing">Enviando…</string>
+    <string name="system_test_ok">Mensaje enviado — revisa Telegram</string>
+    <string name="system_token_missing">Este build no tiene token de Telegram embebido (solo desarrollo).</string>
+    <string name="system_speed_title">Velocidad del bot</string>
+    <string name="system_speed_hint">Normal usa los delays actuales. Rápido acortará esperas en algunos procesos (aún en análisis — no aplica cambios por ahora).</string>
+    <string name="system_speed_normal">Normal</string>
+    <string name="system_speed_fast">Rápido</string>
+    <string name="system_speed_selected_normal">Seleccionado: Normal (comportamiento actual).</string>
+    <string name="system_speed_selected_fast">Seleccionado: Rápido — pendiente de implementar.</string>
+
+    <!-- License -->
+    <string name="license_title">Licencia</string>
+    <string name="license_hint">Play (cold start) exige una sesión activa con tu license key.</string>
+    <string name="license_key_label">License key</string>
+    <string name="license_device_id">Device ID</string>
+    <string name="license_session_active">Sesión activa: %1$s…</string>
+    <string name="license_session_none">Sin sesión activa</string>
+
+    <!-- Profiles -->
+    <string name="profiles_title">Perfiles</string>
+    <string name="profiles_hint">Selecciona el perfil activo. Usa Configurar para farm spot, elf buff y pociones.</string>
+    <string name="profiles_new">Nuevo perfil</string>
+    <string name="profiles_duplicate">Duplicar</string>
+    <string name="profiles_name">Nombre</string>
+    <string name="profiles_configure">Configurar</string>
+    <string name="profiles_active">Activo</string>
+    <string name="profiles_farm">Farm: %1$s</string>
+    <string name="profiles_elf">Elf: %1$s</string>
+    <string name="profiles_unset">Sin configurar</string>
+    <string name="profiles_create_title">Nuevo perfil</string>
+    <string name="profiles_create">Crear</string>
+    <string name="profiles_cancel">Cancelar</string>
+
+    <!-- Profile configure (common) -->
+    <string name="profile_config_title">Configurar perfil</string>
+    <string name="profile_section_general">Generales del PJ</string>
+    <string name="profile_section_mode">Modo</string>
+    <string name="profile_section_mode_settings">Este modo</string>
+    <string name="profile_potions">Pociones</string>
+    <string name="profile_random_teleport">Random teleport</string>
+    <string name="profile_open_potion_config">Configurar pociones</string>
+    <string name="profile_farm_spot">Farm spot</string>
+    <string name="profile_elf_buff">Elf buff</string>
+    <string name="profile_select_farm_spot">Elegir farm spot</string>
+    <string name="profile_select_elf_buff">Elegir elf buff</string>
+    <string name="profile_enable_elf_buff">Buscar elf buff</string>
+    <string name="profile_enable_potions">Recuperar pociones</string>
+
+    <!-- Bot modes -->
+    <string name="mode_farm">Farm</string>
+    <string name="mode_farm_bosses">Farm Bosses</string>
+    <string name="mode_elf_buff_giver">Elf Buff · Mundo abierto</string>
+    <string name="mode_elf_buff_war">Elf Buff · War / APEX</string>
+
+    <!-- Potions -->
+    <string name="potion_title">Pociones</string>
+    <string name="potion_hint">Umbrales y compra automática cuando se agotan.</string>
+    <string name="potion_hp">HP</string>
+    <string name="potion_mp">MP</string>
+    <string name="potion_config_title">Config Pociones</string>
+    <string name="potion_auto_recovery">Recuperación automática</string>
+    <string name="potion_auto_recovery_hint">Compra pociones cuando HP o MP estén vacíos.</string>
+    <string name="potion_stacks_hp">Stacks HP a comprar</string>
+    <string name="potion_stacks_mp">Stacks MP a comprar</string>
+    <string name="potion_profile_missing">Perfil no encontrado</string>
+    <string name="potion_saved">Configuración guardada</string>
+    <string name="status_active">Activo</string>
+    <string name="status_disabled">Desactivado</string>
+
+    <string name="profile_config_hint">Auto ataque y revive siempre activos para todos los perfiles.</string>
+    <string name="profile_bot_mode">Modo del bot</string>
+    <string name="profile_bot_mode_hint">Farm farmea y puede buscar buff. Elf Buff da buff. Farm Bosses cicla spots de boss.</string>
+    <string name="profile_mode_farm">Farm</string>
+    <string name="profile_mode_elf">Elf Buff</string>
+    <string name="profile_mode_bosses">Bosses</string>
+    <string name="profile_war_post_title">War event (post al Start)</string>
+    <string name="profile_buff_post_title">Buff post (Farm Spot)</string>
+    <string name="profile_delete">Borrar perfil</string>
+    <string name="profile_delete_title">Eliminar perfil</string>
+    <string name="profile_delete_confirm">¿Eliminar \"%1$s\" y sus ubicaciones guardadas?</string>
+    <string name="profile_delete_action">Eliminar</string>
+    <string name="profile_random_title">Random Teleport Seal</string>
+    <string name="profile_random_hint">Si el path verde es largo, usa Random en el mapa hasta acercarse. Con seal usado, la espera de llegada es 30s (sin seal, 90s).</string>
+    <string name="profile_elf_auto">Elf buff automático</string>
+    <string name="profile_elf_auto_hint">Zona compartida entre Farm y Farm Bosses. Desactívalo si la elf está offline o no quieres ir por buff.</string>
+    <string name="profile_elf_off">Desactivado — el bot no buscará elf buff</string>
+    <string name="profile_elf_on_no_zone">Activo, pero sin zona configurada</string>
+    <string name="profile_elf_edit_zone">Editar zona elf buff</string>
+    <string name="profile_elf_set_zone">Configurar zona elf buff</string>
+    <string name="profile_bosses_hint">Agregá mapas en el orden del ciclo. El bot teleporta → wires → busca bosses vivos → Focus+Auto. Tras cada kill corre buff/pociones y vuelve al checkpoint.</string>
+    <string name="profile_bosses_no_maps">Sin mapas — buscá y agregá al menos uno</string>
+    <string name="profile_bosses_remove_map">Quitar %1$s</string>
+    <string name="profile_bosses_search">Buscar mapa</string>
+    <string name="profile_bosses_search_hint">Ej. Kalima, Atlans…</string>
+    <string name="profile_bosses_no_match">Sin coincidencias</string>
+    <string name="profile_bosses_hold">Timeout pelea (seg)</string>
+    <string name="profile_bosses_hold_hint">Si el focus no se pierde, rota tras este tiempo. Default %1$ds.</string>
+    <string name="profile_bosses_golden">Incluir golden mobs</string>
+    <string name="profile_bosses_golden_hint">También busca iconos golden en el mapa.</string>
+    <string name="profile_bosses_save_hold">Guardar timeout</string>
+    <string name="profile_elf_params">Parámetros Elf Buff</string>
+    <string name="profile_elf_params_hint">Elegí la variante: mundo abierto (PK All/Union) o War/APEX en Divine.</string>
+    <string name="profile_elf_open_world">Mundo abierto</string>
+    <string name="profile_elf_war">War (APEX)</string>
+    <string name="profile_elf_war_hint">Activá el bot ya dentro del evento War. Al Start solo guarda tus coords HUD (y píxel de minimapa). Tras morir revive y vuelve a ese punto — sin teleport ni check de mapa. No cambia PK ni Auto.</string>
+    <string name="profile_elf_giver_hint">Al Start mapea Greater Defense / Greater Damage. Ciclo UI: All → Focus → Union → buff aliado (verde) → Focus Boss → All.</string>
+    <string name="profile_elf_cast_pause">Pausa entre ciclos (seg)</string>
+    <string name="profile_elf_cast_pause_hint">Tras terminar un ciclo, espera esto y vuelve a buscar. Default 1s.</string>
+    <string name="profile_elf_auto_cast">Auto-cast por timer</string>
+    <string name="profile_elf_save_cast">Guardar casteo</string>
+
+    <string name="spot_title_farm">Farm Spot</string>
+    <string name="spot_title_elf">Elf Buff Zone</string>
+    <string name="spot_default_farm">Farm Spot</string>
+    <string name="spot_default_elf">Elf Buff</string>
+    <string name="spot_elf_zone_hint">El bot irá a esta zona si el buff no está activo.</string>
+    <string name="spot_name">Nombre del spot</string>
+    <string name="spot_coord_x">Coord X (juego)</string>
+    <string name="spot_coord_y">Coord Y (juego)</string>
+    <string name="spot_uncalibrated">Mapa sin calibrar: toca para marcar pixel; las coords de juego no están disponibles hasta añadir coordinate_mapping.</string>
+    <string name="spot_uncalibrated_save">Mapa sin calibrar: se guardará el pixel; añade coordinate_mapping para coords de juego.</string>
+    <string name="spot_uncalibrated_locate">Mapa sin calibrar: no se puede ubicar el punto desde coords.</string>
+    <string name="spot_affine_fail">No se pudo invertir el mapeo (affine singular).</string>
+    <string name="spot_no_image">Este mapa no tiene imagen de mantenimiento.</string>
+    <string name="spot_pixel_label">Pixel: %1$s</string>
+    <string name="spot_coord_label">Coord: (%1$d, %2$d)</string>
+    <string name="spot_zoom_hint">Usa el slider para zoom. Arrastra el mapa para mover. Toca para marcar el spot.</string>
+    <string name="spot_zoom">Zoom</string>
+    <string name="spot_map">Mapa</string>
+    <string name="spot_select_map">Seleccionar mapa</string>
+    <string name="spot_select_map_required">Selecciona un mapa</string>
+    <string name="spot_mark_point">Marca un punto en el mapa</string>
+    <string name="spot_saved">Ubicación guardada</string>
+    <string name="spot_pk_template">PK Union template</string>
+    <string name="spot_pk_hint">Cross = mapas kua-fu; Local = mapas normales sin Cross.</string>
+    <string name="spot_pk_cross">Cross (UnionKuaFu)</string>
+    <string name="spot_pk_local">Local (Union)</string>
+    <string name="spot_wire">Wire</string>
+    <string name="spot_wire_n">Wire %1$d</string>
+    <string name="spot_reset">Reset</string>
+
+    <string name="profiles_map_wire">Mapa: %1$s | Wire %2$d</string>
+
+    <string name="license_err_no_sessions">No cuenta con sesiones disponibles para ejecución</string>
+    <string name="license_err_invalid">Licencia inválida</string>
+    <string name="license_err_revoked">Licencia revocada</string>
+    <string name="license_err_expired">Licencia expirada</string>
+    <string name="license_err_session_released">Sesión liberada desde el panel — bot detenido</string>
+    <string name="license_err_missing_key">Configura tu licencia en el menú Licencia</string>
+    <string name="license_err_network">No se pudo conectar al servidor de licencias</string>
+    <string name="license_err_generic">Error de licencia (%1$s)</string>
+    <string name="license_err_no_session_id">Respuesta sin session_id</string>
+    <string name="license_err_unexpected">Respuesta inesperada del servidor</string>
+
+    <string name="telegram_err_chat_id">Configura tu Chat ID</string>
+    <string name="telegram_err_token_missing">Token del bot no embebido en este build</string>
+    <string name="telegram_err_not_configured">Telegram no configurado</string>
+    <string name="telegram_err_token_blank">Token del bot no configurado</string>
+    <string name="telegram_err_network">No se pudo conectar con Telegram</string>
+    <string name="telegram_test_message">MU Amaizing Bot — prueba OK.\nRecibirás avisos aquí si el juego se desconecta o entra en mantenimiento.</string>
+    <string name="telegram_alert_prefix">⚠️ MU Bot — %1$s</string>
+    <string name="telegram_alert_no_hud">HUD no detectado (%1$d×%2$ds) — posible desconexión o mantenimiento</string>
+    <string name="telegram_alert_no_capture">Sin captura de pantalla — posible desconexión o mantenimiento</string>
+    <string name="telegram_alert_repeated_errors">Bot detenido por errores repetidos: %1$s</string>
+    <string name="telegram_alert_recovered">Juego recuperado — HUD detectado de nuevo</string>
+
+    <string name="overlay_title">MU Bot</string>
+    <string name="overlay_bosses_killed">Bosses killed: %1$d</string>
+    <string name="overlay_input_off">Input off</string>
+    <string name="overlay_capture_off">Captura off</string>
+    <string name="overlay_capture_wait">Captura…</string>
+    <string name="overlay_ready">Listo</string>
+    <string name="overlay_play">Play</string>
+    <string name="overlay_pause">Pause</string>
+    <string name="overlay_stop">Stop</string>
+    <string name="overlay_map">Map</string>
+    <string name="overlay_cast">Cast</string>
+    <string name="overlay_reset">Reset</string>
+    <string name="overlay_elf_cooldown_min">Elf: %1$dm %2$02ds</string>
+    <string name="overlay_elf_cooldown_sec">Elf: %1$ds</string>
+    <string name="overlay_elf_attempts">Elf: %1$d/%2$d</string>
+    <string name="overlay_elf_ok">Elf: ok</string>
+    <string name="overlay_cast_unmapped">Cast: sin map</string>
+    <string name="overlay_cast_now">Cast: ya!</string>
+    <string name="overlay_cast_wait">Cast: %1$ds</string>
+    <string name="overlay_cast_ready">Cast: listo</string>
+    <string name="overlay_cast_manual">Cast: manual</string>
+    <string name="overlay_retry_in">Retry en %1$ds</string>
+    <string name="overlay_expire_in">Expire en %1$ds</string>
+    <string name="overlay_restarting">Reiniciando…</string>
+    <string name="overlay_retry_exhausted">Auto-retry agotado (%1$d/%2$d)</string>
+    <string name="overlay_retry_capture_fail">Retry falló (captura)</string>
 </resources>

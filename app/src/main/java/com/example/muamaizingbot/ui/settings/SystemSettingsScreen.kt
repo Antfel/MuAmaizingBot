@@ -1,5 +1,6 @@
 package com.example.muamaizingbot.ui.settings
 
+import android.app.Activity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,6 +17,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,9 +25,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.R
+import com.example.muamaizingbot.settings.AppLanguage
+import com.example.muamaizingbot.settings.AppSettingsStore
 import com.example.muamaizingbot.telegram.TelegramEndpoint
 import com.example.muamaizingbot.telegram.TelegramNotifier
 import com.example.muamaizingbot.telegram.TelegramSendResult
@@ -47,6 +54,10 @@ fun SystemSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val language by AppSettingsStore.language.collectAsState()
+
     var speedMode by remember { mutableStateOf(BotSpeedMode.NORMAL) }
     var chatId by remember { mutableStateOf(TelegramStore.chatId()) }
     var alertsEnabled by remember { mutableStateOf(TelegramStore.alertsEnabled()) }
@@ -54,6 +65,8 @@ fun SystemSettingsScreen(
     var testStatus by remember { mutableStateOf<String?>(null) }
     var testing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val savedLabel = stringResource(R.string.saved)
+    val testOkLabel = stringResource(R.string.system_test_ok)
 
     Column(
         modifier = modifier
@@ -63,27 +76,51 @@ fun SystemSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "Sistema",
+            text = stringResource(R.string.system_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
 
         Text(
-            text = "Alertas Telegram",
+            text = stringResource(R.string.system_language),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "Avisos si el juego se desconecta o entra en mantenimiento. " +
-                "El token del bot va embebido en la app; solo configuras tu Chat ID.",
+            text = stringResource(R.string.system_language_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AppLanguage.entries.forEach { lang ->
+                FilterChip(
+                    selected = language == lang,
+                    onClick = {
+                        if (language != lang) {
+                            AppSettingsStore.setLanguage(lang)
+                            activity?.recreate()
+                        }
+                    },
+                    label = { Text(lang.nativeLabel) },
+                )
+            }
+        }
 
         Text(
-            text = "1. Abre @MuAmaizingAlertBot en Telegram\n" +
-                "2. Toca Start — el bot te responderá tu Chat ID\n" +
-                "3. Pégalo abajo y usa «Probar Telegram»",
+            text = stringResource(R.string.system_telegram_title),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = stringResource(R.string.system_telegram_hint),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = stringResource(R.string.system_telegram_steps),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -93,7 +130,7 @@ fun SystemSettingsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text("Alertas activas")
+            Text(stringResource(R.string.system_alerts_enabled))
             Switch(
                 checked = alertsEnabled,
                 onCheckedChange = {
@@ -111,7 +148,7 @@ fun SystemSettingsScreen(
                 savedHint = ""
                 testStatus = null
             },
-            label = { Text("Chat ID") },
+            label = { Text(stringResource(R.string.system_chat_id)) },
             placeholder = { Text("6054316335") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -126,12 +163,12 @@ fun SystemSettingsScreen(
                 onClick = {
                     TelegramStore.setChatId(chatId)
                     chatId = TelegramStore.chatId()
-                    savedHint = "Guardado"
+                    savedHint = savedLabel
                     testStatus = null
                 },
                 modifier = Modifier.weight(1f),
             ) {
-                Text("Guardar Chat ID")
+                Text(stringResource(R.string.system_save_chat_id))
             }
             OutlinedButton(
                 onClick = {
@@ -145,7 +182,7 @@ fun SystemSettingsScreen(
                         }
                         testing = false
                         testStatus = when (result) {
-                            TelegramSendResult.Ok -> "Mensaje enviado — revisa Telegram"
+                            TelegramSendResult.Ok -> testOkLabel
                             is TelegramSendResult.Failed -> result.message
                         }
                     }
@@ -153,7 +190,13 @@ fun SystemSettingsScreen(
                 enabled = !testing && chatId.isNotBlank(),
                 modifier = Modifier.weight(1f),
             ) {
-                Text(if (testing) "Enviando…" else "Probar Telegram")
+                Text(
+                    if (testing) {
+                        stringResource(R.string.system_testing)
+                    } else {
+                        stringResource(R.string.system_test_telegram)
+                    },
+                )
             }
         }
 
@@ -168,7 +211,7 @@ fun SystemSettingsScreen(
         testStatus?.let { status ->
             Text(
                 text = status,
-                color = if (status.startsWith("Mensaje enviado")) {
+                color = if (status == testOkLabel) {
                     MaterialTheme.colorScheme.primary
                 } else {
                     MaterialTheme.colorScheme.error
@@ -179,20 +222,19 @@ fun SystemSettingsScreen(
 
         if (!TelegramEndpoint.isConfigured()) {
             Text(
-                text = "Este build no tiene token de Telegram embebido (solo desarrollo).",
+                text = stringResource(R.string.system_token_missing),
                 color = MaterialTheme.colorScheme.error,
                 style = MaterialTheme.typography.bodySmall,
             )
         }
 
         Text(
-            text = "Velocidad del bot",
+            text = stringResource(R.string.system_speed_title),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            text = "Normal usa los delays actuales. Rápido acortará esperas en algunos " +
-                "procesos (aún en análisis — no aplica cambios por ahora).",
+            text = stringResource(R.string.system_speed_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -204,26 +246,26 @@ fun SystemSettingsScreen(
             FilterChip(
                 selected = speedMode == BotSpeedMode.NORMAL,
                 onClick = { speedMode = BotSpeedMode.NORMAL },
-                label = { Text("Normal") },
+                label = { Text(stringResource(R.string.system_speed_normal)) },
             )
             FilterChip(
                 selected = speedMode == BotSpeedMode.FAST,
                 onClick = { speedMode = BotSpeedMode.FAST },
-                label = { Text("Rápido") },
+                label = { Text(stringResource(R.string.system_speed_fast)) },
             )
         }
 
         Text(
             text = when (speedMode) {
-                BotSpeedMode.NORMAL -> "Seleccionado: Normal (comportamiento actual)."
-                BotSpeedMode.FAST -> "Seleccionado: Rápido — pendiente de implementar."
+                BotSpeedMode.NORMAL -> stringResource(R.string.system_speed_selected_normal)
+                BotSpeedMode.FAST -> stringResource(R.string.system_speed_selected_fast)
             },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         TextButton(onClick = onBack) {
-            Text("Volver")
+            Text(stringResource(R.string.action_back))
         }
     }
 }

@@ -1,0 +1,17 @@
+---
+description: Recovery and maintenance paths must follow active bot mode, not farm-spot defaults.
+globs: app/src/main/java/com/example/muamaizingbot/bot/**/*.kt
+alwaysApply: false
+---
+
+# Mode-aware recovery
+
+When touching recovery, elf/potion/inventory return, or loop navigation:
+
+- **farm / elf_buff_giver** → farm map + spot
+- **farm_bosses** → boss checkpoint (map + wire), never `goToActiveFarmSpot` as generic recovery
+- **elf_buff_war** → war post; skip farm map/spot assumptions
+
+`MapCheckActions.isInConfiguredMap()` is mode-aware. Do **not** combine “on configured map” with **farm spot coordinate** checks while in `farm_bosses` or war.
+
+Prefer `BotRecoveryActions.recoverFromLostState` (mode-aware) over bare `navigateToFarmWithRetry` from shared maintenance code.

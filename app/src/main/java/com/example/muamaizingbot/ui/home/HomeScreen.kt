@@ -28,12 +28,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.accessibility.AccessibilityHelper
 import com.example.muamaizingbot.accessibility.BotAccessibilityService
 import com.example.muamaizingbot.bot.BotController
@@ -87,70 +89,79 @@ fun HomeScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Inicio",
+            text = stringResource(R.string.home_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.SemiBold,
         )
 
         Text(
-            text = "Usa el menú lateral (☰) para perfiles y farm spot. Emulador: 1280×720 @ 240 DPI.",
+            text = stringResource(R.string.home_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         StatusCard(
-            title = "Perfil",
-            value = currentProfile?.displayName ?: "Ninguno",
+            title = stringResource(R.string.home_profile),
+            value = currentProfile?.displayName ?: stringResource(R.string.label_none),
         )
 
         StatusCard(
-            title = "Modo",
-            value = currentProfile?.let { BotMode.label(it.botMode) } ?: "—",
+            title = stringResource(R.string.home_mode),
+            value = currentProfile?.let { stringResource(BotMode.labelRes(it.botMode)) }
+                ?: stringResource(R.string.label_em_dash),
         )
 
         StatusCard(
             title = when {
-                currentProfile?.isFarmBossesMode() == true -> "Boss maps"
-                currentProfile?.isElfBuffWarMode() == true -> "War event post"
-                currentProfile?.isElfBuffGiverMode() == true -> "Buff post"
-                else -> "Farm spot"
+                currentProfile?.isFarmBossesMode() == true -> stringResource(R.string.home_boss_maps)
+                currentProfile?.isElfBuffWarMode() == true -> stringResource(R.string.home_war_post)
+                currentProfile?.isElfBuffGiverMode() == true -> stringResource(R.string.home_buff_post)
+                else -> stringResource(R.string.home_farm_spot)
             },
             value = when {
                 currentProfile?.isFarmBossesMode() == true -> {
                     val n = currentProfile?.killBossesConfig?.maps?.size ?: 0
-                    if (n == 0) "Sin mapas" else "$n mapa${if (n == 1) "" else "s"}"
+                    if (n == 0) {
+                        stringResource(R.string.home_not_configured)
+                    } else {
+                        stringResource(R.string.home_maps_configured, n)
+                    }
                 }
                 else -> farmSpot?.summaryLabel(
                     MapDefinitionRepository.getById(farmSpot?.map.orEmpty())?.name
-                ) ?: "Sin configurar"
+                ) ?: stringResource(R.string.home_not_configured)
             },
         )
 
         StatusCard(
-            title = "Bot",
-            value = botState.label,
+            title = stringResource(R.string.home_bot),
+            value = stringResource(botState.labelRes()),
         )
 
         StatusCard(
-            title = "Accesibilidad",
+            title = stringResource(R.string.home_accessibility),
             value = when {
-                BotAccessibilityService.isConnected -> "Conectado"
-                accessibilityEnabled -> "Activado (reinicia servicio)"
-                else -> "Pendiente"
+                BotAccessibilityService.isConnected -> stringResource(R.string.home_accessibility_connected)
+                accessibilityEnabled -> stringResource(R.string.home_accessibility_restart)
+                else -> stringResource(R.string.home_accessibility_pending)
             },
         )
 
         StatusCard(
-            title = "Captura",
-            value = if (captureActive) "Activa" else "Inactiva",
+            title = stringResource(R.string.home_capture),
+            value = if (captureActive) {
+                stringResource(R.string.home_capture_on)
+            } else {
+                stringResource(R.string.home_capture_off)
+            },
         )
 
         StatusCard(
-            title = "Overlay",
+            title = stringResource(R.string.home_overlay),
             value = when {
-                !overlayGranted -> "Permiso pendiente"
-                overlayRunning -> "Activo"
-                else -> "Inactivo"
+                !overlayGranted -> stringResource(R.string.home_overlay_denied)
+                overlayRunning -> stringResource(R.string.home_overlay_running)
+                else -> stringResource(R.string.home_overlay_stopped)
             },
         )
 
@@ -159,7 +170,7 @@ fun HomeScreen(
                 onClick = { context.startActivity(AccessibilityHelper.createSettingsIntent()) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Activar accesibilidad")
+                Text(stringResource(R.string.home_open_accessibility))
             }
         }
 
@@ -168,7 +179,13 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = !captureActive,
         ) {
-            Text(if (captureActive) "Captura activa" else "Iniciar captura")
+            Text(
+                if (captureActive) {
+                    stringResource(R.string.home_capture_active)
+                } else {
+                    stringResource(R.string.home_request_capture)
+                },
+            )
         }
 
         OutlinedButton(
@@ -176,7 +193,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = captureActive,
         ) {
-            Text("Detener captura")
+            Text(stringResource(R.string.home_stop_capture))
         }
 
         if (!overlayGranted) {
@@ -184,7 +201,7 @@ fun HomeScreen(
                 onClick = { context.startActivity(OverlayPermission.createSettingsIntent(context)) },
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text("Conceder permiso overlay")
+                Text(stringResource(R.string.home_grant_overlay))
             }
         }
 
@@ -205,7 +222,7 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = overlayGranted,
         ) {
-            Text("Mostrar overlay")
+            Text(stringResource(R.string.home_start_overlay))
         }
 
         OutlinedButton(
@@ -217,13 +234,13 @@ fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = overlayRunning,
         ) {
-            Text("Ocultar overlay")
+            Text(stringResource(R.string.home_stop_overlay))
         }
 
         Spacer(modifier = Modifier.height(4.dp))
 
         Text(
-            text = "1) Configura perfil y spot en el menú.\n2) Activa accesibilidad y captura.\n3) Overlay → Start para farm.",
+            text = stringResource(R.string.home_steps),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

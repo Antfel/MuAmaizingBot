@@ -1,8 +1,10 @@
 package com.example.muamaizingbot.bot.maintenance
 
 import android.util.Log
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.settings.UiStrings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -36,12 +38,16 @@ object ElfBuffSeekGate {
                 val totalSec = ((remainingCooldownMs + 999L) / 1000L).coerceAtLeast(1)
                 val min = totalSec / 60
                 val sec = totalSec % 60
-                return if (min > 0) "Elf: ${min}m ${sec.toString().padStart(2, '0')}s" else "Elf: ${sec}s"
+                return if (min > 0) {
+                    UiStrings.get(R.string.overlay_elf_cooldown_min, min, sec)
+                } else {
+                    UiStrings.get(R.string.overlay_elf_cooldown_sec, sec)
+                }
             }
             if (failedAttempts > 0) {
-                return "Elf: $failedAttempts/$maxAttempts"
+                return UiStrings.get(R.string.overlay_elf_attempts, failedAttempts, maxAttempts)
             }
-            return "Elf: ok"
+            return UiStrings.get(R.string.overlay_elf_ok)
         }
     }
 

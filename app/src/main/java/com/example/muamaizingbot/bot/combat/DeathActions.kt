@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.combat
 
 import android.util.Log
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
+import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
 import kotlinx.coroutines.delay
@@ -64,6 +65,8 @@ object DeathActions {
                 return true
             }
 
+            TrustedCurrentMapMemory.invalidate()
+            Log.d(TAG, "[MAP_MEMORY] invalidate reason=death")
             Log.d(TAG, "[DEATH] reviving attempt=${attempt + 1} at ($REVIVE_X,$REVIVE_Y)")
             if (!NavigationVision.tap(REVIVE_X, REVIVE_Y)) {
                 Log.w(TAG, "[DEATH] revive tap failed attempt=${attempt + 1}")
@@ -94,6 +97,8 @@ object DeathActions {
             Log.d(TAG, "[DEATH] already alive (skip auto-revive wait)")
             return true
         }
+        TrustedCurrentMapMemory.invalidate()
+        Log.d(TAG, "[MAP_MEMORY] invalidate reason=death_auto_revive")
         Log.d(TAG, "[DEATH] waiting auto-revive up to ${timeoutMs}ms (lockout=${DEATH_LOCKOUT_MS}ms)")
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {

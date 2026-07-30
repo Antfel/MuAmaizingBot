@@ -64,6 +64,21 @@ object CurrentMapOcr {
     /** HUD miss / garbage / empty — trigger open-map OCR fallback. */
     fun isWeak(result: ReadResult): Boolean = !result.matched
 
+    /**
+     * Resolves OCR text to a known map. A recognized map different from the expected
+     * destination is strong evidence of being elsewhere, not weak OCR.
+     */
+    fun resolveKnownMapId(
+        raw: String,
+        knownMaps: Iterable<Pair<String, String>>,
+    ): String? {
+        if (sanitizeHudText(raw).isBlank()) return null
+        return knownMaps
+            .filter { (_, name) -> matchesExpected(raw, name) }
+            .maxByOrNull { (_, name) -> compress(name).length }
+            ?.first
+    }
+
     suspend fun isOnMap(frame: Bitmap, mapDef: MapDefinition): Boolean {
         return read(frame, mapDef).matched
     }
@@ -163,6 +178,16 @@ object CurrentMapOcr {
             idx = ocr.indexOf(exp, idx + 1)
         }
 
+        // Floorless map names: tolerate one OCR substitution in the expected-length
+        // name window (observed stable HUD typo: "Corrupled Lands").
+        // Numbered maps stay exact so sibling floors cannot cross-match.
+        if (trailingNumber(expectedName) == null &&
+            exp.length >= 8 &&
+            ocr.windowed(exp.length).any { differsByAtMostOneChar(it, exp) }
+        ) {
+            return true
+        }
+
         // Fallback: same trailing floor number + base name tokens.
         val expNum = trailingNumber(expectedName) ?: return false
         val ocrNum = trailingNumber(cleaned) ?: return false
@@ -170,6 +195,17 @@ object CurrentMapOcr {
         val expBase = compress(expectedName.replace(Regex("""\d+\s*$"""), ""))
         val ocrBase = compress(cleaned.replace(Regex("""\d+\s*$"""), ""))
         return expBase.length >= 4 && ocrBase.contains(expBase)
+    }
+
+    private fun differsByAtMostOneChar(left: String, right: String): Boolean {
+        if (left.length != right.length) return false
+        var differences = 0
+        for (index in left.indices) {
+            if (left[index] != right[index] && ++differences > 1) {
+                return false
+            }
+        }
+        return true
     }
 
     /** Drop wire-chip bleed (“…2-6Switch”) and bracket noise. */

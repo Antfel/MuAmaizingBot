@@ -51,7 +51,8 @@ object ElfBuffNavigationActions {
         }
 
         if (!goToElfBuff(elfLocation)) {
-            Log.w(TAG, "[ELF] route to buff failed; recovery checkpoint")
+            // Mode-aware: farm → farm spot; farm_bosses → boss checkpoint; war → war post.
+            Log.w(TAG, "[ELF] route to buff failed; mode-aware recovery checkpoint")
             return BotRecoveryActions.recoverFromLostState("elf-route-failed")
         }
 

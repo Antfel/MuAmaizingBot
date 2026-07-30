@@ -1,6 +1,8 @@
 package com.example.muamaizingbot.telegram
 
 import android.util.Log
+import com.example.muamaizingbot.R
+import com.example.muamaizingbot.settings.UiStrings
 import org.json.JSONObject
 import java.io.BufferedReader
 import java.io.InputStreamReader
@@ -23,31 +25,31 @@ object TelegramNotifier {
     fun sendTestMessage(): TelegramSendResult {
         val chatId = TelegramStore.chatId()
         if (chatId.isBlank()) {
-            return TelegramSendResult.Failed("Configura tu Chat ID")
+            return TelegramSendResult.Failed(UiStrings.get(R.string.telegram_err_chat_id))
         }
         if (!TelegramEndpoint.isConfigured()) {
-            return TelegramSendResult.Failed("Token del bot no embebido en este build")
+            return TelegramSendResult.Failed(UiStrings.get(R.string.telegram_err_token_missing))
         }
         return sendMessage(
             chatId = chatId,
-            text = "MU Amaizing Bot — prueba OK.\nRecibirás avisos aquí si el juego se desconecta o entra en mantenimiento.",
+            text = UiStrings.get(R.string.telegram_test_message),
         )
     }
 
     fun sendDisconnectAlert(reason: String): TelegramSendResult {
         if (!TelegramStore.isReadyForSend()) {
-            return TelegramSendResult.Failed("Telegram no configurado")
+            return TelegramSendResult.Failed(UiStrings.get(R.string.telegram_err_not_configured))
         }
         return sendMessage(
             chatId = TelegramStore.chatId(),
-            text = "⚠️ MU Bot — $reason",
+            text = UiStrings.get(R.string.telegram_alert_prefix, reason),
         )
     }
 
     private fun sendMessage(chatId: String, text: String): TelegramSendResult {
         val token = TelegramEndpoint.botToken()
         if (token.isBlank()) {
-            return TelegramSendResult.Failed("Token del bot no configurado")
+            return TelegramSendResult.Failed(UiStrings.get(R.string.telegram_err_token_blank))
         }
 
         var conn: HttpURLConnection? = null
@@ -80,7 +82,7 @@ object TelegramNotifier {
             }
         } catch (t: Throwable) {
             Log.w(TAG, "sendMessage error: ${t.message}")
-            TelegramSendResult.Failed("No se pudo conectar con Telegram")
+            TelegramSendResult.Failed(UiStrings.get(R.string.telegram_err_network))
         } finally {
             conn?.disconnect()
         }

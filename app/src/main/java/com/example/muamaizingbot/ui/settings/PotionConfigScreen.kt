@@ -20,8 +20,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.profile.ProfileRepository
 
 @Composable
@@ -43,6 +45,8 @@ fun PotionConfigScreen(
         mutableIntStateOf(profile?.mpPotionStacks ?: 10)
     }
     var statusMessage by remember { mutableStateOf("") }
+    val profileMissing = stringResource(R.string.potion_profile_missing)
+    val savedMessage = stringResource(R.string.potion_saved)
 
     Column(
         modifier = modifier
@@ -51,7 +55,7 @@ fun PotionConfigScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "Config Pociones",
+            text = stringResource(R.string.potion_config_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
@@ -69,11 +73,11 @@ fun PotionConfigScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Recuperación automática",
+                    text = stringResource(R.string.potion_auto_recovery),
                     fontWeight = FontWeight.Medium,
                 )
                 Text(
-                    text = "Compra pociones cuando HP o MP estén vacíos.",
+                    text = stringResource(R.string.potion_auto_recovery_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -85,13 +89,13 @@ fun PotionConfigScreen(
         }
 
         StackField(
-            label = "Stacks HP a comprar",
+            label = stringResource(R.string.potion_stacks_hp),
             value = hpStacks,
             onValueChange = { hpStacks = it.coerceIn(1, 99) },
         )
 
         StackField(
-            label = "Stacks MP a comprar",
+            label = stringResource(R.string.potion_stacks_mp),
             value = mpStacks,
             onValueChange = { mpStacks = it.coerceIn(1, 99) },
         )
@@ -108,7 +112,7 @@ fun PotionConfigScreen(
             onClick = {
                 val current = profile
                 if (current == null) {
-                    statusMessage = "Perfil no encontrado"
+                    statusMessage = profileMissing
                     return@TextButton
                 }
                 ProfileRepository.saveProfile(
@@ -118,19 +122,19 @@ fun PotionConfigScreen(
                         mpPotionStacks = mpStacks,
                     )
                 )
-                statusMessage = "Configuración guardada"
+                statusMessage = savedMessage
             },
             modifier = Modifier.fillMaxWidth(),
             enabled = profile != null,
         ) {
-            Text("Guardar")
+            Text(stringResource(R.string.action_save))
         }
 
         OutlinedButton(
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Volver")
+            Text(stringResource(R.string.action_back))
         }
     }
 }

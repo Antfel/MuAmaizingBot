@@ -77,4 +77,33 @@ object CoordinateTextParser {
         val corrected = valueStr.substring(1).toIntOrNull() ?: return value
         return if (corrected in minValue..maxValue) corrected else value
     }
+
+    /**
+     * HUD OCR often drops digits from a known good axis (e.g. 161 → 61 / 16 / 6).
+     * Only when [read] is a proper shorter fragment of [expected], not equal.
+     */
+    fun looksLikeTruncatedAxis(read: Int, expected: Int): Boolean {
+        if (read == expected) return false
+        val r = read.toString()
+        val e = expected.toString()
+        if (r.length >= e.length) return false
+        return e.startsWith(r) || e.endsWith(r) || e.contains(r)
+    }
+
+    /**
+     * True when at least one axis looks truncated and both axes remain plausible
+     * versus the farm-spot target. This avoids treating a real move such as
+     * `(1,190)` as sticky only because `1` is contained in target `161`.
+     */
+    fun looksLikeTruncatedHudRead(
+        current: Pair<Int, Int>,
+        target: Pair<Int, Int>,
+        tolerance: Int = 0,
+    ): Boolean {
+        val xTruncated = looksLikeTruncatedAxis(current.first, target.first)
+        val yTruncated = looksLikeTruncatedAxis(current.second, target.second)
+        val xPlausible = xTruncated || kotlin.math.abs(current.first - target.first) <= tolerance
+        val yPlausible = yTruncated || kotlin.math.abs(current.second - target.second) <= tolerance
+        return (xTruncated || yTruncated) && xPlausible && yPlausible
+    }
 }

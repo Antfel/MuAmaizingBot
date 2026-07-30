@@ -11,13 +11,16 @@ import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.R
 
 @Composable
 fun ConfigDrawerContent(
     profileLabel: String,
     farmSpotLabel: String,
+    onOpenHome: () -> Unit,
     onOpenProfiles: () -> Unit,
     onOpenLicense: () -> Unit,
     onOpenSystem: () -> Unit,
@@ -29,7 +32,7 @@ fun ConfigDrawerContent(
             .padding(horizontal = 16.dp, vertical = 24.dp),
     ) {
         Text(
-            text = "Configuración",
+            text = stringResource(R.string.drawer_title),
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold,
         )
@@ -50,24 +53,29 @@ fun ConfigDrawerContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         NavigationDrawerItem(
-            label = { Text("Perfiles") },
+            label = { Text(stringResource(R.string.drawer_home)) },
+            selected = false,
+            onClick = onOpenHome,
+        )
+        NavigationDrawerItem(
+            label = { Text(stringResource(R.string.drawer_profiles)) },
             selected = false,
             onClick = onOpenProfiles,
         )
         NavigationDrawerItem(
-            label = { Text("Sistema") },
+            label = { Text(stringResource(R.string.drawer_system)) },
             selected = false,
             onClick = onOpenSystem,
         )
         NavigationDrawerItem(
-            label = { Text("Licencia") },
+            label = { Text(stringResource(R.string.drawer_license)) },
             selected = false,
             onClick = onOpenLicense,
         )
 
         Spacer(modifier = Modifier.height(16.dp))
         Text(
-            text = "Contrato fijo: emulador 1280×720 @ 240 DPI.",
+            text = stringResource(R.string.drawer_dpi_note),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

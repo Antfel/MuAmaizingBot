@@ -1,7 +1,9 @@
 package com.example.muamaizingbot.bot.disconnect
 
 import android.util.Log
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.bot.BotDiagnosticJournal
+import com.example.muamaizingbot.settings.UiStrings
 import com.example.muamaizingbot.telegram.TelegramEndpoint
 import com.example.muamaizingbot.telegram.TelegramNotifier
 import com.example.muamaizingbot.telegram.TelegramSendResult
@@ -107,7 +109,7 @@ object DisconnectDetector {
         val frame = NavigationVision.captureFrame()
         if (frame == null) {
             noteBlank("no_frame")
-            return maybeAlert("Sin captura de pantalla — posible desconexión o mantenimiento")
+            return maybeAlert(UiStrings.get(R.string.telegram_alert_no_capture))
         }
 
         val hit = HUD_PROBES.firstOrNull { (path, thresh) ->
@@ -129,8 +131,11 @@ object DisconnectDetector {
 
         noteBlank("no_hud")
         return maybeAlert(
-            "HUD no detectado (${consecutiveBlanks}×${CHECK_INTERVAL_MS / 1000}s) — " +
-                "posible desconexión o mantenimiento",
+            UiStrings.get(
+                R.string.telegram_alert_no_hud,
+                consecutiveBlanks,
+                CHECK_INTERVAL_MS / 1000,
+            ),
         )
     }
 
@@ -141,7 +146,7 @@ object DisconnectDetector {
 
         withContext(Dispatchers.IO) {
             val result = TelegramNotifier.sendDisconnectAlert(
-                "Bot detenido por errores repetidos: $reason",
+                UiStrings.get(R.string.telegram_alert_repeated_errors, reason),
             )
             if (result is TelegramSendResult.Ok) {
                 lastAlertMs = now
@@ -183,7 +188,7 @@ object DisconnectDetector {
 
     private suspend fun sendRecoveryNotice() {
         withContext(Dispatchers.IO) {
-            TelegramNotifier.sendDisconnectAlert("Juego recuperado — HUD detectado de nuevo")
+            TelegramNotifier.sendDisconnectAlert(UiStrings.get(R.string.telegram_alert_recovered))
         }
         alertSentThisSession = false
         Log.d(TAG, "recovery notice sent")

@@ -3,6 +3,7 @@ package com.example.muamaizingbot.bot
 import android.util.Log
 import com.example.muamaizingbot.bot.actions.ActionQueue
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
+import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.license.LicenseGate
 import kotlinx.coroutines.CoroutineScope
@@ -86,6 +87,8 @@ object BotController {
 
         startJob?.cancel()
         startJob = scope.launch {
+            TrustedCurrentMapMemory.invalidate()
+            Log.d(TAG, "[MAP_MEMORY] invalidate reason=cold_start")
             Log.d(TAG, "[BOT] cold start acquire from=$previous")
             BotDiagnosticJournal.record(TAG, "cold start acquire")
             val ok = LicenseGate.acquire()
@@ -136,6 +139,8 @@ object BotController {
         autoResumeOnExpire = false
         pausedAtMs = 0L
         coldStartRequired = true
+        TrustedCurrentMapMemory.invalidate()
+        Log.d(TAG, "[MAP_MEMORY] invalidate reason=stop")
         BotWorker.destroy()
         ActionQueue.clear()
         _state.value = BotRuntimeState.IDLE
@@ -161,6 +166,8 @@ object BotController {
         autoResumeOnExpire = false
         pausedAtMs = 0L
         coldStartRequired = true
+        TrustedCurrentMapMemory.invalidate()
+        Log.d(TAG, "[MAP_MEMORY] invalidate reason=license_revoke")
         BotWorker.destroy()
         ActionQueue.clear()
         _state.value = BotRuntimeState.IDLE
@@ -191,6 +198,8 @@ object BotController {
         autoResumeOnExpire = false
         pausedAtMs = 0L
         coldStartRequired = true
+        TrustedCurrentMapMemory.invalidate()
+        Log.d(TAG, "[MAP_MEMORY] invalidate reason=reset")
         BotWorker.destroy()
         ActionQueue.clear()
         _state.value = BotRuntimeState.IDLE
@@ -241,6 +250,8 @@ object BotController {
 
             Log.w(TAG, "[BOT] pause/error expired (${PAUSE_EXPIRE_MS}ms) reason=$reason → destroy worker")
             BotDiagnosticJournal.record(TAG, "expire destroy reason=$reason autoResume=$resume")
+            TrustedCurrentMapMemory.invalidate()
+            Log.d(TAG, "[MAP_MEMORY] invalidate reason=pause_expired")
             BotWorker.destroy()
             coldStartRequired = true
             ActionQueue.clear()

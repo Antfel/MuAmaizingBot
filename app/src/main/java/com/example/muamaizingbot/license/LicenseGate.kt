@@ -3,7 +3,9 @@ package com.example.muamaizingbot.license
 import android.content.Context
 import android.util.Log
 import com.example.muamaizingbot.BuildConfig
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.bot.BotController
+import com.example.muamaizingbot.settings.UiStrings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -80,7 +82,7 @@ object LicenseGate {
                 false
             }
             is LicenseApiResult.Ok -> {
-                setFail("INVALID_RESPONSE", "Respuesta inesperada del servidor")
+                setFail("INVALID_RESPONSE", UiStrings.get(R.string.license_err_unexpected))
                 false
             }
         }
@@ -159,7 +161,7 @@ object LicenseGate {
     private fun handleLeaseRevoked(code: String, message: String) {
         val userMsg = when (code) {
             "SESSION_NOT_FOUND", "SESSION_EXPIRED" ->
-                "Sesión liberada desde el panel — bot detenido"
+                UiStrings.get(R.string.license_err_session_released)
             else -> message.ifBlank { LicenseApiClient.userMessageForCode(code) }
         }
         Log.w(TAG, "lease revoked code=$code → stop bot")

@@ -17,11 +17,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
@@ -67,10 +69,11 @@ fun AppNavigation(
     val currentProfile by ProfileRepository.currentProfile.collectAsState()
     val farmSpot by LocationRepository.farmSpot.collectAsState()
 
-    val profileLabel = currentProfile?.displayName ?: "Sin perfil activo"
+    val profileLabel = currentProfile?.displayName
+        ?: stringResource(R.string.nav_no_active_profile)
     val farmSpotLabel = farmSpot?.summaryLabel(
         MapDefinitionRepository.getById(farmSpot?.map.orEmpty())?.name
-    ) ?: "Farm spot sin configurar"
+    ) ?: stringResource(R.string.nav_farm_spot_unset)
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -79,6 +82,15 @@ fun AppNavigation(
                 ConfigDrawerContent(
                     profileLabel = profileLabel,
                     farmSpotLabel = farmSpotLabel,
+                    onOpenHome = {
+                        scope.launch {
+                            drawerState.close()
+                            navController.navigate(Routes.HOME) {
+                                popUpTo(Routes.HOME) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        }
+                    },
                     onOpenProfiles = {
                         scope.launch {
                             drawerState.close()
@@ -105,12 +117,12 @@ fun AppNavigation(
         Scaffold(
             topBar = {
                 TopAppBar(
-                    title = { Text("MU Amaizing Bot") },
+                    title = { Text(stringResource(R.string.app_name)) },
                     navigationIcon = {
                         IconButton(
                             onClick = { scope.launch { drawerState.open() } },
                         ) {
-                            Icon(Icons.Default.Menu, contentDescription = "Menú")
+                            Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
                         }
                     },
                 )

@@ -245,6 +245,8 @@ object NavigationOrchestrator {
             return true
         }
 
+        TrustedCurrentMapMemory.invalidate()
+        Log.d(TAG, "[MAP_MEMORY] invalidate reason=map_navigation")
         cleanGameUi()
 
         if (!MapWindowActions.openMapWindow()) {

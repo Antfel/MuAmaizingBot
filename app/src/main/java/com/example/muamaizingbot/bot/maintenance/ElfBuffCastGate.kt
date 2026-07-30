@@ -1,7 +1,9 @@
 package com.example.muamaizingbot.bot.maintenance
 
 import android.util.Log
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.profile.BotProfile
+import com.example.muamaizingbot.settings.UiStrings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,13 +28,17 @@ object ElfBuffCastGate {
             get() = hasSkillCoords && (forcePending || remainingMs <= 0L)
 
         fun label(): String {
-            if (!hasSkillCoords) return "Cast: sin map"
-            if (forcePending) return "Cast: ya!"
+            if (!hasSkillCoords) return UiStrings.get(R.string.overlay_cast_unmapped)
+            if (forcePending) return UiStrings.get(R.string.overlay_cast_now)
             if (remainingMs > 0L) {
                 val sec = ((remainingMs + 999L) / 1000L).coerceAtLeast(1)
-                return "Cast: ${sec}s"
+                return UiStrings.get(R.string.overlay_cast_wait, sec)
             }
-            return if (autoCastEnabled) "Cast: listo" else "Cast: manual"
+            return if (autoCastEnabled) {
+                UiStrings.get(R.string.overlay_cast_ready)
+            } else {
+                UiStrings.get(R.string.overlay_cast_manual)
+            }
         }
     }
 

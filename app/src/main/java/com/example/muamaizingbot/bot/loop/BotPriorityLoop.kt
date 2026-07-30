@@ -33,6 +33,7 @@ import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.profile.normalizedBotMode
+import com.example.muamaizingbot.vision.coordinate.CoordinateTextParser
 import kotlin.math.abs
 import kotlinx.coroutines.delay
 
@@ -47,12 +48,15 @@ object BotPriorityLoop {
      * so [BotAutoRestart] can re-run startup navigation.
      */
     private const val WRONG_MAP_SOFT_LIMIT = 8
+    /** A single plausible-but-wrong HUD read must not reopen the map after a confirmed spot. */
+    private const val OFF_SPOT_CONFIRMATION_READS = 2
 
     private var consecutiveFarmSoftFails = 0
     private var consecutiveWrongMapSoftFails = 0
     /** Last confirmed on-spot from valid HUD coords (sticky across OCR misses). */
     private var lastSpotOk = false
     private var consecutiveCoordMisses = 0
+    private var consecutiveValidOffSpotReads = 0
 
     enum class IterationResult {
         OK,
@@ -73,6 +77,7 @@ object BotPriorityLoop {
             consecutiveWrongMapSoftFails = 0
             lastSpotOk = false
             consecutiveCoordMisses = 0
+            consecutiveValidOffSpotReads = 0
             if (!DeathActions.recoverIfDead()) {
                 return IterationResult.ERROR
             }
@@ -314,13 +319,15 @@ object BotPriorityLoop {
     /**
      * On-spot only when HUD coords parse and dist ≤ [arrivalRadius].
      * OCR miss / parse fail → sticky [lastSpotOk] (do not reopen map on junk like `YS,95)`).
-     * Off-spot only with valid coords and dist > radius.
+     * Truncated reads (161→61) while last confirmed on-spot → sticky (do not retap map).
+     * Off-spot only with valid coords, not truncation-like, and dist > radius.
      */
     private suspend fun isAtConfiguredFarmSpot(): Boolean {
         val farmSpot = LocationRepository.farmSpot.value
         if (farmSpot == null) {
             Log.d(TAG, "[SPOT] no farm spot saved")
             lastSpotOk = false
+            consecutiveValidOffSpotReads = 0
             return false
         }
         val targetX = farmSpot.coordX
@@ -328,6 +335,7 @@ object BotPriorityLoop {
         if (targetX == null || targetY == null) {
             Log.w(TAG, "[SPOT] farm spot missing HUD coords — cannot validate arrival")
             lastSpotOk = false
+            consecutiveValidOffSpotReads = 0
             return false
         }
         val mapDef = MapDefinitionRepository.getById(farmSpot.map)
@@ -344,6 +352,36 @@ object BotPriorityLoop {
         consecutiveCoordMisses = 0
         val dist = abs(current.first - targetX) + abs(current.second - targetY)
         val onSpot = dist <= farmSpot.arrivalRadius
+        if (!onSpot &&
+            lastSpotOk &&
+            CoordinateTextParser.looksLikeTruncatedHudRead(
+                current,
+                targetX to targetY,
+                tolerance = farmSpot.arrivalRadius,
+            )
+        ) {
+            Log.d(
+                TAG,
+                "[SPOT] OCR trunc sticky current=(${current.first},${current.second}) " +
+                    "target=($targetX,$targetY) dist=$dist r=${farmSpot.arrivalRadius}",
+            )
+            consecutiveValidOffSpotReads = 0
+            return true
+        }
+        if (onSpot) {
+            consecutiveValidOffSpotReads = 0
+        } else if (lastSpotOk) {
+            consecutiveValidOffSpotReads++
+            if (!shouldTreatAsOffSpot(lastSpotOk, consecutiveValidOffSpotReads)) {
+                Log.d(
+                    TAG,
+                    "[SPOT] off-spot pending #$consecutiveValidOffSpotReads/" +
+                        "$OFF_SPOT_CONFIRMATION_READS current=(${current.first},${current.second}) " +
+                        "target=($targetX,$targetY) dist=$dist r=${farmSpot.arrivalRadius}",
+                )
+                return true
+            }
+        }
         lastSpotOk = onSpot
         Log.d(
             TAG,
@@ -351,6 +389,14 @@ object BotPriorityLoop {
                 "target=($targetX,$targetY) dist=$dist r=${farmSpot.arrivalRadius}",
         )
         return onSpot
+    }
+
+    internal fun shouldTreatAsOffSpot(
+        lastSpotWasConfirmed: Boolean,
+        consecutiveValidOffSpotReads: Int,
+    ): Boolean {
+        return !lastSpotWasConfirmed ||
+            consecutiveValidOffSpotReads >= OFF_SPOT_CONFIRMATION_READS
     }
 
     private suspend fun handleMissingElfBuff(reason: String): IterationResult {
@@ -568,6 +614,7 @@ object BotPriorityLoop {
             // Nav already called ensureAutoMode when ensureAuto=true — avoid a second OCR/tap pass.
             lastSpotOk = true
             consecutiveCoordMisses = 0
+            consecutiveValidOffSpotReads = 0
             return IterationResult.OK
         }
         if (BotRecoveryActions.isNavCooldownActive()) {

@@ -19,9 +19,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.license.LicenseGate
 import com.example.muamaizingbot.license.LicenseStore
 
@@ -32,6 +34,7 @@ fun LicenseSettingsScreen(
 ) {
     var licenseKey by remember { mutableStateOf(LicenseStore.licenseKey()) }
     var savedHint by remember { mutableStateOf("") }
+    val savedLabel = stringResource(R.string.saved)
 
     val hasSession by LicenseGate.hasSession.collectAsState()
     val sessionId by LicenseGate.sessionId.collectAsState()
@@ -46,13 +49,13 @@ fun LicenseSettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            text = "Licencia",
+            text = stringResource(R.string.license_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
 
         Text(
-            text = "Play (cold start) exige una sesión activa con tu license key.",
+            text = stringResource(R.string.license_hint),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -63,7 +66,7 @@ fun LicenseSettingsScreen(
                 licenseKey = it
                 savedHint = ""
             },
-            label = { Text("License key") },
+            label = { Text(stringResource(R.string.license_key_label)) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
         )
@@ -72,11 +75,11 @@ fun LicenseSettingsScreen(
             onClick = {
                 LicenseStore.setLicenseKey(licenseKey)
                 licenseKey = LicenseStore.licenseKey()
-                savedHint = "Guardado"
+                savedHint = savedLabel
             },
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Guardar")
+            Text(stringResource(R.string.action_save))
         }
 
         if (savedHint.isNotEmpty()) {
@@ -88,7 +91,7 @@ fun LicenseSettingsScreen(
         }
 
         Text(
-            text = "Device ID",
+            text = stringResource(R.string.license_device_id),
             fontWeight = FontWeight.Medium,
         )
         Text(
@@ -100,9 +103,12 @@ fun LicenseSettingsScreen(
 
         Text(
             text = if (hasSession) {
-                "Sesión activa: ${sessionId?.take(8).orEmpty()}…"
+                stringResource(
+                    R.string.license_session_active,
+                    sessionId?.take(8).orEmpty(),
+                )
             } else {
-                "Sin sesión activa"
+                stringResource(R.string.license_session_none)
             },
             style = MaterialTheme.typography.bodyMedium,
             color = if (hasSession) {
@@ -122,7 +128,7 @@ fun LicenseSettingsScreen(
         }
 
         TextButton(onClick = onBack) {
-            Text("Volver")
+            Text(stringResource(R.string.action_back))
         }
     }
 }

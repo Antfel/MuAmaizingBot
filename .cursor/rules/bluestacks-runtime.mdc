@@ -1,0 +1,12 @@
+---
+description: BlueStacks target resolution and ADB serial remap conventions for MUAmaizingBot.
+globs: app/src/main/java/**/*.kt
+alwaysApply: false
+---
+
+# BlueStacks runtime
+
+- Primary UI resolution: **1280×720**. Scale calibrated 2560×1440 refs with `sx=W/2560`, `sy=H/1440`.
+- Emulator port ≠ adb serial: **5554 → often `127.0.0.1:5555`**. Always `adb devices -l`.
+- Install via `scripts/install_bluestacks.sh` (or `ADB_DEVICE=…`).
+- Prefer log proof (`BotLoop` / `FarmBosses` / `Recovery`) after navigation or mode changes.

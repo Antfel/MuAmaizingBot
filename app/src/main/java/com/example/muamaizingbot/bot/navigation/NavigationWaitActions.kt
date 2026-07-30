@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.maps.MapDefinition
+import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.util.AdaptiveWait
 import com.example.muamaizingbot.vision.BitmapRegionSimilarity
@@ -52,6 +53,7 @@ object NavigationWaitActions {
             isOnConfiguredMap(mapDef, null) && !MapWindowActions.isMapWindowOpen()
         }
         if (loaded) {
+            rememberMap(mapDef.id, "map_load")
             Log.d(TAG, "[MAP_LOAD] confirmed map=${mapDef.id}")
         } else {
             Log.w(TAG, "[MAP_LOAD] timeout map=${mapDef.id}")
@@ -125,6 +127,8 @@ object NavigationWaitActions {
         TEMPLATE,
         COORDS_AT_SPOT,
         COORDS_NEAR_SPOT,
+        /** HUD OCR was garbage, but the recent positively observed map still matches. */
+        TRUSTED_MEMORY,
         NONE,
     }
 
@@ -142,12 +146,35 @@ object NavigationWaitActions {
             frame.recycle()
         }
         if (hud.matched) {
+            rememberMap(mapDef.id, "hud_ocr")
             return true
+        }
+        val knownHudMapId = resolveKnownMapId(hud.rawText)
+        if (knownHudMapId != null) {
+            rememberMap(knownHudMapId, "hud_other")
+            Log.d(TAG, "[MAP_MEMORY] clear other map=$knownHudMapId expected=${mapDef.id}")
+            return false
+        }
+        val trustedMapId = TrustedCurrentMapMemory.trustedMapId()
+        if (trustedMapId != null) {
+            val matches = trustedMapId == mapDef.id
+            Log.d(
+                TAG,
+                "[MAP_MEMORY] trusted map=$trustedMapId expected=${mapDef.id} " +
+                    "matched=$matches source=hud_garbage",
+            )
+            return matches
         }
         if (!CurrentMapOcr.isWeak(hud)) {
             return false
         }
-        return confirmViaOpenMapOcr(mapDef)?.matched == true
+        val openOcr = confirmViaOpenMapOcr(mapDef) ?: return false
+        if (openOcr.matched) {
+            rememberMap(mapDef.id, "open_map_ocr")
+            return true
+        }
+        resolveKnownMapId(openOcr.rawText)?.let { rememberMap(it, "open_map_other") }
+        return false
     }
 
     suspend fun detectMapPresence(
@@ -161,14 +188,39 @@ object NavigationWaitActions {
             frame.recycle()
         }
         if (ocr.matched) {
+            rememberMap(mapDef.id, "hud_ocr")
             return MapPresence.OCR
+        }
+
+        val knownHudMapId = resolveKnownMapId(ocr.rawText)
+        if (knownHudMapId != null) {
+            rememberMap(knownHudMapId, "hud_other")
+            Log.d(TAG, "[MAP_MEMORY] clear other map=$knownHudMapId expected=${mapDef.id}")
+            return MapPresence.NONE
         }
 
         // Weak HUD (empty / garbage / wrong digit) → open zone map title OCR.
         if (CurrentMapOcr.isWeak(ocr)) {
+            val trustedMapId = TrustedCurrentMapMemory.trustedMapId()
+            if (trustedMapId != null) {
+                val matches = trustedMapId == mapDef.id
+                Log.d(
+                    TAG,
+                    "[MAP_MEMORY] trusted map=$trustedMapId expected=${mapDef.id} " +
+                        "matched=$matches source=hud_garbage",
+                )
+                return if (matches) MapPresence.TRUSTED_MEMORY else MapPresence.NONE
+            }
             val openOcr = confirmViaOpenMapOcr(mapDef)
             if (openOcr?.matched == true) {
+                rememberMap(mapDef.id, "open_map_ocr")
                 return MapPresence.OCR
+            }
+            val knownOpenMapId = openOcr?.let { resolveKnownMapId(it.rawText) }
+            if (knownOpenMapId != null) {
+                rememberMap(knownOpenMapId, "open_map_other")
+                Log.d(TAG, "[MAP_MEMORY] clear other map=$knownOpenMapId expected=${mapDef.id}")
+                return MapPresence.NONE
             }
             // Clear wrong-map text from open panel — do not soft-match coords.
             if (openOcr != null && openOcr.rawText.isNotBlank()) {
@@ -216,6 +268,20 @@ object NavigationWaitActions {
             MapWindowActions.closeMapWindowIfOpen()
         }
         return result
+    }
+
+    private fun resolveKnownMapId(raw: String): String? {
+        return CurrentMapOcr.resolveKnownMapId(
+            raw,
+            MapDefinitionRepository.allMaps().map { map ->
+                map.id to map.name.ifBlank { map.id }
+            },
+        )
+    }
+
+    private fun rememberMap(mapId: String, source: String) {
+        TrustedCurrentMapMemory.record(mapId)
+        Log.d(TAG, "[MAP_MEMORY] record map=$mapId source=$source")
     }
 
     suspend fun isOnConfiguredMap(mapDef: MapDefinition, farmSpot: FarmLocation?): Boolean {

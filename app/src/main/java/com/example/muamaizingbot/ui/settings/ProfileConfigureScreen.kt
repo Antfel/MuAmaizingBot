@@ -37,7 +37,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import com.example.muamaizingbot.R
 import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
@@ -81,7 +83,7 @@ fun ProfileConfigureScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            text = "Configurar perfil",
+            text = stringResource(R.string.profile_config_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.Bold,
         )
@@ -92,17 +94,22 @@ fun ProfileConfigureScreen(
         )
 
         Text(
-            text = "Auto ataque y revive siempre activos para todos los perfiles.",
+            text = stringResource(R.string.profile_config_hint),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        SectionHeader("Generales del PJ")
+        SectionHeader(stringResource(R.string.profile_section_general))
 
+        val potionStatus = if (profile?.enablePotionRecovery == true) {
+            stringResource(R.string.status_active)
+        } else {
+            stringResource(R.string.status_disabled)
+        }
         ConfigOptionCard(
-            title = "Config Pociones",
+            title = stringResource(R.string.potion_config_title),
             summary = buildString {
-                append(if (profile?.enablePotionRecovery == true) "Activo" else "Desactivado")
+                append(potionStatus)
                 profile?.let {
                     append(" | HP ${it.hpPotionStacks} | MP ${it.mpPotionStacks}")
                 }
@@ -128,12 +135,12 @@ fun ProfileConfigureScreen(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    text = "Modo del bot",
+                    text = stringResource(R.string.profile_bot_mode),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Farm farmea y puede buscar buff. Elf Buff da buff. Farm Bosses cicla spots de boss.",
+                    text = stringResource(R.string.profile_bot_mode_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -147,7 +154,7 @@ fun ProfileConfigureScreen(
                             ProfileRepository.setBotMode(profileFilename, BotMode.FARM)
                         },
                         enabled = profile != null,
-                        label = { Text("Farm") },
+                        label = { Text(stringResource(R.string.profile_mode_farm)) },
                     )
                     FilterChip(
                         selected = profile?.isElfBuffPostMode() == true,
@@ -160,7 +167,7 @@ fun ProfileConfigureScreen(
                             }
                         },
                         enabled = profile != null,
-                        label = { Text("Elf Buff") },
+                        label = { Text(stringResource(R.string.profile_mode_elf)) },
                     )
                     FilterChip(
                         selected = profile?.isFarmBossesMode() == true,
@@ -168,13 +175,13 @@ fun ProfileConfigureScreen(
                             ProfileRepository.setBotMode(profileFilename, BotMode.FARM_BOSSES)
                         },
                         enabled = profile != null,
-                        label = { Text("Bosses") },
+                        label = { Text(stringResource(R.string.profile_mode_bosses)) },
                     )
                 }
             }
         }
 
-        SectionHeader("Este modo")
+        SectionHeader(stringResource(R.string.profile_section_mode_settings))
 
         when {
             profile?.isFarmBossesMode() == true -> {
@@ -192,12 +199,12 @@ fun ProfileConfigureScreen(
             profile?.isElfBuffPostMode() == true -> {
                 ConfigOptionCard(
                     title = when {
-                        profile.isElfBuffWarMode() -> "War event (post al Start)"
-                        else -> "Buff post (Farm Spot)"
+                        profile.isElfBuffWarMode() -> stringResource(R.string.profile_war_post_title)
+                        else -> stringResource(R.string.profile_buff_post_title)
                     },
                     summary = farmSpot?.summaryLabel(
                         MapDefinitionRepository.getById(farmSpot.map)?.name
-                    ) ?: "Sin configurar",
+                    ) ?: stringResource(R.string.profiles_unset),
                     onClick = onOpenFarmSpot,
                 )
                 ElfBuffParamsCard(
@@ -207,10 +214,10 @@ fun ProfileConfigureScreen(
             }
             else -> {
                 ConfigOptionCard(
-                    title = "Farm Spot",
+                    title = stringResource(R.string.profile_farm_spot),
                     summary = farmSpot?.summaryLabel(
                         MapDefinitionRepository.getById(farmSpot.map)?.name
-                    ) ?: "Sin configurar",
+                    ) ?: stringResource(R.string.profiles_unset),
                     onClick = onOpenFarmSpot,
                 )
                 ElfBuffSeekConfigCard(
@@ -227,22 +234,22 @@ fun ProfileConfigureScreen(
             modifier = Modifier.fillMaxWidth(),
             enabled = profile != null && profiles.size > 1,
         ) {
-            Text("Borrar perfil")
+            Text(stringResource(R.string.profile_delete))
         }
 
         OutlinedButton(
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text("Volver")
+            Text(stringResource(R.string.action_back))
         }
     }
 
     if (showDeleteDialog && profile != null) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("Eliminar perfil") },
-            text = { Text("¿Eliminar \"${profile.displayName}\" y sus ubicaciones guardadas?") },
+            title = { Text(stringResource(R.string.profile_delete_title)) },
+            text = { Text(stringResource(R.string.profile_delete_confirm, profile.displayName)) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -252,12 +259,12 @@ fun ProfileConfigureScreen(
                         onBack()
                     },
                 ) {
-                    Text("Eliminar")
+                    Text(stringResource(R.string.profile_delete_action))
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteDialog = false }) {
-                    Text("Cancelar")
+                    Text(stringResource(R.string.profiles_cancel))
                 }
             },
         )
@@ -300,13 +307,12 @@ private fun RandomTeleportConfigCard(
         ) {
             Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                 Text(
-                    text = "Random Teleport Seal",
+                    text = stringResource(R.string.profile_random_title),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Text(
-                    text = "Si el path verde es largo, usa Random en el mapa hasta acercarse. " +
-                        "Con seal usado, la espera de llegada es 30s (sin seal, 90s).",
+                    text = stringResource(R.string.profile_random_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -348,13 +354,12 @@ private fun ElfBuffSeekConfigCard(
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(
-                        text = "Elf buff automático",
+                        text = stringResource(R.string.profile_elf_auto),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Zona compartida entre Farm y Farm Bosses. " +
-                            "Desactívalo si la elf está offline o no quieres ir por buff.",
+                        text = stringResource(R.string.profile_elf_auto_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -370,11 +375,11 @@ private fun ElfBuffSeekConfigCard(
 
             Text(
                 text = when {
-                    profile?.enableElfBuff != true -> "Desactivado — el bot no buscará elf buff"
+                    profile?.enableElfBuff != true -> stringResource(R.string.profile_elf_off)
                     elfBuff != null -> elfBuff.summaryLabel(
                         MapDefinitionRepository.getById(elfBuff.map)?.name
                     )
-                    else -> "Activo, pero sin zona configurada"
+                    else -> stringResource(R.string.profile_elf_on_no_zone)
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -385,7 +390,7 @@ private fun ElfBuffSeekConfigCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
-                    if (elfBuff != null) "Editar zona elf buff" else "Configurar zona elf buff",
+                    if (elfBuff != null) stringResource(R.string.profile_elf_edit_zone) else stringResource(R.string.profile_elf_set_zone),
                 )
             }
         }
@@ -482,21 +487,19 @@ private fun FarmBossesConfigCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "Farm Bosses",
+                text = stringResource(R.string.mode_farm_bosses),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Agregá mapas en el orden del ciclo. El bot teleporta → wires → " +
-                    "busca bosses vivos → Focus+Auto. Tras cada kill corre buff/pociones " +
-                    "y vuelve al checkpoint.",
+                text = stringResource(R.string.profile_bosses_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
             if (selectedMaps.isEmpty()) {
                 Text(
-                    text = "Sin mapas — buscá y agregá al menos uno",
+                    text = stringResource(R.string.profile_bosses_no_maps),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -515,7 +518,7 @@ private fun FarmBossesConfigCard(
                             trailingIcon = {
                                 Icon(
                                     imageVector = Icons.Default.Close,
-                                    contentDescription = "Quitar $name",
+                                    contentDescription = stringResource(R.string.profile_bosses_remove_map, name),
                                     modifier = Modifier.clickable(enabled = profile != null) {
                                         removeMap(mapId)
                                     },
@@ -530,8 +533,8 @@ private fun FarmBossesConfigCard(
                 value = searchQuery,
                 onValueChange = { searchQuery = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Buscar mapa") },
-                placeholder = { Text("Ej. Kalima, Atlans…") },
+                label = { Text(stringResource(R.string.profile_bosses_search)) },
+                placeholder = { Text(stringResource(R.string.profile_bosses_search_hint)) },
                 singleLine = true,
                 enabled = profile != null,
             )
@@ -554,7 +557,7 @@ private fun FarmBossesConfigCard(
                 }
             } else if (searchQuery.isNotBlank()) {
                 Text(
-                    text = "Sin coincidencias",
+                    text = stringResource(R.string.profile_bosses_no_match),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -564,11 +567,13 @@ private fun FarmBossesConfigCard(
                 value = holdText,
                 onValueChange = { holdText = it.filter { ch -> ch.isDigit() }.take(3) },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Timeout pelea (seg)") },
+                label = { Text(stringResource(R.string.profile_bosses_hold)) },
                 supportingText = {
                     Text(
-                        "Si el focus no se pierde, rota tras este tiempo. " +
-                            "Default ${KillBossesConfig.DEFAULT_HOLD_SEC}s.",
+                        stringResource(
+                            R.string.profile_bosses_hold_hint,
+                            KillBossesConfig.DEFAULT_HOLD_SEC,
+                        ),
                     )
                 },
                 singleLine = true,
@@ -582,11 +587,11 @@ private fun FarmBossesConfigCard(
             ) {
                 Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                     Text(
-                        text = "Incluir golden mobs",
+                        text = stringResource(R.string.profile_bosses_golden),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                     Text(
-                        text = "También busca iconos golden en el mapa.",
+                        text = stringResource(R.string.profile_bosses_golden_hint),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -612,7 +617,7 @@ private fun FarmBossesConfigCard(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = profile != null,
             ) {
-                Text("Guardar timeout")
+                Text(stringResource(R.string.profile_bosses_save_hold))
             }
         }
     }
@@ -638,12 +643,12 @@ private fun ElfBuffParamsCard(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(
-                text = "Parámetros Elf Buff",
+                text = stringResource(R.string.profile_elf_params),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Elegí la variante: mundo abierto (PK All/Union) o War/APEX en Divine.",
+                text = stringResource(R.string.profile_elf_params_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -657,7 +662,7 @@ private fun ElfBuffParamsCard(
                         ProfileRepository.setBotMode(profileFilename, BotMode.ELF_BUFF_GIVER)
                     },
                     enabled = profile != null,
-                    label = { Text("Mundo abierto") },
+                    label = { Text(stringResource(R.string.profile_elf_open_world)) },
                 )
                 FilterChip(
                     selected = war,
@@ -665,15 +670,13 @@ private fun ElfBuffParamsCard(
                         ProfileRepository.setBotMode(profileFilename, BotMode.ELF_BUFF_WAR)
                     },
                     enabled = profile != null,
-                    label = { Text("War (APEX)") },
+                    label = { Text(stringResource(R.string.profile_elf_war)) },
                 )
             }
 
             if (war) {
                 Text(
-                    text = "Activá el bot ya dentro del evento War. Al Start solo guarda " +
-                        "tus coords HUD (y píxel de minimapa). Tras morir revive y vuelve " +
-                        "a ese punto — sin teleport ni check de mapa. No cambia PK ni Auto.",
+                    text = stringResource(R.string.profile_elf_war_hint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -701,6 +704,7 @@ private fun ElfGiverCastFields(
         mutableStateOf(profile?.elfBuffAutoCast ?: true)
     }
     var saveHint by remember { mutableStateOf<String?>(null) }
+    val savedLabel = stringResource(R.string.saved)
 
     LaunchedEffect(profile?.elfBuffCastIntervalSec, profile?.elfBuffAutoCast) {
         intervalText = (profile?.elfBuffCastIntervalSec ?: BotProfile.DEFAULT_ELF_CAST_INTERVAL_SEC).toString()
@@ -708,8 +712,7 @@ private fun ElfGiverCastFields(
     }
 
     Text(
-        text = "Al Start mapea Greater Defense / Greater Damage. " +
-            "Ciclo UI: All → Focus → Union → buff aliado (verde) → Focus Boss → All.",
+        text = stringResource(R.string.profile_elf_giver_hint),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
@@ -718,9 +721,9 @@ private fun ElfGiverCastFields(
         value = intervalText,
         onValueChange = { intervalText = it.filter { ch -> ch.isDigit() }.take(3) },
         modifier = Modifier.fillMaxWidth(),
-        label = { Text("Pausa entre ciclos (seg)") },
+        label = { Text(stringResource(R.string.profile_elf_cast_pause)) },
         supportingText = {
-            Text("Tras terminar un ciclo, espera esto y vuelve a buscar. Default 1s.")
+            Text(stringResource(R.string.profile_elf_cast_pause_hint))
         },
         singleLine = true,
         enabled = profile != null,
@@ -732,7 +735,7 @@ private fun ElfGiverCastFields(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Auto-cast por timer",
+            text = stringResource(R.string.profile_elf_auto_cast),
             style = MaterialTheme.typography.bodyMedium,
         )
         Switch(
@@ -753,12 +756,12 @@ private fun ElfGiverCastFields(
                 intervalSec = interval,
                 autoCast = autoCast,
             )
-            saveHint = "Guardado"
+            saveHint = savedLabel
         },
         modifier = Modifier.fillMaxWidth(),
         enabled = profile != null,
     ) {
-        Text("Guardar casteo")
+        Text(stringResource(R.string.profile_elf_save_cast))
     }
 
     saveHint?.let {
