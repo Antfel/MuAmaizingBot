@@ -12,6 +12,8 @@ import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isFarmBossesMode
+import com.example.muamaizingbot.settings.BotTiming
+import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
@@ -73,7 +75,7 @@ object PotionPurchaseActions {
             return BotRecoveryActions.recoverFromLostState("potion-tap-failed")
         }
 
-        delay(TAP_SLOT_WAIT_MS)
+        delay(BotTiming.ms(TAP_SLOT_WAIT_MS, BotTimingCategory.POST_TAP))
         val entry = waitForPotionEntryResult() ?: run {
             Log.w(TAG, "[POTION] entry flow unknown")
             return BotRecoveryActions.recoverFromLostState("potion-entry-unknown")
@@ -114,7 +116,7 @@ object PotionPurchaseActions {
     }
 
     private suspend fun finishPotionRecovery(needsNavigation: Boolean): Boolean {
-        delay(POST_SHOP_SETTLE_MS)
+        delay(BotTiming.ms(POST_SHOP_SETTLE_MS, BotTimingCategory.FIXED_SETTLE))
         NavigationOrchestrator.cleanGameUi()
 
         if (needsNavigation) {
@@ -143,7 +145,10 @@ object PotionPurchaseActions {
     }
 
     private suspend fun waitForPurchasedPotions(hpWasEmpty: Boolean, mpWasEmpty: Boolean): Boolean {
-        val deadline = System.currentTimeMillis() + REFILL_TIMEOUT_MS
+        val deadline = System.currentTimeMillis() + BotTiming.ms(
+            REFILL_TIMEOUT_MS,
+            BotTimingCategory.SCREEN_LOAD,
+        )
         while (System.currentTimeMillis() < deadline) {
             val hpOk = !hpWasEmpty || !isHpPotionEmpty()
             val mpOk = !mpWasEmpty || !isManaPotionEmpty()
@@ -171,7 +176,10 @@ object PotionPurchaseActions {
     }
 
     private suspend fun waitForPotionEntryResult(): PotionEntry? {
-        val deadline = System.currentTimeMillis() + ENTRY_TIMEOUT_MS
+        val deadline = System.currentTimeMillis() + BotTiming.ms(
+            ENTRY_TIMEOUT_MS,
+            BotTimingCategory.SCREEN_LOAD,
+        )
         while (System.currentTimeMillis() < deadline) {
             val frame = NavigationVision.captureFrame() ?: run {
                 delay(ENTRY_POLL_MS)
@@ -209,12 +217,15 @@ object PotionPurchaseActions {
             }
         Log.d(TAG, "[POTION] accepting teleport to shop")
         NavigationVision.tapMatch(teleport)
-        delay(TELEPORT_ACCEPT_WAIT_MS)
+        delay(BotTiming.ms(TELEPORT_ACCEPT_WAIT_MS, BotTimingCategory.FIXED_SETTLE))
         return true
     }
 
     private suspend fun waitForShopOpen(): Boolean {
-        val deadline = System.currentTimeMillis() + SHOP_OPEN_TIMEOUT_MS
+        val deadline = System.currentTimeMillis() + BotTiming.ms(
+            SHOP_OPEN_TIMEOUT_MS,
+            BotTimingCategory.SCREEN_LOAD,
+        )
         while (System.currentTimeMillis() < deadline) {
             val frame = NavigationVision.captureFrame() ?: run {
                 delay(ENTRY_POLL_MS)
@@ -255,8 +266,12 @@ object PotionPurchaseActions {
 
     private suspend fun closeShop() {
         NavigationVision.tap(SHOP_CLOSE_X, SHOP_CLOSE_Y)
-        delay(CLOSE_SHOP_WAIT_MS)
-        val closed = NavigationVision.waitUntilAbsent(SHOP_OPEN, SHOP_THRESHOLD, 5000)
+        delay(BotTiming.ms(CLOSE_SHOP_WAIT_MS, BotTimingCategory.POST_TAP))
+        val closed = NavigationVision.waitUntilAbsent(
+            SHOP_OPEN,
+            SHOP_THRESHOLD,
+            BotTiming.ms(5000L, BotTimingCategory.SCREEN_LOAD),
+        )
         Log.d(TAG, "[POTION] shop closed=$closed")
     }
 

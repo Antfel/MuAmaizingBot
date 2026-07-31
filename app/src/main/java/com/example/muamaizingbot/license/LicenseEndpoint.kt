@@ -13,8 +13,8 @@ import javax.crypto.spec.SecretKeySpec
 internal object LicenseEndpoint {
 
     // AES-128-CBC ciphertext + IV (Base64). Plaintext is never stored as a string constant.
-    private val WRAP_A = "vEjWAkKWZi4oNPhcSSKpUw=="
-    private val WRAP_B = "YxGmqOvyFEhuOzk9H/TtwqG9ED3fQ9B3Z9acixJQeEaGGxZJ45+8hdh2faLdm7TT"
+    private val WRAP_A = "xmOf0dPVerVolongu9KKAA=="
+    private val WRAP_B = "XxH2tqbR4TG4NQPeqcnE00fToiZmeJ20aXeOV9Hw6o1R4NrRmguubblttJSaw9aF"
 
     @Volatile
     private var cached: String? = null

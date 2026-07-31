@@ -25,8 +25,10 @@ object ElfBuffCastActions {
     /** Wait for both buff cast animations before Focus Boss, or focus drops mid-cast. */
     private const val POST_CAST_MS = 1_000L
     private const val POST_UNFOCUS_MS = 220L
-    private const val MAX_FOCUS_TRIES = 6
+    private const val MAX_FOCUS_TRIES = 3
     private const val ENSURE_ALL_RETRIES = 1
+    private const val SWITCH_UNION_ATTEMPTS = 2
+    private const val SWITCH_UNION_RETRY_MS = 250L
 
     private val CAST_ORDER = listOf(
         ElfBuffSkillMapper.SkillId.GREATER_DAMAGE,
@@ -77,14 +79,14 @@ object ElfBuffCastActions {
             }
             ElfBuffDebugDump.saveRaw("02_t${tryIndex}_pk_all")
 
-            if (!ElfBuffTargetingActions.spamFocusUntilHud()) {
-                Log.d(TAG, "[ELF_GIVER] no focus HUD after spam try=$tryIndex")
+            if (!ElfBuffTargetingActions.spamFocusUntilRedHud()) {
+                Log.d(TAG, "[ELF_GIVER] no red focus HUD under All after spam try=$tryIndex")
                 ElfBuffDebugDump.saveRaw("03_t${tryIndex}_no_focus")
                 continue
             }
             ElfBuffDebugDump.saveRaw("03_t${tryIndex}_focus_hud")
 
-            if (!ElfBuffTargetingActions.switchPkModeUnion()) {
+            if (!switchPkModeUnionPreservingFocus()) {
                 Log.w(TAG, "[ELF_GIVER] switch Union failed try=$tryIndex — Focus Boss then All")
                 clearFocusThenEnsureAll()
                 continue
@@ -135,6 +137,32 @@ object ElfBuffCastActions {
             ElfBuffCastGate.noteCastDone()
         }
         Log.i(TAG, "[ELF_DEBUG] session=${ElfBuffDebugDump.sessionPath()}")
+        return false
+    }
+
+    /**
+     * A busy combat frame can delay the PK popup beyond its first detection window.
+     * Retry while keeping the current target; clearing Focus here would force a full
+     * and unnecessary player-search cycle.
+     */
+    private suspend fun switchPkModeUnionPreservingFocus(): Boolean {
+        repeat(SWITCH_UNION_ATTEMPTS) { attempt ->
+            if (attempt > 0 && ElfBuffTargetingActions.isPkModeUnion()) {
+                Log.d(TAG, "[ELF_GIVER] Union confirmed after prior switch attempt")
+                return true
+            }
+            if (ElfBuffTargetingActions.switchPkModeUnionFromAll()) {
+                return true
+            }
+            if (attempt < SWITCH_UNION_ATTEMPTS - 1) {
+                Log.w(
+                    TAG,
+                    "[ELF_GIVER] switch Union retry=${attempt + 1}/" +
+                        "${SWITCH_UNION_ATTEMPTS - 1} preserving Focus",
+                )
+                delay(SWITCH_UNION_RETRY_MS)
+            }
+        }
         return false
     }
 

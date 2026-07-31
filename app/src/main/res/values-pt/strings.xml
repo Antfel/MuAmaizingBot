@@ -79,11 +79,11 @@
     <string name="system_test_ok">Mensagem enviada — confira o Telegram</string>
     <string name="system_token_missing">Este build não tem token de Telegram embutido (somente desenvolvimento).</string>
     <string name="system_speed_title">Velocidade do bot</string>
-    <string name="system_speed_hint">Normal usa os delays atuais. Rápido encurtará algumas esperas (ainda em análise — não aplica mudanças por enquanto).</string>
+    <string name="system_speed_hint">Normal soma ~1s em carga/settle (mais conservador). Rápido encurta tetos de carga e settles fixos; os polls ainda saem ao detectar a UI.</string>
     <string name="system_speed_normal">Normal</string>
     <string name="system_speed_fast">Rápido</string>
-    <string name="system_speed_selected_normal">Selecionado: Normal (comportamento atual).</string>
-    <string name="system_speed_selected_fast">Selecionado: Rápido — pendente de implementar.</string>
+    <string name="system_speed_selected_normal">Selecionado: Normal (+1s carga/settle).</string>
+    <string name="system_speed_selected_fast">Selecionado: Rápido (carga/settle ~40–45% mais curtos).</string>
 
     <string name="license_title">Licença</string>
     <string name="license_hint">Play (cold start) exige uma sessão ativa com sua license key.</string>
@@ -91,6 +91,10 @@
     <string name="license_device_id">Device ID</string>
     <string name="license_session_active">Sessão ativa: %1$s…</string>
     <string name="license_session_none">Sem sessão ativa</string>
+    <string name="content_maps_title">Mapas (conteúdo remoto)</string>
+    <string name="content_maps_version">Pack local: v%1$d</string>
+    <string name="content_maps_check_updates">Buscar atualizações de mapas</string>
+    <string name="content_maps_syncing">Sincronizando mapas…</string>
 
     <string name="profiles_title">Perfis</string>
     <string name="profiles_hint">Selecione o perfil ativo. Use Configurar para farm spot, elf buff e poções.</string>
@@ -201,6 +205,7 @@
     <string name="spot_map">Mapa</string>
     <string name="spot_select_map">Selecionar mapa</string>
     <string name="spot_select_map_required">Selecione um mapa</string>
+    <string name="spot_no_configured_maps">Não há mapas completamente configurados. Publique-os no admin de Mapas.</string>
     <string name="spot_mark_point">Marque um ponto no mapa</string>
     <string name="spot_saved">Localização salva</string>
     <string name="spot_pk_template">PK Union template</string>

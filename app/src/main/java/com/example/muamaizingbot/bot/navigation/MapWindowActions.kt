@@ -4,6 +4,8 @@ import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.maps.MapDefinition
+import com.example.muamaizingbot.settings.BotTiming
+import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 
@@ -100,25 +102,26 @@ object MapWindowActions {
     }
 
     suspend fun waitUntilMapWindowOpen(timeoutMs: Long): Boolean {
+        val effectiveTimeout = BotTiming.ms(timeoutMs, BotTimingCategory.SCREEN_LOAD)
         val roi = mapHeaderRoi()
         val threshold = NavigationTemplateThresholds.mapWindow()
         if (NavigationVision.waitForTemplate(
                 assetPath = MAP_WINDOW_OPEN,
                 threshold = threshold,
-                timeoutMs = timeoutMs,
+                timeoutMs = effectiveTimeout,
                 roi = roi,
             ) != null
         ) {
             return true
         }
-        return waitUntilMapPanelOpenViaCloseButton(timeoutMs.coerceAtMost(1500))
+        return waitUntilMapPanelOpenViaCloseButton(effectiveTimeout.coerceAtMost(1500))
     }
 
     suspend fun waitUntilMapWindowClosed(timeoutMs: Long): Boolean {
         return NavigationVision.waitUntilAbsent(
             assetPath = MAP_WINDOW_OPEN,
             threshold = NavigationTemplateThresholds.mapWindow(),
-            timeoutMs = timeoutMs,
+            timeoutMs = BotTiming.ms(timeoutMs, BotTimingCategory.SCREEN_LOAD),
         )
     }
 

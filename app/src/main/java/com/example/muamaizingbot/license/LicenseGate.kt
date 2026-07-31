@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.muamaizingbot.BuildConfig
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.bot.BotController
+import com.example.muamaizingbot.content.MapContentSync
 import com.example.muamaizingbot.settings.UiStrings
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -75,6 +76,10 @@ object LicenseGate {
                     "acquire ok session=${result.sessionId.take(8)}… " +
                         "active=${result.activeSessions}/${result.maxSessions}",
                 )
+                // Non-blocking map pack sync; baseline APK assets remain usable on failure.
+                scope.launch(Dispatchers.IO) {
+                    MapContentSync.sync(base, key, result.sessionId)
+                }
                 true
             }
             is LicenseApiResult.Failed -> {

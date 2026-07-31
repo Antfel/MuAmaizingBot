@@ -27,8 +27,8 @@ android {
         applicationId = "com.example.muamaizingbot"
         minSdk = 28
         targetSdk = 36
-        versionCode = 20
-        versionName = "1.3.1-rc2"
+        versionCode = 21
+        versionName = "1.3.1-rc3"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -84,6 +84,10 @@ android {
         compose = true
         buildConfig = true
     }
+
+    testOptions {
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -98,9 +102,11 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.navigation.compose)
+    implementation("com.squareup.okhttp3:okhttp:5.4.0")
     implementation(libs.opencv)
     implementation(libs.mlkit.text.recognition)
     testImplementation(libs.junit)
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.espresso.core)

@@ -2,14 +2,15 @@ package com.example.muamaizingbot
 
 import android.app.Application
 import android.content.Context
+import com.example.muamaizingbot.content.MapContentSync
 import com.example.muamaizingbot.license.LicenseGate
 import com.example.muamaizingbot.license.LicenseStore
-import com.example.muamaizingbot.settings.AppSettingsStore
-import com.example.muamaizingbot.settings.LocaleHelper
-import com.example.muamaizingbot.telegram.TelegramStore
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.settings.AppSettingsStore
+import com.example.muamaizingbot.settings.LocaleHelper
+import com.example.muamaizingbot.telegram.TelegramStore
 import com.example.muamaizingbot.vision.opencv.OpenCVInitializer
 import com.example.muamaizingbot.vision.template.TemplateRepository
 
@@ -24,6 +25,7 @@ class MuBotApplication : Application() {
         OpenCVInitializer.init()
         TemplateRepository.init(this)
         MapDefinitionRepository.init(this)
+        MapContentSync.init(this)
         ProfileRepository.init(this)
         LocationRepository.init(this)
         LocationRepository.refreshForCurrentProfile()

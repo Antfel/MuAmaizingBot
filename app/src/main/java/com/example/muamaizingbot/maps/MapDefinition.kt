@@ -49,6 +49,15 @@ data class MapDefinition(
 
     fun isNavigable(): Boolean = MapNavigationParser.isNavigable(navigation)
 
+    /** Ready for farm/elf/boss pickers: maintenance + teleport + affine calibration. */
+    fun isFullyConfigured(): Boolean {
+        return hasMaintenanceImage() &&
+            isNavigable() &&
+            coordinateMapping != null &&
+            coordinateMapping.coordX.size == 3 &&
+            coordinateMapping.coordY.size == 3
+    }
+
     fun supportsWireSwitch(): Boolean {
         val config = wireSwitch ?: return false
         return config.enabled && config.availableWires.size > 1

@@ -79,11 +79,11 @@
     <string name="system_test_ok">Message sent — check Telegram</string>
     <string name="system_token_missing">This build has no embedded Telegram token (dev only).</string>
     <string name="system_speed_title">Bot speed</string>
-    <string name="system_speed_hint">Normal uses current delays. Fast will shorten some waits (still under analysis — not applied yet).</string>
+    <string name="system_speed_hint">Normal adds ~1s to load/settle (more conservative). Fast shortens load ceilings and fixed settles; polls still exit as soon as UI is ready.</string>
     <string name="system_speed_normal">Normal</string>
     <string name="system_speed_fast">Fast</string>
-    <string name="system_speed_selected_normal">Selected: Normal (current behavior).</string>
-    <string name="system_speed_selected_fast">Selected: Fast — not implemented yet.</string>
+    <string name="system_speed_selected_normal">Selected: Normal (+1s load/settle).</string>
+    <string name="system_speed_selected_fast">Selected: Fast (load/settle ~40–45% shorter).</string>
 
     <string name="license_title">License</string>
     <string name="license_hint">Play (cold start) requires an active session with your license key.</string>
@@ -91,6 +91,10 @@
     <string name="license_device_id">Device ID</string>
     <string name="license_session_active">Active session: %1$s…</string>
     <string name="license_session_none">No active session</string>
+    <string name="content_maps_title">Maps (remote content)</string>
+    <string name="content_maps_version">Local pack: v%1$d</string>
+    <string name="content_maps_check_updates">Check for map updates</string>
+    <string name="content_maps_syncing">Syncing maps…</string>
 
     <string name="profiles_title">Profiles</string>
     <string name="profiles_hint">Select the active profile. Use Configure for farm spot, elf buff and potions.</string>
@@ -201,6 +205,7 @@
     <string name="spot_map">Map</string>
     <string name="spot_select_map">Select map</string>
     <string name="spot_select_map_required">Select a map</string>
+    <string name="spot_no_configured_maps">No fully configured maps. Publish them from the Maps admin.</string>
     <string name="spot_mark_point">Mark a point on the map</string>
     <string name="spot_saved">Location saved</string>
     <string name="spot_pk_template">PK Union template</string>

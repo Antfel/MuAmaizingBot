@@ -17,6 +17,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -24,8 +25,12 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.R
+import com.example.muamaizingbot.content.MapContentSync
 import com.example.muamaizingbot.license.LicenseGate
 import com.example.muamaizingbot.license.LicenseStore
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun LicenseSettingsScreen(
@@ -35,10 +40,12 @@ fun LicenseSettingsScreen(
     var licenseKey by remember { mutableStateOf(LicenseStore.licenseKey()) }
     var savedHint by remember { mutableStateOf("") }
     val savedLabel = stringResource(R.string.saved)
+    val scope = rememberCoroutineScope()
 
     val hasSession by LicenseGate.hasSession.collectAsState()
     val sessionId by LicenseGate.sessionId.collectAsState()
     val userMessage by LicenseGate.userMessage.collectAsState()
+    val contentStatus by MapContentSync.status.collectAsState()
     val deviceId = remember { LicenseStore.deviceId() }
 
     Column(
@@ -117,6 +124,55 @@ fun LicenseSettingsScreen(
                 MaterialTheme.colorScheme.onSurfaceVariant
             },
         )
+
+        Text(
+            text = stringResource(R.string.content_maps_title),
+            fontWeight = FontWeight.Medium,
+        )
+        Text(
+            text = stringResource(
+                R.string.content_maps_version,
+                contentStatus.localPackVersion,
+            ),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        val syncMsg = contentStatus.lastSyncMessage
+        if (!syncMsg.isNullOrBlank()) {
+            Text(
+                text = syncMsg,
+                style = MaterialTheme.typography.bodySmall,
+                color = when (contentStatus.lastSyncOk) {
+                    true -> MaterialTheme.colorScheme.primary
+                    false -> MaterialTheme.colorScheme.error
+                    null -> MaterialTheme.colorScheme.onSurfaceVariant
+                },
+            )
+        }
+
+        OutlinedButton(
+            onClick = {
+                scope.launch {
+                    withContext(Dispatchers.IO) {
+                        MapContentSync.sync(
+                            baseUrl = LicenseStore.serverUrl(),
+                            licenseKey = LicenseStore.licenseKey(),
+                            sessionId = LicenseGate.sessionId.value,
+                        )
+                    }
+                }
+            },
+            enabled = !contentStatus.syncing && LicenseStore.licenseKey().isNotBlank(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text(
+                text = if (contentStatus.syncing) {
+                    stringResource(R.string.content_maps_syncing)
+                } else {
+                    stringResource(R.string.content_maps_check_updates)
+                },
+            )
+        }
 
         val msg = userMessage
         if (!msg.isNullOrBlank()) {

@@ -84,11 +84,11 @@
     <string name="system_test_ok">Mensaje enviado — revisa Telegram</string>
     <string name="system_token_missing">Este build no tiene token de Telegram embebido (solo desarrollo).</string>
     <string name="system_speed_title">Velocidad del bot</string>
-    <string name="system_speed_hint">Normal usa los delays actuales. Rápido acortará esperas en algunos procesos (aún en análisis — no aplica cambios por ahora).</string>
+    <string name="system_speed_hint">Normal suma ~1s a carga/settle (más conservador). Rápido acorta techos de carga y settles fijos; los polls siguen saliendo al detectar la UI.</string>
     <string name="system_speed_normal">Normal</string>
     <string name="system_speed_fast">Rápido</string>
-    <string name="system_speed_selected_normal">Seleccionado: Normal (comportamiento actual).</string>
-    <string name="system_speed_selected_fast">Seleccionado: Rápido — pendiente de implementar.</string>
+    <string name="system_speed_selected_normal">Seleccionado: Normal (+1s carga/settle).</string>
+    <string name="system_speed_selected_fast">Seleccionado: Rápido (carga/settle ~40–45% más cortos).</string>
 
     <!-- License -->
     <string name="license_title">Licencia</string>
@@ -97,6 +97,10 @@
     <string name="license_device_id">Device ID</string>
     <string name="license_session_active">Sesión activa: %1$s…</string>
     <string name="license_session_none">Sin sesión activa</string>
+    <string name="content_maps_title">Mapas (contenido remoto)</string>
+    <string name="content_maps_version">Pack local: v%1$d</string>
+    <string name="content_maps_check_updates">Buscar actualizaciones de mapas</string>
+    <string name="content_maps_syncing">Sincronizando mapas…</string>
 
     <!-- Profiles -->
     <string name="profiles_title">Perfiles</string>
@@ -211,6 +215,7 @@
     <string name="spot_map">Mapa</string>
     <string name="spot_select_map">Seleccionar mapa</string>
     <string name="spot_select_map_required">Selecciona un mapa</string>
+    <string name="spot_no_configured_maps">No hay mapas completamente configurados. Publícalos desde el admin de Mapas.</string>
     <string name="spot_mark_point">Marca un punto en el mapa</string>
     <string name="spot_saved">Ubicación guardada</string>
     <string name="spot_pk_template">PK Union template</string>

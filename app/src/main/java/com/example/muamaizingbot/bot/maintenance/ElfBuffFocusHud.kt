@@ -20,7 +20,7 @@ object ElfBuffFocusHud {
 
     private const val HP_BAR_RED = "templates/mu/ui/focus_hp_bar.png"
     private const val HP_BAR_GREEN = "templates/mu/ui/focus_hp_bar_green.png"
-    private const val HP_BAR_THRESHOLD = 0.68f
+    private const val HP_BAR_THRESHOLD = 0.80f
 
     private const val FOCUS_BOSS = "templates/mu/ui/targeting/focus_elite_skull.png"
     private const val FOCUS_BOSS_THRESHOLD = 0.70f
@@ -98,12 +98,33 @@ object ElfBuffFocusHud {
     /**
      * After switching to Union:
      * GREEN = ally, RED = still hostile / not ally, null = no HUD.
+     * Uses a single capture for both templates (War mid-cross / tick classify).
      */
     suspend fun classifyUnionFocus(): HpBarColor? {
-        // Prefer green first — ally confirmation.
-        if (isGreenHpBarVisible()) return HpBarColor.GREEN
-        if (isRedHpBarVisible()) return HpBarColor.RED
-        return null
+        val frame = NavigationVision.captureFrame() ?: return null
+        return try {
+            val green = NavigationVision.findOnFrame(frame, HP_BAR_GREEN, HP_BAR_THRESHOLD, roi())
+            if (green != null) {
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] focus HP green at=(${green.centerX},${green.centerY}) " +
+                        "score=${"%.3f".format(green.score)}",
+                )
+                return HpBarColor.GREEN
+            }
+            val red = NavigationVision.findOnFrame(frame, HP_BAR_RED, HP_BAR_THRESHOLD, roi())
+            if (red != null) {
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] focus HP red at=(${red.centerX},${red.centerY}) " +
+                        "score=${"%.3f".format(red.score)}",
+                )
+                return HpBarColor.RED
+            }
+            null
+        } finally {
+            frame.recycle()
+        }
     }
 
     /**

@@ -4,10 +4,10 @@ import android.util.Log
 import kotlin.math.atan2
 
 /**
- * War ally-search: 3 fixed taps in the **lower half** of the play ellipse
- * (SW / S / SE), ~2 HUD coords apart (calibrated ~87px @ 1280×720).
- * Round-robin with MISS / HIT cooldowns. Each cell is probed with a 5-point
- * cross (center + N/E/S/W).
+ * War ally-search grid: south-biased cells inside the play ellipse.
+ * Prefer cells with the highest visual change vs an empty reference
+ * ([ElfBuffWarChangeScout]); fall back to round-robin when scores are cold.
+ * Each selected cell is probed with a 5-point cross (center + N/E/S/W).
  */
 object ElfBuffWarTapGrid {
 
@@ -24,20 +24,24 @@ object ElfBuffWarTapGrid {
     const val CELL_PX_BASE = 87
 
     /**
-     * Lower-ellipse triangle in HUD units from character center (y > 0 = south).
-     * ~2 HUD keeps taps inside the War play ellipse.
+     * South-biased HUD offsets from character center (y > 0 = south).
+     * Core triangle first; W/E + SSW/SSE expand coverage for change scoring.
      */
     private val TRIANGLE_HUD_OFFSETS = listOf(
         Triple("SW", -2, 1),
         Triple("S", 0, 2),
         Triple("SE", 2, 1),
+        Triple("W", -2, 0),
+        Triple("E", 2, 0),
+        Triple("SSW", -1, 2),
+        Triple("SSE", 1, 2),
     )
 
     /** Cross arm offset from cell center (= cell/4 ≈ 22px @ 1280). */
     private const val CROSS_OFFSET_DIV = 4
 
-    private const val MISS_TTL_MS = 2_000L
-    private const val HIT_CD_MS = 5_000L
+    private const val MISS_TTL_MS = 1_000L
+    private const val HIT_CD_MS = 3_500L
 
     /** War does not treat potions_auto as exclusion (HUD not shown in war). */
     private val WAR_EXCLUDED_ZONE_IDS = setOf(
@@ -80,6 +84,7 @@ object ElfBuffWarTapGrid {
         pendingCellIndex = null
         awaitingResult = false
         cursor = 0
+        ElfBuffWarChangeScout.reset(reason)
         Log.d(TAG, "[WAR_GRID] reset reason=$reason cells=${cells.size}")
     }
 
@@ -94,6 +99,7 @@ object ElfBuffWarTapGrid {
         blockedUntilMs.clear()
         pendingCellIndex = null
         awaitingResult = false
+        ElfBuffWarChangeScout.reset("rebuild")
         Log.i(
             TAG,
             "[WAR_GRID] built cells=${cells.size} screen=${screenW}x${screenH} " +
@@ -120,47 +126,59 @@ object ElfBuffWarTapGrid {
     }
 
     /**
-     * Next free cell for a cross probe, or null if all blocked.
-     * Marks the cell as pending (result resolved on next [noteFocusResult]).
+     * Next free cell for a cross probe, or null if the grid is empty.
+     * Prefers the free cell with the strongest empty-reference change score;
+     * otherwise continues round-robin. Marks the cell pending for [noteFocusResult].
      */
-    fun nextTapCell(screenW: Int, screenH: Int): Cell? {
+    suspend fun nextTapCell(screenW: Int, screenH: Int): Cell? {
         ensureBuilt(screenW, screenH)
         if (cells.isEmpty()) {
             return null
         }
         val now = System.currentTimeMillis()
+        val free = cells.filter { cell ->
+            val until = blockedUntilMs[cell.index] ?: 0L
+            until <= now
+        }
+        if (free.isEmpty()) {
+            Log.d(TAG, "[WAR_GRID] all ${cells.size} cells blocked — reset and restart sweep")
+            blockedUntilMs.clear()
+            pendingCellIndex = null
+            awaitingResult = false
+            cursor = 0
+            return selectCell(cells[0], reason = "fresh_sweep")
+        }
+
+        free.forEach { blockedUntilMs.remove(it.index) }
+
+        val ranked = ElfBuffWarChangeScout.rankFreeCells(free, screenW, screenH)
+        val prioritized = ranked.firstOrNull()?.cell
+        if (prioritized != null) {
+            return selectCell(
+                prioritized,
+                reason = "change score=${"%.1f".format(ranked.first().score)}",
+            )
+        }
+
         val n = cells.size
         repeat(n) {
             val idx = cursor % n
             cursor = (cursor + 1) % n
-            val until = blockedUntilMs[idx] ?: 0L
-            if (until > now) {
-                return@repeat
-            }
-            blockedUntilMs.remove(idx)
             val cell = cells[idx]
-            pendingCellIndex = idx
-            awaitingResult = true
-            Log.d(
-                TAG,
-                "[WAR_GRID] cell=$idx/${n - 1} label=${cell.label} " +
-                    "center=(${cell.screenX},${cell.screenY})",
-            )
-            return cell
+            if (free.any { it.index == cell.index }) {
+                return selectCell(cell, reason = "round_robin")
+            }
         }
-        Log.d(TAG, "[WAR_GRID] all $n cells blocked — reset and restart sweep")
-        blockedUntilMs.clear()
-        pendingCellIndex = null
-        awaitingResult = false
-        cursor = 0
-        val cell = cells[0]
-        pendingCellIndex = 0
+        return selectCell(free.first(), reason = "round_robin_fallback")
+    }
+
+    private fun selectCell(cell: Cell, reason: String): Cell {
+        pendingCellIndex = cell.index
         awaitingResult = true
-        cursor = 1 % n
         Log.d(
             TAG,
-            "[WAR_GRID] cell=0/${n - 1} label=${cell.label} " +
-                "center=(${cell.screenX},${cell.screenY}) (fresh sweep)",
+            "[WAR_GRID] cell=${cell.index}/${cells.size - 1} label=${cell.label} " +
+                "center=(${cell.screenX},${cell.screenY}) via=$reason",
         )
         return cell
     }
@@ -201,7 +219,7 @@ object ElfBuffWarTapGrid {
     private fun cellPx(screenW: Int): Int =
         (CELL_PX_BASE * screenW / BASE_W).coerceAtLeast(24)
 
-    /** Three triangle cells around character center; drop any that hit exclusions. */
+    /** Build south-biased cells; drop any that hit exclusions / ellipse edge. */
     private fun buildCells(screenW: Int, screenH: Int): List<Cell> {
         val cx = ELLIPSE_CX * screenW / BASE_W
         val cy = ELLIPSE_CY * screenH / BASE_H

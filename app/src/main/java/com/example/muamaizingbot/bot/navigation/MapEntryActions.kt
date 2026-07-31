@@ -4,6 +4,8 @@ import android.util.Log
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.maps.MapNavigation
+import com.example.muamaizingbot.settings.BotTiming
+import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.navigation.ScrollSettleWait
@@ -389,7 +391,7 @@ object MapEntryActions {
         val modalRow = NavigationVision.waitForTemplate(
             assetPath = navigation.modalOptionTemplate,
             threshold = MAP_OPTION_THRESHOLD,
-            timeoutMs = MODAL_DIALOG_WAIT_MS,
+            timeoutMs = BotTiming.ms(MODAL_DIALOG_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
             pollMs = 400L,
         ) ?: run {
             NavigationVision.logBestScore(navigation.modalOptionTemplate)

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.settings.AppLanguage
 import com.example.muamaizingbot.settings.AppSettingsStore
+import com.example.muamaizingbot.settings.BotSpeedMode
 import com.example.muamaizingbot.telegram.TelegramEndpoint
 import com.example.muamaizingbot.telegram.TelegramNotifier
 import com.example.muamaizingbot.telegram.TelegramSendResult
@@ -40,14 +41,6 @@ import com.example.muamaizingbot.telegram.TelegramStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/**
- * App-wide timing profile. UI stub — delays still use Normal timings until wired.
- */
-enum class BotSpeedMode {
-    NORMAL,
-    FAST,
-}
 
 @Composable
 fun SystemSettingsScreen(
@@ -57,8 +50,8 @@ fun SystemSettingsScreen(
     val context = LocalContext.current
     val activity = context as? Activity
     val language by AppSettingsStore.language.collectAsState()
+    val speedMode by AppSettingsStore.botSpeed.collectAsState()
 
-    var speedMode by remember { mutableStateOf(BotSpeedMode.NORMAL) }
     var chatId by remember { mutableStateOf(TelegramStore.chatId()) }
     var alertsEnabled by remember { mutableStateOf(TelegramStore.alertsEnabled()) }
     var savedHint by remember { mutableStateOf("") }
@@ -245,12 +238,12 @@ fun SystemSettingsScreen(
         ) {
             FilterChip(
                 selected = speedMode == BotSpeedMode.NORMAL,
-                onClick = { speedMode = BotSpeedMode.NORMAL },
+                onClick = { AppSettingsStore.setBotSpeed(BotSpeedMode.NORMAL) },
                 label = { Text(stringResource(R.string.system_speed_normal)) },
             )
             FilterChip(
                 selected = speedMode == BotSpeedMode.FAST,
-                onClick = { speedMode = BotSpeedMode.FAST },
+                onClick = { AppSettingsStore.setBotSpeed(BotSpeedMode.FAST) },
                 label = { Text(stringResource(R.string.system_speed_fast)) },
             )
         }

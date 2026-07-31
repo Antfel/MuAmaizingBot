@@ -3,12 +3,10 @@ package com.example.muamaizingbot.license
 import android.util.Log
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.settings.UiStrings
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.io.BufferedReader
-import java.io.InputStreamReader
-import java.net.HttpURLConnection
-import java.net.URL
-import java.nio.charset.StandardCharsets
 
 sealed class LicenseApiResult {
     data class Acquired(
@@ -29,8 +27,7 @@ sealed class LicenseApiResult {
 object LicenseApiClient {
 
     private const val TAG = "LicenseApi"
-    private const val CONNECT_TIMEOUT_MS = 8_000
-    private const val READ_TIMEOUT_MS = 10_000
+    private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
 
     fun acquire(
         baseUrl: String,
@@ -127,38 +124,33 @@ object LicenseApiClient {
         body: JSONObject,
         map: (JSONObject, Int) -> LicenseApiResult,
     ): LicenseApiResult {
-        var conn: HttpURLConnection? = null
         return try {
-            conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "POST"
-                connectTimeout = CONNECT_TIMEOUT_MS
-                readTimeout = READ_TIMEOUT_MS
-                doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                setRequestProperty("Accept", "application/json")
-                if (url.contains(".ngrok-free.dev/")) {
-                    setRequestProperty("ngrok-skip-browser-warning", "true")
+            val requestBuilder = Request.Builder()
+                .url(url)
+                .header("Accept", "application/json")
+                .post(body.toString().toRequestBody(JSON_MEDIA_TYPE))
+            LicenseHttpClient.addTunnelHeaders(url, requestBuilder)
+
+            LicenseHttpClient.licenseClient.newCall(requestBuilder.build()).execute().use { response ->
+                val text = response.body.string()
+                val json = if (text.isBlank()) {
+                    JSONObject()
+                } else {
+                    runCatching { JSONObject(text) }.getOrElse {
+                        Log.w(TAG, "POST $url non-JSON status=${response.code}")
+                        JSONObject()
+                            .put("error", "INVALID_RESPONSE")
+                            .put("message", userMessageForCode("INVALID_RESPONSE"))
+                    }
                 }
+                map(json, response.code)
             }
-            val bytes = body.toString().toByteArray(StandardCharsets.UTF_8)
-            conn.outputStream.use { it.write(bytes) }
-
-            val code = conn.responseCode
-            val stream = if (code in 200..299) conn.inputStream else conn.errorStream
-            val text = stream?.use { input ->
-                BufferedReader(InputStreamReader(input, StandardCharsets.UTF_8)).readText()
-            }.orEmpty()
-
-            val json = if (text.isBlank()) JSONObject() else JSONObject(text)
-            map(json, code)
         } catch (t: Throwable) {
             Log.w(TAG, "POST $url failed: ${t.message}")
             LicenseApiResult.Failed(
                 "NETWORK",
                 userMessageForCode("NETWORK"),
             )
-        } finally {
-            conn?.disconnect()
         }
     }
 }

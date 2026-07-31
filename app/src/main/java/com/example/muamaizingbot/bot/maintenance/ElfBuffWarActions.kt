@@ -10,12 +10,13 @@ import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
 /**
- * Divine War / APEX elf loop: grid taps → green HP buff → Focus Boss clear HUD → resume taps.
+ * Divine War / APEX elf loop: grid taps → green HP buff → hard-clear HUD → resume taps.
  * Never touches PK All/Union. Does not force Auto combat.
  * Death aborts the cycle immediately so the loop can revive + return to post.
  *
- * Search: angular round-robin over ~87px cells (1 HUD coord) with MISS/HIT cooldowns.
- * Each cell: 5-point cross (C+N/E/S/W); aborts early if focus appears mid-cross.
+ * Search: south-biased cells prioritized by empty-reference visual change, with
+ * round-robin fallback and MISS/HIT cooldowns. Each cell: 5-point cross
+ * (C+N/E/S/W); aborts early if focus appears mid-cross.
  */
 object ElfBuffWarActions {
 

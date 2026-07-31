@@ -6,6 +6,8 @@ import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.FarmLocation
+import com.example.muamaizingbot.settings.BotTiming
+import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.util.AdaptiveWait
 import com.example.muamaizingbot.vision.BitmapRegionSimilarity
 import com.example.muamaizingbot.vision.coordinate.CoordinateReader
@@ -43,7 +45,10 @@ object NavigationWaitActions {
 
     suspend fun waitUntilMapLoaded(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return false
-        val timeoutMs = navigation.enterWaitSeconds * 1000L
+        val timeoutMs = BotTiming.ms(
+            navigation.enterWaitSeconds * 1000L,
+            BotTimingCategory.SCREEN_LOAD,
+        )
 
         val loaded = AdaptiveWait.until(
             timeoutMs = timeoutMs,
@@ -64,7 +69,10 @@ object NavigationWaitActions {
     /** Poll until the in-world map name OCR matches (after teleport / loading). */
     suspend fun waitUntilWorldReady(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return true
-        val timeoutMs = navigation.enterWaitSeconds * 1000L
+        val timeoutMs = BotTiming.ms(
+            navigation.enterWaitSeconds * 1000L,
+            BotTimingCategory.SCREEN_LOAD,
+        )
 
         val ready = AdaptiveWait.until(timeoutMs = timeoutMs, label = "world_ready") {
             isOnConfiguredMap(mapDef, null)
@@ -80,7 +88,10 @@ object NavigationWaitActions {
     /** HUD + screen stable — safe to open zone map / wire UI (avoids false taps while loading). */
     suspend fun waitUntilZoneUiReady(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return waitUntilUiSettled()
-        val timeoutMs = navigation.enterWaitSeconds * 1000L
+        val timeoutMs = BotTiming.ms(
+            navigation.enterWaitSeconds * 1000L,
+            BotTimingCategory.SCREEN_LOAD,
+        )
         Log.d(TAG, "[ZONE_UI] waiting map=${mapDef.id}")
 
         var hudStable = 0
@@ -255,7 +266,7 @@ object NavigationWaitActions {
             Log.w(TAG, "[MAP_OCR] open-map fallback: map window failed")
             return null
         }
-        delay(OPEN_MAP_OCR_SETTLE_MS)
+        delay(BotTiming.ms(OPEN_MAP_OCR_SETTLE_MS, BotTimingCategory.POST_TAP))
         val frame = NavigationVision.captureFrame()
         if (frame == null) {
             MapWindowActions.closeMapWindowIfOpen()
@@ -323,7 +334,7 @@ object NavigationWaitActions {
 
     suspend fun waitUntilNavigationComplete(): Boolean {
         Log.d(TAG, "[NAV_COMPLETE] started")
-        delay(AUTO_NAV_INITIAL_WAIT_MS)
+        delay(BotTiming.ms(AUTO_NAV_INITIAL_WAIT_MS, BotTimingCategory.FIXED_SETTLE))
 
         var tracking = false
         repeat(AUTO_NAV_START_ATTEMPTS) { attempt ->
@@ -354,7 +365,7 @@ object NavigationWaitActions {
                 Log.d(TAG, "[NAV_COMPLETE] miss $misses/$AUTO_NAV_MISSES_TO_FINISH")
                 if (misses >= AUTO_NAV_MISSES_TO_FINISH) {
                     if (waitForScreenStability()) {
-                        delay(AUTO_NAV_FINISH_GRACE_MS)
+                        delay(BotTiming.ms(AUTO_NAV_FINISH_GRACE_MS, BotTimingCategory.FIXED_SETTLE))
                         Log.d(TAG, "[NAV_COMPLETE] finished=true")
                         return true
                     }
@@ -459,7 +470,10 @@ object NavigationWaitActions {
 
     private suspend fun waitForScreenStability(): Boolean {
         var stableCount = 0
-        val deadline = System.currentTimeMillis() + STABILITY_TIMEOUT_MS
+        val deadline = System.currentTimeMillis() + BotTiming.ms(
+            STABILITY_TIMEOUT_MS,
+            BotTimingCategory.FIXED_SETTLE,
+        )
         var lastRegion: Bitmap? = null
 
         while (System.currentTimeMillis() < deadline) {

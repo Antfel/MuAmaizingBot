@@ -9,6 +9,8 @@ import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.SwipeCoords
 import com.example.muamaizingbot.maps.WireSwitchConfig
+import com.example.muamaizingbot.settings.BotTiming
+import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.ScaledRoi
@@ -45,7 +47,12 @@ object WireSwitchActions {
     /** Same cadence as map-list scroll ([MapEntryActions] / [NavigationVision]). */
     private const val SCROLL_WAIT_MS = 1000L
     private const val POPUP_OPEN_WAIT_MS = 1500L
-    private const val WIRE_SELECT_WAIT_MS = 1500L
+    /**
+     * Minimum settle after tapping a wire row before Switch Line may be pressed.
+     * Enter is often already on-screen, so we poll for it immediately and only
+     * pad up to this floor (was a blind 1500ms sleep).
+     */
+    private const val WIRE_SELECT_MIN_SETTLE_MS = 350L
     private const val WIRE_ENTER_WAIT_MS = 4000L
     private const val HUD_WAIT_MS = 12_000L
     /** Longer drag than a flick; short travel keeps it map-list soft. */
@@ -127,7 +134,6 @@ object WireSwitchActions {
             dismissWirePopup(config)
             return false
         }
-        delay(WIRE_SELECT_WAIT_MS)
 
         if (!confirmWireSwitch(config, layout)) {
             dismissWirePopup(config)
@@ -301,7 +307,7 @@ object WireSwitchActions {
                     "at=(${switchButton.centerX},${switchButton.centerY}) score=${switchButton.score}",
             )
             NavigationVision.tapMatch(switchButton)
-            delay(POPUP_OPEN_WAIT_MS)
+            delay(BotTiming.ms(POPUP_OPEN_WAIT_MS, BotTimingCategory.SCREEN_LOAD))
 
             if (closeChatIfOpen()) {
                 Log.w(TAG, "[WIRE] tap opened chat instead of wire popup — retry")
@@ -330,7 +336,7 @@ object WireSwitchActions {
         if (paths.isEmpty()) {
             return null
         }
-        val deadline = System.currentTimeMillis() + HUD_WAIT_MS
+        val deadline = System.currentTimeMillis() + BotTiming.ms(HUD_WAIT_MS, BotTimingCategory.SCREEN_LOAD)
         while (System.currentTimeMillis() < deadline) {
             if (!requireCapture("waitWireHud")) {
                 return null
@@ -513,7 +519,7 @@ object WireSwitchActions {
                     swipe.y2,
                     swipe.durationMs,
                 )
-                delay(SCROLL_WAIT_MS)
+                delay(BotTiming.ms(SCROLL_WAIT_MS, BotTimingCategory.FIXED_SETTLE))
             }
         }
 
@@ -559,11 +565,13 @@ object WireSwitchActions {
     ): Boolean {
         val enterPath = config.templates.enterButton
         val enterRoi = NavigationVision.wirePopupEnterRoiFromList(layout.listRoi)
+        val selectAtMs = System.currentTimeMillis()
+        val minSettleMs = BotTiming.ms(WIRE_SELECT_MIN_SETTLE_MS, BotTimingCategory.POST_TAP)
 
         var enter = NavigationVision.waitForTemplate(
             assetPath = enterPath,
             threshold = WIRE_ENTER_THRESHOLD,
-            timeoutMs = WIRE_ENTER_WAIT_MS,
+            timeoutMs = BotTiming.ms(WIRE_ENTER_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
             pollMs = 300L,
             roi = enterRoi,
         )
@@ -571,28 +579,45 @@ object WireSwitchActions {
             enter = NavigationVision.waitForTemplate(
                 assetPath = enterPath,
                 threshold = WIRE_ENTER_THRESHOLD,
-                timeoutMs = 1500L,
+                timeoutMs = BotTiming.ms(1500L, BotTimingCategory.SCREEN_LOAD),
                 pollMs = 300L,
             )
         }
 
         if (enter != null) {
+            val sinceSelect = System.currentTimeMillis() - selectAtMs
+            if (sinceSelect < minSettleMs) {
+                delay(minSettleMs - sinceSelect)
+            }
+            val switchWaitMs = BotTiming.ms(
+                config.switchWaitSeconds * 1000L,
+                BotTimingCategory.FIXED_SETTLE,
+            )
             Log.d(
                 TAG,
                 "[WIRE] confirming switch score=${enter.score} at=(${enter.centerX},${enter.centerY}) " +
-                    "wait=${config.switchWaitSeconds}s",
+                    "settle=${minSettleMs}ms sinceSelect=${sinceSelect}ms wait=${switchWaitMs}ms",
             )
             NavigationVision.tapMatch(enter)
-            delay(config.switchWaitSeconds * 1000L)
+            delay(switchWaitMs)
             return true
         }
 
         NavigationVision.logBestScore(enterPath, enterRoi)
         Log.w(TAG, "[WIRE] enter button not found — fallback ref tap ($WIRE_ENTER_REF_X,$WIRE_ENTER_REF_Y)")
+        val sinceSelect = System.currentTimeMillis() - selectAtMs
+        if (sinceSelect < minSettleMs) {
+            delay(minSettleMs - sinceSelect)
+        }
         if (!NavigationVision.tap(WIRE_ENTER_REF_X, WIRE_ENTER_REF_Y)) {
             return false
         }
-        delay(config.switchWaitSeconds * 1000L)
+        delay(
+            BotTiming.ms(
+                config.switchWaitSeconds * 1000L,
+                BotTimingCategory.FIXED_SETTLE,
+            ),
+        )
         return true
     }
 

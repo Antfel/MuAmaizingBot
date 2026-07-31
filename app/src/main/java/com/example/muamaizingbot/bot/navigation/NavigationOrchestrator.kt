@@ -8,6 +8,8 @@ import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.settings.BotTiming
+import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
@@ -260,8 +262,9 @@ object NavigationOrchestrator {
         }
 
         MapWindowActions.closeMapWindowIfOpen()
-        Log.d(TAG, "[NAV] pre-wire HUD settle ${PRE_WIRE_SETTLE_MS}ms")
-        delay(PRE_WIRE_SETTLE_MS)
+        val settleMs = BotTiming.ms(PRE_WIRE_SETTLE_MS, BotTimingCategory.FIXED_SETTLE)
+        Log.d(TAG, "[NAV] pre-wire HUD settle ${settleMs}ms")
+        delay(settleMs)
 
         if (!WireSwitchActions.switchToWire(mapDef, wireId)) {
             Log.w(TAG, "[NAV] switch_to_wire failed")

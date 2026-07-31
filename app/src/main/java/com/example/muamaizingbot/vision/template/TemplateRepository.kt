@@ -4,9 +4,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Log
+import java.io.File
 
 /**
- * Loads the single fixed template pack from assets ([TemplateAssets.ASSET_ROOT]).
+ * Loads the single fixed template pack from assets ([TemplateAssets.ASSET_ROOT]),
+ * then overlays any PNGs from a downloaded content pack (same relative paths).
  * Target capture: 1280×720 @ 240 DPI.
  */
 object TemplateRepository {
@@ -16,18 +18,24 @@ object TemplateRepository {
     private val templatesByCanonicalPath = linkedMapOf<String, TemplateInfo>()
     private lateinit var appContext: Context
 
-    fun init(context: Context) {
+    fun init(context: Context, overlayRoot: File? = null) {
         appContext = context.applicationContext
-        reload()
+        reload(overlayRoot)
     }
 
-    fun reload() {
+    fun reload(overlayRoot: File? = null) {
         if (!::appContext.isInitialized) {
             return
         }
         clearLoadedTemplates()
         walkAssets(appContext, TemplateAssets.ASSET_ROOT)
-        Log.d(TAG, "[TEMPLATE] loaded count=${templatesByCanonicalPath.size}")
+        if (overlayRoot != null) {
+            val overlayTemplates = File(overlayRoot, TemplateAssets.ASSET_ROOT)
+            if (overlayTemplates.isDirectory) {
+                walkDisk(overlayTemplates, TemplateAssets.ASSET_ROOT)
+            }
+        }
+        Log.d(TAG, "[TEMPLATE] loaded count=${templatesByCanonicalPath.size} overlay=${overlayRoot != null}")
     }
 
     fun getByPath(canonicalPath: String): TemplateInfo? {
@@ -63,6 +71,18 @@ object TemplateRepository {
         }
     }
 
+    private fun walkDisk(dir: File, relativeRoot: String) {
+        val children = dir.listFiles() ?: return
+        for (child in children) {
+            val relative = "$relativeRoot/${child.name}"
+            if (child.isDirectory) {
+                walkDisk(child, relative)
+            } else if (child.name.endsWith(".png", ignoreCase = true)) {
+                loadDisk(child, relative)
+            }
+        }
+    }
+
     private fun loadAsset(context: Context, physicalPath: String) {
         if (!physicalPath.startsWith("${TemplateAssets.ASSET_ROOT}/") ||
             !physicalPath.endsWith(".png", ignoreCase = true)
@@ -71,15 +91,35 @@ object TemplateRepository {
         }
         val relative = physicalPath.removePrefix("${TemplateAssets.ASSET_ROOT}/")
         val canonicalPath = "${TemplateAssets.CANONICAL_PREFIX}/$relative"
-        if (templatesByCanonicalPath.containsKey(canonicalPath)) {
-            return
-        }
         val bitmap = context.assets.open(physicalPath).use { stream ->
             BitmapFactory.decodeStream(stream)
         } ?: run {
-            Log.w(TAG, "[TEMPLATE] failed relative=$relative")
+            Log.w(TAG, "[TEMPLATE] failed asset relative=$relative")
             return
         }
+        putTemplate(canonicalPath, relative, bitmap)
+    }
+
+    private fun loadDisk(file: File, physicalRelativePath: String) {
+        if (!physicalRelativePath.startsWith("${TemplateAssets.ASSET_ROOT}/") ||
+            !physicalRelativePath.endsWith(".png", ignoreCase = true)
+        ) {
+            return
+        }
+        val relative = physicalRelativePath.removePrefix("${TemplateAssets.ASSET_ROOT}/")
+        val canonicalPath = "${TemplateAssets.CANONICAL_PREFIX}/$relative"
+        val bitmap = BitmapFactory.decodeFile(file.absolutePath) ?: run {
+            Log.w(TAG, "[TEMPLATE] failed disk relative=$relative")
+            return
+        }
+        // Overlay replaces any existing asset bitmap for the same path.
+        templatesByCanonicalPath.remove(canonicalPath)?.bitmap?.let { old ->
+            if (!old.isRecycled) old.recycle()
+        }
+        putTemplate(canonicalPath, relative, bitmap)
+    }
+
+    private fun putTemplate(canonicalPath: String, relative: String, bitmap: Bitmap) {
         val category = relative.substringBefore('/', missingDelimiterValue = "root")
         templatesByCanonicalPath[canonicalPath] = TemplateInfo(
             assetPath = canonicalPath,

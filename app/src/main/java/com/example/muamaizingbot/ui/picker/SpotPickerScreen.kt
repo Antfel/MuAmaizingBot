@@ -48,7 +48,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import com.example.muamaizingbot.R
@@ -56,10 +55,10 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.maps.CoordinateMapping
-import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.ui.components.MapSearchField
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.template.TemplateAssets
 import java.util.Locale
@@ -262,7 +261,7 @@ fun SpotPickerScreen(
             }
         }
 
-        MapDropdown(
+        MapSearchField(
             maps = maps,
             selectedMapId = selectedMapId,
             onMapSelected = { mapId ->
@@ -276,7 +275,15 @@ fun SpotPickerScreen(
                 isCross = MapDefinitionRepository.getById(mapId)?.isCross ?: true
                 statusMessage = ""
             },
+            enabled = profile != null,
         )
+        if (maps.isEmpty()) {
+            Text(
+                text = stringResource(R.string.spot_no_configured_maps),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
 
         UnionCrossDropdown(
             isCross = isCross,
@@ -445,56 +452,6 @@ fun SpotPickerScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MapDropdown(
-    maps: List<MapDefinition>,
-    selectedMapId: String,
-    onMapSelected: (String) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val selectedName = maps.firstOrNull { it.id == selectedMapId }?.name ?: stringResource(R.string.spot_select_map)
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        OutlinedTextField(
-            value = selectedName,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.spot_map)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            maps.forEach { map ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            if (map.isCross) {
-                                "${map.name} · Cross"
-                            } else {
-                                "${map.name} · Local"
-                            },
-                        )
-                    },
-                    onClick = {
-                        onMapSelected(map.id)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
 private fun UnionCrossDropdown(
     isCross: Boolean,
     onSelected: (Boolean) -> Unit,
@@ -597,11 +554,10 @@ private fun ZoomableMapPicker(
     onSelect: (Int, Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
     val assetPath = TemplateAssets.normalizeToCanonical(canonicalAssetPath)
     val bitmap = remember(assetPath) {
         runCatching {
-            context.assets.open(assetPath).use { stream ->
+            com.example.muamaizingbot.content.ContentAssetResolver.open(assetPath)?.use { stream ->
                 BitmapFactory.decodeStream(stream)?.asImageBitmap()
             }
         }.getOrNull()
