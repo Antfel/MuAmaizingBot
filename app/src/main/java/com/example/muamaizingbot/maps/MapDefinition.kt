@@ -4,15 +4,16 @@ import org.json.JSONObject
 
 data class MapMaintenance(
     val mapUiImageAssetPath: String,
-    val imageWidth: Int = 2560,
-    val imageHeight: Int = 1440,
+    val imageWidth: Int = 1280,
+    val imageHeight: Int = 720,
 )
 
 data class AffineTransform(
     val coordX: List<Double>,
     val coordY: List<Double>,
-    val sourceWidth: Int = 2560,
-    val sourceHeight: Int = 1440,
+    /** Pixel space of the affine fit (= maintenance PNG). Prefer 1280×720. */
+    val sourceWidth: Int = 1280,
+    val sourceHeight: Int = 720,
 )
 
 data class MapDefinition(
@@ -70,8 +71,8 @@ data class MapDefinition(
                 val pcPath = maint.optString("map_ui_image", "")
                 MapMaintenance(
                     mapUiImageAssetPath = MapNavigationParser.pcPathToAssetPath(pcPath),
-                    imageWidth = maint.optInt("image_width", 2560),
-                    imageHeight = maint.optInt("image_height", 1440),
+                    imageWidth = maint.optInt("image_width", 1280),
+                    imageHeight = maint.optInt("image_height", 720),
                 )
             }
 
@@ -94,11 +95,15 @@ data class MapDefinition(
                     return@let null
                 }
                 val source = mapping.optJSONObject("source_image_size")
+                // Prefer explicit source; else maintenance PNG size; else native 1280.
+                // Do not default to legacy 2560 — that double-scaled 720p calibs.
+                val fallbackW = maintenance?.imageWidth ?: 1280
+                val fallbackH = maintenance?.imageHeight ?: 720
                 AffineTransform(
                     coordX = coordX,
                     coordY = coordY,
-                    sourceWidth = source?.optInt("width", 2560) ?: 2560,
-                    sourceHeight = source?.optInt("height", 1440) ?: 1440,
+                    sourceWidth = source?.optInt("width", fallbackW) ?: fallbackW,
+                    sourceHeight = source?.optInt("height", fallbackH) ?: fallbackH,
                 )
             }
 

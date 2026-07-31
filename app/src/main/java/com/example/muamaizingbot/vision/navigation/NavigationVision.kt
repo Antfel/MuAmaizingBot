@@ -167,6 +167,8 @@ object NavigationVision {
             if (swipe != null && attempt < maxAttempts) {
                 swipe(swipe)
                 delay(MAP_LIST_SCROLL_WAIT_MS)
+            } else if (swipe == null && attempt == 1) {
+                Log.w(TAG, "[VISION] scroll skipped — map_list_swipe is null path=$assetPath")
             }
         }
 

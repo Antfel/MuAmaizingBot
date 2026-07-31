@@ -57,6 +57,16 @@ object MapNavigationParser {
     private const val DEFAULT_CHECKED_TEMPLATE = "templates/ui/common/checked.png"
     private const val DEFAULT_UNCHECKED_TEMPLATE = "templates/ui/common/unchecked.png"
 
+    /** Shared maps-list drag @ 1280×720 (same as Raklion / Corrupted / Kalima). */
+    val DEFAULT_MAP_LIST_SWIPE = SwipeCoords(
+        x1 = 530,
+        y1 = 708,
+        x2 = 530,
+        y2 = 600,
+        durationMs = 250L,
+        maxAttempts = 10,
+    )
+
     private val COMMON_WIRE_DEFAULTS = WireSwitchTemplates(
         switchButton = "templates/mu/wires/common/switch_button.png",
         popupOpen = "templates/mu/wires/common/wire_popup_open.png",
@@ -99,7 +109,8 @@ object MapNavigationParser {
             uncheckedTemplate = uncheckedTemplate,
             enterTemplate = pcPathToAssetPath(nav.optString("enter_template", "")),
             enterWaitSeconds = nav.optInt("enter_wait", 8),
-            mapListSwipe = parseSwipe(nav.optJSONObject("map_list_swipe")),
+            mapListSwipe = parseSwipe(nav.optJSONObject("map_list_swipe"))
+                ?: DEFAULT_MAP_LIST_SWIPE,
         )
     }
 

@@ -7,10 +7,10 @@ import kotlin.math.roundToInt
 /**
  * Affine map between maintenance-reference pixels and in-game HUD coordinates.
  *
- * SpotPicker / farm spots author pixels in logical [RefCoords.REF_WIDTH]×[RefCoords.REF_HEIGHT].
- * The transform coefficients are defined in [AffineTransform] `sourceWidth`×`sourceHeight`
- * (historically 2560×1440). Maintenance PNG size is declared separately and is used only
- * when converting native PNG taps; prefer calling the REF overloads from the picker.
+ * SpotPicker / farm spots author pixels in logical [RefCoords.REF_WIDTH]×[RefCoords.REF_HEIGHT]
+ * (legacy 2560×1440). Affine coefficients are defined in [AffineTransform]
+ * `sourceWidth`×`sourceHeight` — for current maintenance PNGs that is **1280×720**.
+ * [refToSource] converts REF ↔ source so both spaces stay consistent.
  */
 object CoordinateMapping {
 
