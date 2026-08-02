@@ -13,7 +13,7 @@ object OverlayHudStyle {
     val textPrimary = Color(0xFFFFFFFF)
     val textSecondary = Color(0xB3FFFFFF)
     val panelWidth = 128.dp
-    val bubbleSize = 36.dp
+    val bubbleSize = 40.dp
     val controlButtonSize = 28.dp
     val controlIconSize = 16.dp
     val cornerRadius = 8.dp

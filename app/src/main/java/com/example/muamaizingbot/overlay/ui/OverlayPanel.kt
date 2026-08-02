@@ -1,5 +1,6 @@
 package com.example.muamaizingbot.overlay.ui
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,6 +36,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -149,12 +153,25 @@ private fun BubbleOverlay(
             .clickable(onClick = onExpand),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            text = stateShortLabel(botState, autoRestartPending),
-            color = bubbleTextColor(botState),
-            fontWeight = FontWeight.Bold,
-            fontSize = OverlayHudStyle.statusFontSize,
+        Image(
+            painter = painterResource(id = bubbleIconRes(botState)),
+            contentDescription = stringResource(botState.labelRes()),
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
         )
+        if (autoRestartPending &&
+            (botState == BotRuntimeState.ERROR || botState == BotRuntimeState.PAUSED)
+        ) {
+            Text(
+                text = "R",
+                color = OverlayHudStyle.textPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = OverlayHudStyle.statusFontSize,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(2.dp),
+            )
+        }
     }
 }
 
@@ -455,22 +472,12 @@ private fun ElfSeekRow(
     }
 }
 
-private fun stateShortLabel(state: BotRuntimeState, autoRestartPending: Boolean): String =
-    when {
-        autoRestartPending &&
-            (state == BotRuntimeState.ERROR || state == BotRuntimeState.PAUSED) -> "R"
-        state == BotRuntimeState.IDLE -> "ID"
-        state == BotRuntimeState.RUNNING -> "ON"
-        state == BotRuntimeState.PAUSED -> "||"
-        state == BotRuntimeState.ERROR -> "!"
-        else -> "?"
-    }
-
-private fun bubbleTextColor(state: BotRuntimeState) = when (state) {
-    BotRuntimeState.RUNNING -> OverlayHudStyle.accentGreen
-    BotRuntimeState.ERROR -> OverlayHudStyle.accentRed
-    BotRuntimeState.PAUSED -> OverlayHudStyle.accentOrange
-    else -> OverlayHudStyle.textPrimary
+private fun bubbleIconRes(state: BotRuntimeState): Int = when (state) {
+    BotRuntimeState.RUNNING -> R.drawable.ic_bot_running
+    BotRuntimeState.PAUSED -> R.drawable.ic_bot_paused
+    BotRuntimeState.IDLE,
+    BotRuntimeState.ERROR,
+    -> R.drawable.ic_bot_stopped
 }
 
 private fun stateColor(state: BotRuntimeState) = when (state) {
