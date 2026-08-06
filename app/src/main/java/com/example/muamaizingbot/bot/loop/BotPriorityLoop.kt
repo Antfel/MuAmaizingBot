@@ -150,7 +150,11 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
-        if (hudClear && PetCheckGate.shouldCheck(profile)) {
+        // Pet: farm / giver / war keep interval checks. Farm Bosses skip while FIGHT
+        // (prep runs in post-kill / post-revive general checks instead).
+        val skipPetDuringBossFight =
+            profile.isFarmBossesMode() && BossHuntState.phase == BossHuntPhase.FIGHT
+        if (hudClear && !skipPetDuringBossFight && PetCheckGate.shouldCheck(profile)) {
             Log.d(
                 TAG,
                 "[LOOP] branch=pet_validate intervalMin=${profile.petCheckIntervalMinutes} " +
@@ -165,6 +169,9 @@ object BotPriorityLoop {
                 return navigateToBossCheckpoint("post-pet")
             }
             return IterationResult.OK
+        }
+        if (skipPetDuringBossFight && PetCheckGate.shouldCheck(profile)) {
+            Log.d(TAG, "[LOOP] skip pet_validate during boss FIGHT (prep after kill/death)")
         }
 
         // Elf buff: any time (farm + Farm Bosses mid-hunt). Giver / War never seek.
@@ -537,9 +544,10 @@ object BotPriorityLoop {
     }
 
     /**
-     * Shared general maintenance for Farm Bosses: potions, inventory, then elf buff.
-     * Used at startup, post-revive, and post-kill.
-     * Potions / inventory / elf also run every loop tick before the farm-bosses branch.
+     * Shared general maintenance for Farm Bosses: potions, inventory, pet, then elf buff.
+     * Used at startup, post-revive, and post-kill (preparation before the next hunt).
+     * Potions / inventory / elf also run every loop tick before the farm-bosses branch;
+     * pet is **not** probed mid-FIGHT — only here and via the normal interval outside FIGHT.
      * Return to checkpoint is the caller's job.
      */
     private suspend fun runFarmBossesGeneralChecks(
@@ -576,6 +584,23 @@ object BotPriorityLoop {
             if (!InventoryRecycleActions.handleFullInventory()) {
                 return recoveryOrError("boss-$reason-recycle")
             }
+        }
+
+        // Preparation pet check after fight / death (and startup general pass).
+        // Force regardless of interval — this is the farm_bosses prep window.
+        if (profile.enablePet) {
+            Log.d(
+                TAG,
+                "[LOOP] farm_bosses pet_validate reason=$reason " +
+                    "want=${profile.petType.toStorage()}",
+            )
+            val pet = PetActions.validateIfEnabled(profile)
+            PetCheckGate.noteCheckDone()
+            Log.d(
+                TAG,
+                "[LOOP] farm_bosses pet_validate result=$pet reason=$reason " +
+                    "want=${profile.petType.toStorage()}",
+            )
         }
 
         if (ElfBuffSeekGate.shouldAttemptSeek(profile) && !ElfBuffCheckActions.hasElfBuff()) {

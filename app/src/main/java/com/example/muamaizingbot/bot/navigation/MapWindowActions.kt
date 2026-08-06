@@ -27,23 +27,55 @@ object MapWindowActions {
         if (waitForWorldReady != null) {
             NavigationWaitActions.waitUntilWorldReady(waitForWorldReady)
         }
-        if (isMapWindowOpen()) {
+        WireSwitchActions.ensureChatClosed()
+        if (hasMapTabChrome()) {
             Log.d(TAG, "[MAP] window already open")
             return true
         }
         return openMapWindow(retries = retries, timeoutMs = timeoutMs)
     }
 
+    /**
+     * Any top-right panel that looks like map chrome (Map tab **or** close_x).
+     * Prefer [hasMapTabChrome] before scrolling the map list — chat/store also have close_x.
+     */
     suspend fun isMapWindowOpen(): Boolean {
-        if (NavigationVision.findTemplate(
-                MAP_WINDOW_OPEN,
-                NavigationTemplateThresholds.mapWindow(),
-                mapHeaderRoi(),
-            ) != null
-        ) {
+        if (hasMapTabChrome()) {
             return true
         }
         return isMapPanelOpenViaCloseButton()
+    }
+
+    /** True only when the left "Map" tab template is visible — not close_x alone. */
+    suspend fun hasMapTabChrome(): Boolean {
+        return NavigationVision.findTemplate(
+            MAP_WINDOW_OPEN,
+            NavigationTemplateThresholds.mapWindow(),
+            mapHeaderRoi(),
+        ) != null
+    }
+
+    /**
+     * Ready to swipe the world map list: chat closed and Map tab visible.
+     * Reopens the map if a false "open" (close_x-only / chat) left us mid-nav.
+     */
+    suspend fun ensureMapListReadyForScroll(retries: Int = 2): Boolean {
+        DisconnectDetector.markBusy("map-window")
+        if (WireSwitchActions.ensureChatClosed()) {
+            Log.w(TAG, "[MAP] closed chat before list scroll")
+        }
+        if (hasMapTabChrome()) {
+            return true
+        }
+        if (isMapPanelOpenViaCloseButton()) {
+            Log.w(TAG, "[MAP] close_x without Map tab — dismiss before reopen")
+            dismissPanelViaCloseButton()
+        }
+        Log.w(TAG, "[MAP] list not ready — opening map window")
+        if (!openMapWindow(retries = retries, timeoutMs = 5000)) {
+            return false
+        }
+        return hasMapTabChrome()
     }
 
     suspend fun openMapWindow(
@@ -56,9 +88,19 @@ object MapWindowActions {
             NavigationWaitActions.waitUntilWorldReady(waitForWorldReady)
         }
 
-        if (isMapWindowOpen()) {
+        // Map button sits near chat — close chat first so a miss is not left open.
+        if (WireSwitchActions.ensureChatClosed()) {
+            Log.w(TAG, "[MAP] closed chat before map open")
+        }
+
+        // Skip tap only on real Map tab. close_x alone is often chat/store.
+        if (hasMapTabChrome()) {
             Log.d(TAG, "[MAP] window already open (skip tap)")
             return true
+        }
+        if (isMapPanelOpenViaCloseButton()) {
+            Log.w(TAG, "[MAP] close_x without Map tab — dismiss then open")
+            dismissPanelViaCloseButton()
         }
 
         dismissVisiblePopup()
@@ -110,16 +152,13 @@ object MapWindowActions {
         val effectiveTimeout = BotTiming.ms(timeoutMs, BotTimingCategory.SCREEN_LOAD)
         val roi = mapHeaderRoi()
         val threshold = NavigationTemplateThresholds.mapWindow()
-        if (NavigationVision.waitForTemplate(
-                assetPath = MAP_WINDOW_OPEN,
-                threshold = threshold,
-                timeoutMs = effectiveTimeout,
-                roi = roi,
-            ) != null
-        ) {
-            return true
-        }
-        return waitUntilMapPanelOpenViaCloseButton(effectiveTimeout.coerceAtMost(1500))
+        // Require Map tab chrome — close_x alone matches chat/store and caused blind list scrolls.
+        return NavigationVision.waitForTemplate(
+            assetPath = MAP_WINDOW_OPEN,
+            threshold = threshold,
+            timeoutMs = effectiveTimeout,
+            roi = roi,
+        ) != null
     }
 
     suspend fun waitUntilMapWindowClosed(timeoutMs: Long): Boolean {
@@ -135,6 +174,10 @@ object MapWindowActions {
         if (!isMapWindowOpen()) {
             return
         }
+        dismissPanelViaCloseButton()
+    }
+
+    private suspend fun dismissPanelViaCloseButton() {
         val match = NavigationVision.findTemplate(CLOSE_X, NavigationTemplateThresholds.closeX()) ?: return
         if (!isLikelyPanelCloseButton(match.centerX, match.centerY)) {
             Log.d(TAG, "[MAP] skip dismiss; close_x outside panel region at=(${match.centerX},${match.centerY})")
@@ -171,17 +214,5 @@ object MapWindowActions {
     private suspend fun isMapPanelOpenViaCloseButton(): Boolean {
         val close = NavigationVision.findTemplate(CLOSE_X, NavigationTemplateThresholds.closeX()) ?: return false
         return isLikelyPanelCloseButton(close.centerX, close.centerY)
-    }
-
-    private suspend fun waitUntilMapPanelOpenViaCloseButton(timeoutMs: Long): Boolean {
-        val deadline = System.currentTimeMillis() + timeoutMs
-        while (System.currentTimeMillis() < deadline) {
-            if (isMapPanelOpenViaCloseButton()) {
-                Log.d(TAG, "[MAP] panel open via close_x fallback")
-                return true
-            }
-            kotlinx.coroutines.delay(200)
-        }
-        return false
     }
 }

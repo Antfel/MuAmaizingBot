@@ -199,10 +199,18 @@ object BossMapHuntActions {
                 mapDef,
                 timeoutMs = arrivalTimeoutMs,
             )
-            if (!arrived) {
-                Log.w(TAG, "[HUNT] arrival timeout — will still try Focus on next tick")
+            if (arrived) {
+                return true
             }
-            return true
+            // Timeout: only proceed to FIGHT if boss focus HUD is already up.
+            // Otherwise abort hop — avoids skull/seal loops on false arrivals (e.g. OCR trunc).
+            if (BossTargetingActions.hasBossFocus()) {
+                Log.d(TAG, "[HUNT] arrival timeout but boss_focus present — proceed")
+                return true
+            }
+            Log.w(TAG, "[HUNT] arrival timeout and no boss_focus — abort hop")
+            BossHuntState.clearBossTarget()
+            return false
         }
 
         Log.w(TAG, "[HUNT] no affine for ${mapDef.id} — fallback auto_nav wait")

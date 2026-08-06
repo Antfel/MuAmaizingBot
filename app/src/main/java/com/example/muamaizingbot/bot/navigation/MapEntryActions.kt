@@ -38,6 +38,11 @@ object MapEntryActions {
             return false
         }
 
+        if (!MapWindowActions.ensureMapListReadyForScroll()) {
+            Log.w(TAG, "[MAP_ENTRY] map list not ready — abort enter")
+            return false
+        }
+
         return when {
             navigation.isDirectTeleport -> enterDirectTeleport(mapDef, navigation)
             navigation.isModalEnter -> enterModalEnter(mapDef, navigation)
@@ -95,12 +100,18 @@ object MapEntryActions {
             if (swipe == null) {
                 return@repeat
             }
+            if (!assertMapListScrollSafe()) {
+                return false
+            }
             Log.d(TAG, "[MAP_ENTRY] pre-scroll ${index + 1}/$minInitialScrolls order=${mapDef.order}")
             NavigationVision.swipe(swipe)
             delay(MAP_LIST_SCROLL_WAIT_MS)
         }
 
         for (attempt in 1..HEAD_SCROLL_ATTEMPTS) {
+            if (!assertMapListScrollSafe()) {
+                return false
+            }
             val frame = NavigationVision.captureFrame()
             if (frame == null) {
                 Log.w(TAG, "[MAP_ENTRY] head verify no frame attempt=$attempt")
@@ -162,6 +173,9 @@ object MapEntryActions {
                 delay(SUB_HEAD_COLLAPSE_MS)
                 if (swipe != null) {
                     repeat(2) {
+                        if (!assertMapListScrollSafe()) {
+                            return false
+                        }
                         NavigationVision.swipe(swipe)
                         delay(MAP_LIST_SCROLL_WAIT_MS)
                     }
@@ -170,12 +184,28 @@ object MapEntryActions {
             }
 
             if (swipe != null && attempt < HEAD_SCROLL_ATTEMPTS) {
+                if (!assertMapListScrollSafe()) {
+                    return false
+                }
                 NavigationVision.swipe(swipe)
                 delay(MAP_LIST_SCROLL_WAIT_MS)
             }
         }
 
         return false
+    }
+
+    /** Abort blind swipes if chat stole focus or Map tab chrome is gone. */
+    private suspend fun assertMapListScrollSafe(): Boolean {
+        if (WireSwitchActions.ensureChatClosed()) {
+            Log.w(TAG, "[MAP_ENTRY] closed chat mid-entry — stop scrolls")
+            return false
+        }
+        if (!MapWindowActions.hasMapTabChrome()) {
+            Log.w(TAG, "[MAP_ENTRY] Map tab chrome missing — stop scrolls")
+            return false
+        }
+        return true
     }
 
     /** Skip Lorencia / early zones before probing (map list order in JSON). */

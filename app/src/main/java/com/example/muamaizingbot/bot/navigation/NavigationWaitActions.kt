@@ -11,6 +11,7 @@ import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.util.AdaptiveWait
 import com.example.muamaizingbot.vision.BitmapRegionSimilarity
 import com.example.muamaizingbot.vision.coordinate.CoordinateReader
+import com.example.muamaizingbot.vision.coordinate.CoordinateTextParser
 import com.example.muamaizingbot.vision.map.CurrentMapOcr
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.ScaledRoi
@@ -408,6 +409,24 @@ object NavigationWaitActions {
                 Log.d(TAG, "[COORD_ARRIVAL] current=(${current.first},${current.second}) dist=$dist")
                 if (dist <= radius) {
                     Log.d(TAG, "[COORD_ARRIVAL] arrived")
+                    return true
+                }
+                // HUD often drops leading digits (179→7). Same heuristic as farm-spot sticky:
+                // require Y near target so a real x=7 elsewhere does not count as arrived.
+                val yNear = abs(current.second - targetY) <= radius
+                if (yNear &&
+                    CoordinateTextParser.looksLikeTruncatedHudRead(
+                        current,
+                        targetX to targetY,
+                        tolerance = radius,
+                    )
+                ) {
+                    Log.d(
+                        TAG,
+                        "[COORD_ARRIVAL] trunc sticky " +
+                            "current=(${current.first},${current.second}) " +
+                            "target=($targetX,$targetY) → arrived",
+                    )
                     return true
                 }
 

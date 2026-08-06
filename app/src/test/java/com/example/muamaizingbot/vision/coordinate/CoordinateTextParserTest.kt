@@ -70,4 +70,16 @@ class CoordinateTextParserTest {
         assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(161 to 171, target, 5))
         assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(200 to 200, target, 5))
     }
+
+    @Test
+    fun looksLikeTruncatedHudRead_plains2Wire2Boss179() {
+        // Incident: target (179,153), OCR sticky (7,154) — drops leading 1.
+        val target = 179 to 153
+        val radius = 10
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedHudRead(7 to 154, target, radius))
+        assertEquals(true, CoordinateTextParser.looksLikeTruncatedAxis(7, 179))
+        // Y far from boss must not count as arrival-truncation.
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(7 to 50, target, radius))
+        assertEquals(false, CoordinateTextParser.looksLikeTruncatedHudRead(200 to 200, target, radius))
+    }
 }
