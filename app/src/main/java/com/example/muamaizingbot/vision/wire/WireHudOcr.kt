@@ -14,17 +14,22 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
 /**
- * OCR for the minimap HUD label `[Wire N]` / `[WireN]`.
+ * OCR for the minimap HUD label `[Wire N]` / `[Line N]`.
  * Used to break ties when several [wire_N_hud] templates score similarly.
+ *
+ * Open-map titles use `Line`; the HUD chip uses `Wire` — same channel id.
  */
 object WireHudOcr {
 
     private const val TAG = "WireHudOcr"
     private const val OCR_UPSCALE = 3.0
 
-    /** `[Wire4]`, `[Wire 5]`, `Wire 6`, OCR noise like `IWire4]`. */
+    /**
+     * HUD chip uses `[Wire N]`; open-map title uses `[Line N]` for the same channel.
+     * Also tolerate OCR noise like `IWire4]` / `(Line 1]`.
+     */
     private val WIRE_LABEL = Regex(
-        pattern = """Wire\s*([1-9])""",
+        pattern = """(?:Wire|Line)\s*([1-9])""",
         option = RegexOption.IGNORE_CASE,
     )
 

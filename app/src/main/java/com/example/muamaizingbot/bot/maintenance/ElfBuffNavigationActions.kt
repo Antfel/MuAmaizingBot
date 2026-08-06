@@ -17,58 +17,62 @@ object ElfBuffNavigationActions {
     private const val BUFF_PICKUP_WAIT_MS = 5000L
 
     suspend fun goToElfBuffAndReturn(): Boolean {
-        DisconnectDetector.markBusy("elf-buff-nav")
-        val profile = ProfileRepository.currentProfile.value
-        if (profile == null) {
-            Log.w(TAG, "[ELF] no active profile")
-            return false
-        }
-
-        if (!ProfileRepository.shouldSeekElfBuff(profile)) {
-            Log.d(TAG, "[ELF] route skipped enableElfBuff=${profile.enableElfBuff}")
-            return true
-        }
-
-        val elfLocation = LocationRepository.getElfBuff(profile.filename)
-        if (elfLocation == null) {
-            Log.w(TAG, "[ELF] no elf buff location configured")
-            return false
-        }
-
-        // Death UI often hides the buff icon → false "missing buff". Revive and let the
-        // mode loop return to farm spot / boss checkpoint on the next iteration.
-        if (DeathActions.isDead()) {
-            Log.d(TAG, "[ELF] dead before elf route; revive (defer buff)")
-            if (!DeathActions.recoverIfDead()) {
+        DisconnectDetector.beginUiAction("elf-buff-nav")
+        try {
+            val profile = ProfileRepository.currentProfile.value
+            if (profile == null) {
+                Log.w(TAG, "[ELF] no active profile")
                 return false
             }
-            if (profile.isFarmBossesMode()) {
-                Log.d(TAG, "[ELF] farm_bosses post-revive; checkpoint return deferred")
+
+            if (!ProfileRepository.shouldSeekElfBuff(profile)) {
+                Log.d(TAG, "[ELF] route skipped enableElfBuff=${profile.enableElfBuff}")
                 return true
             }
-            return BotRecoveryActions.navigateToFarmWithRetry("post-revive-defer-elf") ||
-                BotRecoveryActions.recoverFromLostState("post-revive-defer-elf")
-        }
 
-        if (!goToElfBuff(elfLocation)) {
-            // Mode-aware: farm → farm spot; farm_bosses → boss checkpoint; war → war post.
-            Log.w(TAG, "[ELF] route to buff failed; mode-aware recovery checkpoint")
-            return BotRecoveryActions.recoverFromLostState("elf-route-failed")
-        }
+            val elfLocation = LocationRepository.getElfBuff(profile.filename)
+            if (elfLocation == null) {
+                Log.w(TAG, "[ELF] no elf buff location configured")
+                return false
+            }
 
-        // Farm Bosses: post-kill resumes via FarmBossesLoop.resumeAfterMaintenance.
-        if (profile.isFarmBossesMode()) {
-            Log.d(TAG, "[ELF] buff pickup done; farm_bosses return deferred to checkpoint")
+            // Death UI often hides the buff icon → false "missing buff". Revive and let the
+            // mode loop return to farm spot / boss checkpoint on the next iteration.
+            if (DeathActions.isDead()) {
+                Log.d(TAG, "[ELF] dead before elf route; revive (defer buff)")
+                if (!DeathActions.recoverIfDead()) {
+                    return false
+                }
+                if (profile.isFarmBossesMode()) {
+                    Log.d(TAG, "[ELF] farm_bosses post-revive; checkpoint return deferred")
+                    return true
+                }
+                return BotRecoveryActions.navigateToFarmWithRetry("post-revive-defer-elf") ||
+                    BotRecoveryActions.recoverFromLostState("post-revive-defer-elf")
+            }
+
+            if (!goToElfBuff(elfLocation)) {
+                // Mode-aware: farm → farm spot; farm_bosses → boss checkpoint; war → war post.
+                Log.w(TAG, "[ELF] route to buff failed; mode-aware recovery checkpoint")
+                return BotRecoveryActions.recoverFromLostState("elf-route-failed")
+            }
+
+            // Farm Bosses: post-kill resumes via FarmBossesLoop.resumeAfterMaintenance.
+            if (profile.isFarmBossesMode()) {
+                Log.d(TAG, "[ELF] buff pickup done; farm_bosses return deferred to checkpoint")
+                return true
+            }
+
+            if (!BotRecoveryActions.navigateToFarmWithRetry("post-elf-buff")) {
+                Log.w(TAG, "[ELF] return to farm failed; recovery checkpoint")
+                return BotRecoveryActions.recoverFromLostState("elf-return-failed")
+            }
+
+            Log.d(TAG, "[ELF] elf buff and return completed")
             return true
+        } finally {
+            DisconnectDetector.endUiAction("elf-buff-nav")
         }
-
-        if (!BotRecoveryActions.navigateToFarmWithRetry("post-elf-buff")) {
-            Log.w(TAG, "[ELF] return to farm failed; recovery checkpoint")
-            return BotRecoveryActions.recoverFromLostState("elf-return-failed")
-        }
-
-        Log.d(TAG, "[ELF] elf buff and return completed")
-        return true
     }
 
     private suspend fun goToElfBuff(location: FarmLocation): Boolean {

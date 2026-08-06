@@ -181,6 +181,67 @@ object ProfileRepository {
         return updated
     }
 
+    fun setRandomTeleportFarMinDots(profileFilename: String, dots: Int): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val clamped = dots.coerceIn(
+            BotProfile.MIN_RANDOM_FAR_MIN_DOTS,
+            BotProfile.MAX_RANDOM_FAR_MIN_DOTS,
+        )
+        val updated = profile.copy(randomTeleportFarMinDots = clamped)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] random_teleport_far_min_dots=$clamped file=$profileFilename")
+        return updated
+    }
+
+    fun setCombatFocusEnabled(profileFilename: String, enabled: Boolean): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(enableCombatFocus = enabled)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] enable_combat_focus=$enabled file=$profileFilename")
+        return updated
+    }
+
+    fun setCombatFocusPkMode(profileFilename: String, mode: CombatFocusPkMode): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(combatFocusPkMode = mode)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] combat_focus_pk_mode=${mode.toStorage()} file=$profileFilename")
+        return updated
+    }
+
+    fun setPetEnabled(profileFilename: String, enabled: Boolean): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(enablePet = enabled)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] enable_pet=$enabled file=$profileFilename")
+        return updated
+    }
+
+    fun setPetType(profileFilename: String, type: PetType): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(petType = type)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] pet_type=${type.toStorage()} file=$profileFilename")
+        return updated
+    }
+
+    fun setPetCheckIntervalMinutes(profileFilename: String, minutes: Int): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(
+            petCheckIntervalMinutes = minutes.coerceIn(
+                BotProfile.MIN_PET_CHECK_INTERVAL_MINUTES,
+                BotProfile.MAX_PET_CHECK_INTERVAL_MINUTES,
+            ),
+        )
+        saveProfile(updated)
+        Log.d(
+            TAG,
+            "[PROFILE] pet_check_interval_minutes=${updated.petCheckIntervalMinutes} " +
+                "file=$profileFilename",
+        )
+        return updated
+    }
+
     fun setElfGiverCastConfig(
         profileFilename: String,
         skillRefX: Int?,

@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.maps.MapDefinition
+import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.vision.opencv.OpenCvBitmapConverter
 import com.example.muamaizingbot.vision.roi.ScaledRoi
 import com.google.mlkit.vision.common.InputImage
@@ -98,7 +99,7 @@ object CurrentMapOcr {
         roi: Rect,
         source: String,
     ): ReadResult {
-        val expected = mapDef.name.ifBlank { mapDef.id }
+        val expected = MapDefinitionRepository.ocrExpectedName(mapDef)
         val raw = readRawInRoi(frame, roi)
         if (raw.isNullOrBlank()) {
             Log.d(TAG, "[MAP_OCR] $source empty expected=\"$expected\"")
@@ -208,13 +209,23 @@ object CurrentMapOcr {
         return true
     }
 
-    /** Drop wire-chip bleed (“…2-6Switch”) and bracket noise. */
+    /**
+     * Drop channel-chip bleed and bracket noise from the map-name band.
+     *
+     * Multi-wire maps append `[Wire N]` (HUD) or `[Line N]` (open map title).
+     * Single-wire maps omit that suffix entirely. Neither is part of the zone name.
+     */
     fun sanitizeHudText(raw: String): String {
         return raw
             .replace('\u2013', '-')
             .replace('\u2014', '-')
+            // Prefer explicit Wire/Line tokens before generic bracket stripping.
+            .replace(Regex("""(?i)[\[\(]?\s*Wire\s*[1-9]?\s*[\]\)]?"""), " ")
+            .replace(Regex("""(?i)[\[\(]?\s*Line\s*[1-9]?\s*[\]\)]?"""), " ")
             .replace(Regex("""(?i)[\-\s]*\d*\s*Switch.*"""), " ")
             .replace(Regex("""\[.*?\]"""), " ")
+            // OCR often closes Line tags with `]` instead of `)`: "(Line 1]".
+            .replace(Regex("""\([^)]*[\])]"""), " ")
             .trim()
     }
 

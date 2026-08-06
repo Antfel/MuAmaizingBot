@@ -9,7 +9,10 @@ import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isHpPotionEmpty
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isManaPotionEmpty
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
+import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
+import com.example.muamaizingbot.maps.MapDefinitionRepository
+import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.settings.BotTiming
@@ -49,65 +52,69 @@ object PotionPurchaseActions {
     private const val REFILL_TIMEOUT_MS = 10_000L
 
     suspend fun handleEmptyPotions(): Boolean {
-        DisconnectDetector.markBusy("potion-shop")
-        val profile = ProfileRepository.currentProfile.value
-        if (profile == null) {
-            Log.w(TAG, "[POTION] no active profile")
-            return false
-        }
-
-        if (DeathActions.isDead()) {
-            Log.d(TAG, "[POTION] dead before purchase; reviving first")
-            if (!DeathActions.recoverIfDead()) {
+        DisconnectDetector.beginUiAction("potion-shop")
+        try {
+            val profile = ProfileRepository.currentProfile.value
+            if (profile == null) {
+                Log.w(TAG, "[POTION] no active profile")
                 return false
             }
-        }
 
-        val hpEmpty = isHpPotionEmpty()
-        val mpEmpty = isManaPotionEmpty()
-        if (!hpEmpty && !mpEmpty) {
-            Log.d(TAG, "[POTION] no empty potions")
-            return true
-        }
-
-        Log.d(TAG, "[POTION] starting recovery hpEmpty=$hpEmpty mpEmpty=$mpEmpty")
-        if (!tapEmptyPotionSlot(hpEmpty, mpEmpty)) {
-            return BotRecoveryActions.recoverFromLostState("potion-tap-failed")
-        }
-
-        delay(BotTiming.ms(TAP_SLOT_WAIT_MS, BotTimingCategory.POST_TAP))
-        val entry = waitForPotionEntryResult() ?: run {
-            Log.w(TAG, "[POTION] entry flow unknown")
-            return BotRecoveryActions.recoverFromLostState("potion-entry-unknown")
-        }
-
-        when (entry) {
-            PotionEntry.TELEPORT_POPUP -> {
-                if (!acceptPotionTeleportPopup()) {
-                    return BotRecoveryActions.recoverFromLostState("potion-teleport-failed")
-                }
-                if (!waitForShopOpen()) {
-                    Log.w(TAG, "[POTION] shop did not open after teleport")
-                    return BotRecoveryActions.recoverFromLostState("potion-shop-timeout")
+            if (DeathActions.isDead()) {
+                Log.d(TAG, "[POTION] dead before purchase; reviving first")
+                if (!DeathActions.recoverIfDead()) {
+                    return false
                 }
             }
-            PotionEntry.SHOP_OPEN -> Unit
+
+            val hpEmpty = isHpPotionEmpty()
+            val mpEmpty = isManaPotionEmpty()
+            if (!hpEmpty && !mpEmpty) {
+                Log.d(TAG, "[POTION] no empty potions")
+                return true
+            }
+
+            Log.d(TAG, "[POTION] starting recovery hpEmpty=$hpEmpty mpEmpty=$mpEmpty")
+            if (!tapEmptyPotionSlot(hpEmpty, mpEmpty)) {
+                return BotRecoveryActions.recoverFromLostState("potion-tap-failed")
+            }
+
+            delay(BotTiming.ms(TAP_SLOT_WAIT_MS, BotTimingCategory.POST_TAP))
+            val entry = waitForPotionEntryResult() ?: run {
+                Log.w(TAG, "[POTION] entry flow unknown")
+                return BotRecoveryActions.recoverFromLostState("potion-entry-unknown")
+            }
+
+            when (entry) {
+                PotionEntry.TELEPORT_POPUP -> {
+                    if (!acceptPotionTeleportPopup()) {
+                        return BotRecoveryActions.recoverFromLostState("potion-teleport-failed")
+                    }
+                    if (!waitForShopOpen()) {
+                        Log.w(TAG, "[POTION] shop did not open after teleport")
+                        return BotRecoveryActions.recoverFromLostState("potion-shop-timeout")
+                    }
+                }
+                PotionEntry.SHOP_OPEN -> Unit
+            }
+
+            buyPotions(
+                hpAmount = if (hpEmpty) profile.hpPotionStacks else 0,
+                mpAmount = if (mpEmpty) profile.mpPotionStacks else 0,
+            )
+
+            Log.d(TAG, "[POTION] purchase done, closing shop")
+            closeShop()
+
+            if (!waitForPurchasedPotions(hpEmpty, mpEmpty)) {
+                Log.w(TAG, "[POTION] slots not refilled; attempting recovery")
+                return BotRecoveryActions.recoverFromLostState("potion-refill-timeout")
+            }
+
+            return finishPotionRecovery(entry == PotionEntry.TELEPORT_POPUP)
+        } finally {
+            DisconnectDetector.endUiAction("potion-shop")
         }
-
-        buyPotions(
-            hpAmount = if (hpEmpty) profile.hpPotionStacks else 0,
-            mpAmount = if (mpEmpty) profile.mpPotionStacks else 0,
-        )
-
-        Log.d(TAG, "[POTION] purchase done, closing shop")
-        closeShop()
-
-        if (!waitForPurchasedPotions(hpEmpty, mpEmpty)) {
-            Log.w(TAG, "[POTION] slots not refilled; attempting recovery")
-            return BotRecoveryActions.recoverFromLostState("potion-refill-timeout")
-        }
-
-        return finishPotionRecovery(entry == PotionEntry.TELEPORT_POPUP)
     }
 
     private enum class PotionEntry {
@@ -131,17 +138,34 @@ object PotionPurchaseActions {
                 }
             }
         } else {
-            Log.d(TAG, "[POTION] direct shop purchase; staying at spot")
+            Log.d(TAG, "[POTION] direct shop purchase; no teleport (town or already near shop)")
         }
 
-        if (ProfileRepository.currentProfile.value?.isFarmBossesMode() != true) {
-            if (!GameActions.ensureAutoMode()) {
-                Log.w(TAG, "[POTION] ensureAutoMode failed; farm loop will retry")
-            }
+        // Auto only if we were already farming (map+spot). Startup / city shop must not
+        // toggle Auto in town — later startup nav / farm loop enables it on arrival.
+        if (ProfileRepository.currentProfile.value?.isFarmBossesMode() == true) {
+            Log.d(TAG, "[POTION] skip ensureAutoMode (farm_bosses)")
+        } else if (!isAlreadyFarmingOnSpot()) {
+            Log.d(TAG, "[POTION] skip ensureAutoMode (not at farm spot)")
+        } else if (!GameActions.ensureAutoMode()) {
+            Log.w(TAG, "[POTION] ensureAutoMode failed; farm loop will retry")
         }
 
         Log.d(TAG, "[POTION] recovery completed")
         return true
+    }
+
+    /** True when on configured farm map and within spot radius (was farming). */
+    private suspend fun isAlreadyFarmingOnSpot(): Boolean {
+        if (!MapCheckActions.isInConfiguredMap()) {
+            return false
+        }
+        val farmSpot = LocationRepository.farmSpot.value ?: return false
+        if (farmSpot.coordX == null || farmSpot.coordY == null) {
+            return false
+        }
+        val mapDef = MapDefinitionRepository.getById(farmSpot.map)
+        return NavigationWaitActions.isAtFarmSpot(farmSpot, mapDef)
     }
 
     private suspend fun waitForPurchasedPotions(hpWasEmpty: Boolean, mpWasEmpty: Boolean): Boolean {

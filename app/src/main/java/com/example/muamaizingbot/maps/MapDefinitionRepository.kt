@@ -61,6 +61,33 @@ object MapDefinitionRepository {
     fun getById(mapId: String): MapDefinition? = mapsById[mapId]
 
     /**
+     * Zone label for HUD / open-map OCR.
+     *
+     * Single-entry groups sometimes ship as `"Land of Demons 1"` while the game
+     * shows only `"Land of Demons"` (the digit is not a floor — wire uses Line/Wire).
+     * Multi-floor groups keep their numbered names (Aida 1/2, Kalima 1–9, …).
+     */
+    fun ocrExpectedName(mapDef: MapDefinition): String {
+        val group = mapDef.group.trim()
+        val siblingCount = if (group.isEmpty()) {
+            0
+        } else {
+            mapsById.values.count { it.group.trim() == group }
+        }
+        return ocrExpectedName(mapDef, siblingCount)
+    }
+
+    fun ocrExpectedName(mapDef: MapDefinition, groupSiblingCount: Int): String {
+        val name = mapDef.name.ifBlank { mapDef.id }
+        val group = mapDef.group.trim()
+        if (group.isEmpty()) return name
+        if (groupSiblingCount == 1 && name.trim() == "$group 1") {
+            return group
+        }
+        return name
+    }
+
+    /**
      * Maps ready for Farm Spot / Elf Buff / Farm Bosses / SpotPicker:
      * maintenance image + navigable templates + affine calibration.
      */

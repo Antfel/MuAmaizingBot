@@ -14,7 +14,7 @@ import org.opencv.imgproc.Imgproc
 /**
  * Measures the green Auto-Navigating path on the open zone map via HSV
  * (no templates — path length varies). Calibrated on Plains + Kalima @ 1280×720:
- * `dots < 10` → Near, `dots >= 10` → Far.
+ * default `dots < 10` → Near, `dots >= 10` → Far (threshold is profile-configurable).
  *
  * `dots == 0` is [PathClass.UNKNOWN] (path not painted / not visible yet), not Near.
  */
@@ -30,7 +30,7 @@ object MapPathLengthVision {
     private const val ROI_R = 1180
     private const val ROI_B = 680
 
-    /** Near / Far threshold agreed from Plains + Kalima samples. */
+    /** Default Near / Far threshold (profile may override). */
     const val FAR_MIN_DOTS = 10
 
     private val HSV_LOW = Scalar(35.0, 80.0, 100.0)
@@ -46,6 +46,7 @@ object MapPathLengthVision {
         val dots: Int,
         val pathClass: PathClass,
         val maskPixels: Int = 0,
+        val farMinDots: Int = FAR_MIN_DOTS,
     )
 
     fun pathContentRoi(frameWidth: Int, frameHeight: Int): Rect {
@@ -59,17 +60,25 @@ object MapPathLengthVision {
         )
     }
 
-    fun classify(dots: Int): PathClass = when {
+    fun classify(dots: Int, farMinDots: Int = FAR_MIN_DOTS): PathClass = when {
         dots <= 0 -> PathClass.UNKNOWN
-        dots < FAR_MIN_DOTS -> PathClass.NEAR
+        dots < farMinDots -> PathClass.NEAR
         else -> PathClass.FAR
     }
 
-    fun measure(frame: Bitmap): PathMeasure {
+    fun measure(frame: Bitmap, farMinDots: Int = FAR_MIN_DOTS): PathMeasure {
         val (dots, maskPixels) = countGreenPathDots(frame)
-        val pathClass = classify(dots)
-        Log.d(TAG, "[PATH] dots=$dots maskPix=$maskPixels class=$pathClass")
-        return PathMeasure(dots = dots, pathClass = pathClass, maskPixels = maskPixels)
+        val pathClass = classify(dots, farMinDots)
+        Log.d(
+            TAG,
+            "[PATH] dots=$dots maskPix=$maskPixels class=$pathClass threshold=$farMinDots",
+        )
+        return PathMeasure(
+            dots = dots,
+            pathClass = pathClass,
+            maskPixels = maskPixels,
+            farMinDots = farMinDots,
+        )
     }
 
     /**

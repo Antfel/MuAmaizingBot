@@ -76,8 +76,13 @@ object MapWindowActions {
             }
             NavigationVision.logBestScore(MAP_WINDOW_OPEN, mapHeaderRoi())
             Log.w(TAG, "[MAP] open failed attempt=${attempt + 1}")
+            // Map button sits near chat — a miss often opens chat instead.
+            if (WireSwitchActions.ensureChatClosed()) {
+                Log.w(TAG, "[MAP] closed chat after failed map open — retry")
+            }
         }
         Log.e(TAG, "[MAP] open failed after retries")
+        WireSwitchActions.ensureChatClosed()
         return false
     }
 

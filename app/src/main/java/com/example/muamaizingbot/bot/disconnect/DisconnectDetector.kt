@@ -18,6 +18,10 @@ import kotlinx.coroutines.withContext
  *
  * While the bot is navigating / opening map / buying potions / switching wire,
  * call [markBusy] so blank HUD does not count as disconnect.
+ *
+ * For actions that open panels and hide HUD templates, prefer [withUiAction] /
+ * [beginUiAction] so [BotPriorityLoop] can pause elf/potion/inventory/pet probes
+ * until the action finishes ([isUiActionActive]).
  */
 object DisconnectDetector {
 
@@ -41,7 +45,10 @@ object DisconnectDetector {
         "templates/mu/ui/auto_mode.png" to 0.55f,
         "templates/mu/ui/manual_mode.png" to 0.55f,
         "templates/mu/ui/dead_state.png" to 0.60f,
-        "templates/mu/ui/common/elf_buff_icon.png" to 0.55f,
+        // Either elf buff icon is enough to prove in-world HUD (they can split
+        // across the bar vs overflow popup).
+        "templates/mu/ui/common/elf_buff_greater_defense.png" to 0.55f,
+        "templates/mu/ui/common/elf_buff_greater_damage.png" to 0.55f,
     )
 
     private var consecutiveBlanks = 0
@@ -55,12 +62,21 @@ object DisconnectDetector {
     @Volatile
     private var busyReason: String = ""
 
+    /** Nested UI actions (Gear/Store/map/shop) that hide world HUD templates. */
+    @Volatile
+    private var uiActionDepth = 0
+
+    @Volatile
+    private var uiActionReason: String = ""
+
     fun reset() {
         consecutiveBlanks = 0
         alertSentThisSession = false
         loggedNotReady = false
         busyUntilMs = 0L
         busyReason = ""
+        uiActionDepth = 0
+        uiActionReason = ""
     }
 
     /**
@@ -82,6 +98,43 @@ object DisconnectDetector {
     }
 
     fun isBusy(): Boolean = System.currentTimeMillis() < busyUntilMs
+
+    /**
+     * Marks a UI-blocking action that is actively running (panels open / shop / map).
+     * Unlike [markBusy]'s time window, this clears only via [endUiAction] and is what
+     * the priority loop uses to pause HUD template validations (elf, potions, …).
+     */
+    fun beginUiAction(reason: String, holdMs: Long = DEFAULT_BUSY_HOLD_MS) {
+        markBusy(reason, holdMs)
+        uiActionDepth++
+        uiActionReason = reason
+        Log.d(TAG, "ui_action begin reason=$reason depth=$uiActionDepth")
+    }
+
+    fun endUiAction(reason: String? = null) {
+        uiActionDepth = (uiActionDepth - 1).coerceAtLeast(0)
+        if (uiActionDepth == 0) {
+            uiActionReason = ""
+        }
+        Log.d(TAG, "ui_action end reason=${reason ?: "?"} depth=$uiActionDepth")
+    }
+
+    fun isUiActionActive(): Boolean = uiActionDepth > 0
+
+    fun uiActionReason(): String = uiActionReason
+
+    suspend fun <T> withUiAction(
+        reason: String,
+        holdMs: Long = DEFAULT_BUSY_HOLD_MS,
+        block: suspend () -> T,
+    ): T {
+        beginUiAction(reason, holdMs)
+        try {
+            return block()
+        } finally {
+            endUiAction(reason)
+        }
+    }
 
     suspend fun check(): Boolean {
         if (!TelegramStore.isReadyForSend()) {

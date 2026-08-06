@@ -10,6 +10,7 @@ import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.settings.BotTiming
 import com.example.muamaizingbot.settings.BotTimingCategory
+import com.example.muamaizingbot.vision.map.MapPathLengthVision
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
@@ -291,11 +292,14 @@ object NavigationOrchestrator {
             return false
         }
 
+        val profile = ProfileRepository.currentProfile.value
         val randomEnabled =
             allowRandomSeal &&
-                ProfileRepository.currentProfile.value?.enableRandomTeleport != false
+                profile?.enableRandomTeleport != false
         val sealsUsed = if (randomEnabled) {
-            RandomSealActions.maybeUseRandomIfFarPath()
+            val farMinDots = profile?.randomTeleportFarMinDots
+                ?: MapPathLengthVision.FAR_MIN_DOTS
+            RandomSealActions.maybeUseRandomIfFarPath(farMinDots)
         } else {
             if (allowRandomSeal) {
                 Log.d(TAG, "[NAV] Random Teleport disabled in profile — walk only")

@@ -148,6 +148,32 @@ object BotController {
     }
 
     /**
+     * Stop that waits for the worker coroutine to finish unwinding.
+     * Callers that immediately [start] again (overlay mode switch) must use this,
+     * otherwise the old loop keeps tapping while the new one runs startup.
+     */
+    suspend fun stopAndAwait() {
+        val previous = _state.value
+        Log.d(TAG, "[BOT] stop(await) from=$previous")
+        BotDiagnosticJournal.record(TAG, "stop await")
+        startJob?.cancel()
+        startJob = null
+        BotAutoRestart.cancel("stop")
+        cancelExpireWatchdog()
+        autoResumeOnExpire = false
+        pausedAtMs = 0L
+        coldStartRequired = true
+        TrustedCurrentMapMemory.invalidate()
+        Log.d(TAG, "[MAP_MEMORY] invalidate reason=stop_await")
+        // IDLE first so the worker loop breaks at its next check instead of running an iteration.
+        _state.value = BotRuntimeState.IDLE
+        BotWorker.stop()
+        ActionQueue.clear()
+        LicenseGate.releaseAsync("stop")
+        Log.d(TAG, "[BOT] stop(await) done")
+    }
+
+    /**
      * Called when the license server rejects the lease (admin kill / expired).
      * Same as Stop, but does not call release again (already invalid server-side).
      */

@@ -1,16 +1,19 @@
 package com.example.muamaizingbot.bot.farming
 
 import android.util.Log
+import com.example.muamaizingbot.bot.combat.CombatFocusActions
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
+import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
+import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
 object FarmingLoop {
 
     private const val TAG = "Farming"
-    private const val CYCLE_WAIT_MS = 3000L
+    private const val CYCLE_WAIT_MS = 1000L
     private const val INVENTORY_OPEN = "templates/mu/ui/inventory_open.png"
 
     enum class CycleResult {
@@ -37,6 +40,33 @@ object FarmingLoop {
         if (!GameActions.ensureAutoMode()) {
             Log.w(TAG, "[FARMING] ensure auto failed; will retry on spot")
             return CycleResult.SOFT_FAIL
+        }
+
+        val profile = ProfileRepository.currentProfile.value
+        if (profile != null) {
+            when (val focus = CombatFocusActions.tickIfEnabled(profile)) {
+                CombatFocusActions.TickResult.Idle -> {
+                    if (DeathActions.isDead()) {
+                        Log.w(TAG, "[FARMING] dead after combat-focus tick")
+                        return CycleResult.DEAD
+                    }
+                }
+                CombatFocusActions.TickResult.Engaging -> {
+                    Log.d(TAG, "[FARMING] combat focus engaging")
+                    return CycleResult.OK
+                }
+                CombatFocusActions.TickResult.EnemyClearedNeedReturn -> {
+                    Log.d(TAG, "[FARMING] combat focus cleared → return farm spot")
+                    if (!BotRecoveryActions.navigateToFarmWithRetry(
+                            reason = "combat_focus_return",
+                            ensureAuto = true,
+                        )
+                    ) {
+                        return CycleResult.SOFT_FAIL
+                    }
+                    return CycleResult.OK
+                }
+            }
         }
 
         Log.d(TAG, "[FARMING] farming OK")

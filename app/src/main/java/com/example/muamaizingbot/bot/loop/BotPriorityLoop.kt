@@ -5,8 +5,10 @@ import com.example.muamaizingbot.bot.BotDiagnosticJournal
 import com.example.muamaizingbot.bot.bosses.BossHuntPhase
 import com.example.muamaizingbot.bot.bosses.BossHuntState
 import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
+import com.example.muamaizingbot.bot.combat.CombatFocusActions
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.farming.FarmingLoop
 import com.example.muamaizingbot.bot.maintenance.ElfBuffCastActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffCheckActions
@@ -17,9 +19,12 @@ import com.example.muamaizingbot.bot.maintenance.ElfBuffTargetingActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffWarActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffWarPostActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffWarTapGrid
+import com.example.muamaizingbot.bot.maintenance.HudValidationGate
 import com.example.muamaizingbot.bot.maintenance.MapCheckActions
 import com.example.muamaizingbot.bot.maintenance.InventoryCheckActions
 import com.example.muamaizingbot.bot.maintenance.InventoryRecycleActions
+import com.example.muamaizingbot.bot.maintenance.PetActions
+import com.example.muamaizingbot.bot.maintenance.PetCheckGate
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
@@ -32,6 +37,7 @@ import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.profile.isFarmBossesMode
+import com.example.muamaizingbot.profile.isFarmMode
 import com.example.muamaizingbot.profile.normalizedBotMode
 import com.example.muamaizingbot.vision.coordinate.CoordinateTextParser
 import kotlin.math.abs
@@ -94,8 +100,30 @@ object BotPriorityLoop {
             }
         }
 
+        // While a UI action is in progress (shouldn't normally overlap this loop),
+        // skip HUD probes that would false-miss under open panels. Death already ran.
+        if (DisconnectDetector.isUiActionActive()) {
+            Log.d(
+                TAG,
+                "[LOOP] skip hud_validations ui_action=${DisconnectDetector.uiActionReason()}",
+            )
+            BotDiagnosticJournal.record(
+                TAG,
+                "skip hud_validations ui_action=${DisconnectDetector.uiActionReason()}",
+            )
+            return IterationResult.OK
+        }
+
+        // Close leftover Gear/Store/map/inventory before elf/potion/inventory/pet probes.
+        val hudClear = HudValidationGate.ensureClearForHudProbe()
+        if (!hudClear) {
+            Log.w(TAG, "[LOOP] skip hud_validations — blocking panel still open")
+            BotDiagnosticJournal.record(TAG, "skip hud_validations panel_open")
+            // Still allow mode branch / farming; do not treat as missing buff/potion.
+        }
+
         // Potions + inventory: any time (farm, open-world elf, and Farm Bosses mid-hunt).
-        if (profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
+        if (hudClear && profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
             Log.d(TAG, "[LOOP] branch=empty_potions")
             BotDiagnosticJournal.record(TAG, "branch=empty_potions")
             consecutiveFarmSoftFails = 0
@@ -109,7 +137,7 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
-        if (InventoryCheckActions.isInventoryFull()) {
+        if (hudClear && InventoryCheckActions.isInventoryFull()) {
             Log.d(TAG, "[LOOP] branch=inventory_full")
             BotDiagnosticJournal.record(TAG, "branch=inventory_full")
             consecutiveFarmSoftFails = 0
@@ -122,8 +150,25 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
+        if (hudClear && PetCheckGate.shouldCheck(profile)) {
+            Log.d(
+                TAG,
+                "[LOOP] branch=pet_validate intervalMin=${profile.petCheckIntervalMinutes} " +
+                    "want=${profile.petType.toStorage()}",
+            )
+            BotDiagnosticJournal.record(TAG, "branch=pet_validate")
+            consecutiveFarmSoftFails = 0
+            val pet = PetActions.validateIfEnabled(profile)
+            PetCheckGate.noteCheckDone()
+            Log.d(TAG, "[LOOP] pet_validate result=$pet want=${profile.petType.toStorage()}")
+            if (profile.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
+                return navigateToBossCheckpoint("post-pet")
+            }
+            return IterationResult.OK
+        }
+
         // Elf buff: any time (farm + Farm Bosses mid-hunt). Giver / War never seek.
-        if (ElfBuffSeekGate.shouldAttemptSeek(profile)) {
+        if (hudClear && ElfBuffSeekGate.shouldAttemptSeek(profile)) {
             if (!ElfBuffCheckActions.hasElfBuff()) {
                 // Death screen can hide the buff icon; prefer revive over seeking.
                 if (DeathActions.isDead()) {
@@ -194,7 +239,13 @@ object BotPriorityLoop {
         }
 
         // Farm / giver: never Auto or farm cycle until HUD coords confirm farm spot.
+        // Exception: combat-focus chase — do not yank back while enemy focus is active.
         if (!isAtConfiguredFarmSpot()) {
+            if (CombatFocusActions.shouldSuppressOffSpotRecovery(profile)) {
+                Log.d(TAG, "[LOOP] branch=farming (off_spot suppressed — combat focus chase)")
+                BotDiagnosticJournal.record(TAG, "branch=farming_chase")
+                return handleFarmingCycle()
+            }
             Log.d(TAG, "[LOOP] branch=off_spot")
             BotDiagnosticJournal.record(TAG, "branch=off_spot")
             consecutiveFarmSoftFails = 0
@@ -248,6 +299,53 @@ object BotPriorityLoop {
             Log.d(TAG, "[STARTUP] inventory_full → recycle")
             if (!InventoryRecycleActions.handleFullInventory()) {
                 return recoveryOrError("startup-recycle-failed")
+            }
+        }
+
+        if (profile.enablePet) {
+            when (val pet = PetActions.validateIfEnabled(profile)) {
+                PetActions.CheckResult.MATCH ->
+                    Log.d(TAG, "[STARTUP] pet ok type=${profile.petType.toStorage()}")
+                PetActions.CheckResult.EQUIPPED ->
+                    Log.d(
+                        TAG,
+                        "[STARTUP] pet equipped from inventory type=${profile.petType.toStorage()}",
+                    )
+                PetActions.CheckResult.PURCHASED ->
+                    Log.d(
+                        TAG,
+                        "[STARTUP] pet purchased+equipped type=${profile.petType.toStorage()}",
+                    )
+                PetActions.CheckResult.NEED_PURCHASE ->
+                    Log.w(
+                        TAG,
+                        "[STARTUP] pet need_purchase want=${profile.petType.toStorage()}",
+                    )
+                PetActions.CheckResult.BUY_FAILED ->
+                    Log.w(
+                        TAG,
+                        "[STARTUP] pet buy_failed want=${profile.petType.toStorage()}",
+                    )
+                PetActions.CheckResult.EQUIP_FAILED ->
+                    Log.w(
+                        TAG,
+                        "[STARTUP] pet equip_failed want=${profile.petType.toStorage()}",
+                    )
+                PetActions.CheckResult.OPEN_FAILED,
+                PetActions.CheckResult.READ_FAILED,
+                ->
+                    Log.w(TAG, "[STARTUP] pet validate failed result=$pet")
+                PetActions.CheckResult.SKIPPED -> Unit
+            }
+            PetCheckGate.noteCheckDone()
+        } else {
+            PetCheckGate.reset()
+        }
+
+        // Combat focus: set PK mode once at start (farm / farm_bosses). On-spot only confirms.
+        if (profile.enableCombatFocus && (profile.isFarmMode() || profile.isFarmBossesMode())) {
+            if (!CombatFocusActions.prevalidatePkModeAtStartup(profile)) {
+                Log.w(TAG, "[STARTUP] combat focus PK prevalidate failed — on-spot will repair")
             }
         }
 
@@ -450,6 +548,21 @@ object BotPriorityLoop {
     ): IterationResult {
         Log.d(TAG, "[LOOP] farm_bosses general checks reason=$reason")
         BotDiagnosticJournal.record(TAG, "farm_bosses_general reason=$reason")
+
+        if (DisconnectDetector.isUiActionActive()) {
+            Log.d(
+                TAG,
+                "[LOOP] farm_bosses skip hud_validations ui_action=" +
+                    DisconnectDetector.uiActionReason(),
+            )
+            return IterationResult.OK
+        }
+
+        val hudClear = HudValidationGate.ensureClearForHudProbe()
+        if (!hudClear) {
+            Log.w(TAG, "[LOOP] farm_bosses skip hud_validations — panel open reason=$reason")
+            return IterationResult.OK
+        }
 
         if (profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
             Log.d(TAG, "[LOOP] farm_bosses potions empty reason=$reason")
@@ -659,7 +772,13 @@ object BotPriorityLoop {
             }
         }
         if (profile?.isFarmBossesMode() == true) {
-            return navigateToBossCheckpoint("recovery-$reason")
+            // Must NOT call navigateToBossCheckpoint again: that nests
+            // recoveryOrError("boss-nav-failed-$reason") forever and grows the reason string.
+            Log.e(
+                TAG,
+                "[LOOP] boss nav recovery exhausted reason=$reason → ERROR (auto-restart)",
+            )
+            return IterationResult.ERROR
         }
         return if (BotRecoveryActions.recoverFromLostState(reason)) {
             IterationResult.OK

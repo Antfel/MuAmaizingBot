@@ -35,11 +35,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.muamaizingbot.R
@@ -53,6 +55,10 @@ import com.example.muamaizingbot.bot.maintenance.ElfBuffSeekGate
 import com.example.muamaizingbot.bot.maintenance.ElfBuffSkillMapper
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.license.LicenseGate
+import com.example.muamaizingbot.overlay.OverlayModeSlot
+import com.example.muamaizingbot.overlay.OverlayModeSwitch
+import com.example.muamaizingbot.profile.BotProfile
+import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
 import com.example.muamaizingbot.profile.isFarmBossesMode
@@ -189,6 +195,7 @@ private fun ExpandedOverlay(
     modifier: Modifier = Modifier,
 ) {
     val profile by ProfileRepository.currentProfile.collectAsState()
+    val farmSpot by LocationRepository.farmSpot.collectAsState()
     val seekEnabled = ProfileRepository.shouldSeekElfBuff(profile)
     val seekStatus by ElfBuffSeekGate.status.collectAsState()
     val autoRestart by BotAutoRestart.status.collectAsState()
@@ -197,6 +204,11 @@ private fun ExpandedOverlay(
     val castStatus by ElfBuffCastGate.status.collectAsState()
     val farmBossesMode = profile?.isFarmBossesMode() == true
     val bossesKilled by BossHuntState.bossesKilled.collectAsState()
+    val modeSwitching by OverlayModeSwitch.switching.collectAsState()
+
+    LaunchedEffect(profile?.botMode, profile?.filename) {
+        OverlayModeSwitch.rememberElfSubtype(profile)
+    }
 
     LaunchedEffect(seekEnabled, seekStatus.isOnCooldown) {
         if (!seekEnabled) return@LaunchedEffect
@@ -253,6 +265,20 @@ private fun ExpandedOverlay(
             fontSize = OverlayHudStyle.statusFontSize,
             fontWeight = FontWeight.Medium,
         )
+
+        val activeProfile = profile
+        if (activeProfile != null) {
+            // farmSpot collected so chips refresh when locations change.
+            OverlayModeRow(
+                profile = activeProfile,
+                farmSpotConfigured = farmSpot != null,
+                switching = modeSwitching,
+                onSelect = { slot ->
+                    onInteract()
+                    OverlayModeSwitch.apply(slot)
+                },
+            )
+        }
 
         if (farmBossesMode) {
             Text(
@@ -383,6 +409,61 @@ private fun ExpandedOverlay(
                     modifier = Modifier.size(OverlayHudStyle.controlIconSize),
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun OverlayModeRow(
+    profile: BotProfile,
+    farmSpotConfigured: Boolean,
+    switching: Boolean,
+    onSelect: (OverlayModeSlot) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        OverlayModeSlot.entries.forEach { slot ->
+            val selected = slot.isSelected(profile)
+            val configured = when (slot) {
+                OverlayModeSlot.FARM, OverlayModeSlot.ELF -> farmSpotConfigured
+                OverlayModeSlot.BOSSES -> profile.killBossesConfig.maps.isNotEmpty()
+            }
+            val label = when (slot) {
+                OverlayModeSlot.FARM -> stringResource(R.string.overlay_mode_farm)
+                OverlayModeSlot.ELF -> stringResource(R.string.overlay_mode_elf)
+                OverlayModeSlot.BOSSES -> stringResource(R.string.overlay_mode_bosses)
+            }
+            Text(
+                text = label,
+                color = when {
+                    selected -> OverlayHudStyle.accentGreen
+                    !configured -> OverlayHudStyle.textSecondary.copy(alpha = 0.45f)
+                    switching -> OverlayHudStyle.textSecondary.copy(alpha = 0.45f)
+                    else -> OverlayHudStyle.textPrimary
+                },
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                fontSize = OverlayHudStyle.metaFontSize,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(
+                        if (selected) {
+                            OverlayHudStyle.accentGreen.copy(alpha = 0.22f)
+                        } else {
+                            Color.Transparent
+                        },
+                    )
+                    .clickable(
+                        enabled = configured && !selected && !switching,
+                        onClick = { onSelect(slot) },
+                    )
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+            )
         }
     }
 }

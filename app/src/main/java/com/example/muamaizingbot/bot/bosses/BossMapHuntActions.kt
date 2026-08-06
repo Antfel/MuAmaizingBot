@@ -11,6 +11,7 @@ import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.vision.coord.RefCoords
+import com.example.muamaizingbot.vision.map.MapPathLengthVision
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
 import kotlinx.coroutines.delay
@@ -155,10 +156,12 @@ object BossMapHuntActions {
             return false
         }
         // Path paints while map is open → Far path may use Random Teleport Seal.
-        val randomEnabled =
-            ProfileRepository.currentProfile.value?.enableRandomTeleport != false
+        val profile = ProfileRepository.currentProfile.value
+        val randomEnabled = profile?.enableRandomTeleport != false
         val sealsUsed = if (randomEnabled) {
-            RandomSealActions.maybeUseRandomIfFarPath()
+            val farMinDots = profile?.randomTeleportFarMinDots
+                ?: MapPathLengthVision.FAR_MIN_DOTS
+            RandomSealActions.maybeUseRandomIfFarPath(farMinDots)
         } else {
             Log.d(TAG, "[HUNT] Random Teleport disabled in profile — walk only")
             0
@@ -206,6 +209,75 @@ object BossMapHuntActions {
         BossHuntState.clearBossTarget()
         NavigationWaitActions.waitUntilNavigationComplete()
         delay(1_500)
+        return true
+    }
+
+    /**
+     * After combat-focus cleared an enemy, walk back to the last stored boss HUD coords.
+     * Does not clear [BossHuntState] target. Returns false when no target / no affine.
+     */
+    suspend fun returnToStoredBossTarget(mapDef: MapDefinition, wireId: Int): Boolean {
+        val gx = BossHuntState.targetCoordX
+        val gy = BossHuntState.targetCoordY
+        if (gx == null || gy == null) {
+            Log.w(TAG, "[COMBAT_FOCUS] returnToBoss skipped — no stored target")
+            return false
+        }
+        if (!CoordinateMapping.hasMapping(mapDef)) {
+            Log.w(TAG, "[COMBAT_FOCUS] returnToBoss skipped — no affine for ${mapDef.id}")
+            return false
+        }
+        val pixel = CoordinateMapping.mapCoordToPixel(mapDef, gx, gy)
+        if (pixel == null) {
+            Log.w(TAG, "[COMBAT_FOCUS] returnToBoss skipped — pixel null for ($gx,$gy)")
+            return false
+        }
+        val (refX, refY) = pixel
+
+        if (!MapWindowActions.openMapWindow(retries = 2, timeoutMs = 4_000)) {
+            Log.w(TAG, "[COMBAT_FOCUS] returnToBoss open map failed")
+            return false
+        }
+        delay(400)
+        Log.d(
+            TAG,
+            "[COMBAT_FOCUS] returnToBoss game=($gx,$gy) ref=($refX,$refY)",
+        )
+        if (!NavigationVision.tap(refX, refY, label = "boss_return_tap")) {
+            return false
+        }
+        val profile = ProfileRepository.currentProfile.value
+        val randomEnabled = profile?.enableRandomTeleport != false
+        val sealsUsed = if (randomEnabled) {
+            val farMinDots = profile?.randomTeleportFarMinDots
+                ?: MapPathLengthVision.FAR_MIN_DOTS
+            RandomSealActions.maybeUseRandomIfFarPath(farMinDots)
+        } else {
+            0
+        }
+        val arrivalTimeoutMs = RandomSealActions.arrivalTimeoutMs(sealsUsed)
+        delay(400)
+        MapWindowActions.closeMapWindowIfOpen()
+
+        val target = FarmLocation(
+            id = "boss_return",
+            profile = "",
+            type = "boss_target",
+            name = "BossReturn",
+            map = mapDef.id,
+            wire = wireId,
+            x = refX,
+            y = refY,
+            coordX = gx,
+            coordY = gy,
+            arrivalRadius = ARRIVAL_RADIUS,
+        )
+        val arrived = NavigationWaitActions.waitUntilArrivesAtCoord(
+            target,
+            mapDef,
+            timeoutMs = arrivalTimeoutMs,
+        )
+        Log.d(TAG, "[COMBAT_FOCUS] returnToBoss arrived=$arrived")
         return true
     }
 }

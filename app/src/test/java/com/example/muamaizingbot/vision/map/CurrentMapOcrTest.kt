@@ -1,5 +1,7 @@
 package com.example.muamaizingbot.vision.map
 
+import com.example.muamaizingbot.maps.MapDefinition
+import com.example.muamaizingbot.maps.MapDefinitionRepository
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -116,12 +118,118 @@ class CurrentMapOcrTest {
     }
 
     @Test
+    fun matchesLandOfDemonsWithoutTreatingLineAsFloor() {
+        // Zone name is floorless; [Line N] / [Wire N] are the channel, not a submap.
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Land of Demons (Line 1]",
+                "Land of Demons",
+            ),
+        )
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Land of Demons [Wire2]",
+                "Land of Demons",
+            ),
+        )
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Land of Demons Wirel",
+                "Land of Demons",
+            ),
+        )
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Land of Demons Mire",
+                "Land of Demons",
+            ),
+        )
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Land of Demons DAire1",
+                "Land of Demons",
+            ),
+        )
+        // Stale "Land of Demons 1" expected must not be required; open title alone is enough
+        // for the floorless name, and must not confuse Raklion-style digit matching.
+        assertFalse(
+            CurrentMapOcr.matchesExpected(
+                "Land of Demons",
+                "Land of Demons 2",
+            ),
+        )
+        assertFalse(
+            CurrentMapOcr.matchesExpected(
+                "Divine Realm",
+                "Land of Demons",
+            ),
+        )
+    }
+
+    @Test
+    fun staleLandOfDemons1ExpectedMatchesFloorlessHudWhenSanitized() {
+        // Overlay pack may still ship name="Land of Demons 1"; OCR expects floorless.
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Land of Demons (Line 1]",
+                MapDefinitionRepository.ocrExpectedName(
+                    MapDefinition(
+                        id = "land_of_demons_1",
+                        name = "Land of Demons 1",
+                        group = "Land of Demons",
+                        maintenance = null,
+                        coordinateMapping = null,
+                    ),
+                    groupSiblingCount = 1,
+                ),
+            ),
+        )
+        // Multi-floor groups must keep the digit (Aida 1 vs Aida 2).
+        assertEquals(
+            "Aida 1",
+            MapDefinitionRepository.ocrExpectedName(
+                MapDefinition(
+                    id = "aida_1",
+                    name = "Aida 1",
+                    group = "Aida",
+                    maintenance = null,
+                    coordinateMapping = null,
+                ),
+                groupSiblingCount = 2,
+            ),
+        )
+    }
+
+    @Test
+    fun sanitizeStripsWireAndLineChannelBleed() {
+        assertEquals(
+            "Land of Demons",
+            CurrentMapOcr.sanitizeHudText("Land of Demons (Line 1]"),
+        )
+        assertEquals(
+            "Land of Demons",
+            CurrentMapOcr.sanitizeHudText("Land of Demons [Wire2]"),
+        )
+        assertEquals(
+            "Raklion 3",
+            CurrentMapOcr.sanitizeHudText("Raklion 3 [Wire2]"),
+        )
+        assertTrue(
+            CurrentMapOcr.matchesExpected(
+                "Raklion 3 Wire4]",
+                "Raklion 3",
+            ),
+        )
+    }
+
+    @Test
     fun resolvesRecognizedOtherMapWithoutTreatingGarbageAsKnown() {
         val maps = listOf(
             "noria" to "Noria",
             "corrupted_lands" to "Corrupted Lands",
             "plains_1" to "Plain of Four Winds 1",
             "plains_2" to "Plain of Four Winds 2",
+            "land_of_demons_1" to "Land of Demons",
         )
 
         assertEquals("noria", CurrentMapOcr.resolveKnownMapId("Noria", maps))
@@ -132,6 +240,10 @@ class CurrentMapOcrTest {
         assertEquals(
             "plains_2",
             CurrentMapOcr.resolveKnownMapId("Plain of Four Winds 2-6Switch", maps),
+        )
+        assertEquals(
+            "land_of_demons_1",
+            CurrentMapOcr.resolveKnownMapId("Land of Demons (Line 1]", maps),
         )
         assertNull(CurrentMapOcr.resolveKnownMapId("DUON,", maps))
         assertNull(CurrentMapOcr.resolveKnownMapId("", maps))

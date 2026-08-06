@@ -1,8 +1,10 @@
 package com.example.muamaizingbot.bot.bosses
 
 import android.util.Log
+import com.example.muamaizingbot.bot.combat.CombatFocusActions
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
+import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.maps.MapDefinition
@@ -43,6 +45,7 @@ object FarmBossesLoop {
         BossHuntState.reset()
         consecutiveFocusFails = 0
         consecutiveFocusMisses = 0
+        CombatFocusActions.reset()
     }
 
     fun clearArrivalState() {
@@ -174,9 +177,28 @@ object FarmBossesLoop {
         val includeGolden = profile.killBossesConfig.includeGoldenMobs
         val fightInProgress = BossHuntState.fightStartedAtMs != 0L
 
+        // Enemy player focus takes priority over boss-focus-lost kill detection.
+        if (profile.enableCombatFocus &&
+            (CombatFocusActions.isEngagingEnemy() || ElfBuffFocusHud.isRedHpBarVisible())
+        ) {
+            return handleCombatFocusDuringFight(profile, mapId)
+        }
+
         if (fightInProgress) {
             // Mid-fight: focus HUD flickers under VFX — tolerate a few misses before kill.
             if (!BossTargetingActions.hasBossFocus()) {
+                if (profile.enableCombatFocus) {
+                    when (val focus = CombatFocusActions.tickIfEnabled(profile)) {
+                        CombatFocusActions.TickResult.Engaging -> {
+                            Log.d(TAG, "[BOSS] boss focus gone — combat focus engaging")
+                            return CycleResult.OK
+                        }
+                        CombatFocusActions.TickResult.EnemyClearedNeedReturn -> {
+                            return returnAfterCombatFocus(mapId)
+                        }
+                        CombatFocusActions.TickResult.Idle -> Unit
+                    }
+                }
                 Log.d(TAG, "[BOSS] focus missing mid-fight — one acquire round")
                 if (BossTargetingActions.ensureFocusBoss(
                         includeGolden = includeGolden,
@@ -237,10 +259,67 @@ object FarmBossesLoop {
             )
         }
 
+        when (val focus = CombatFocusActions.tickIfEnabled(profile)) {
+            CombatFocusActions.TickResult.Idle -> Unit
+            CombatFocusActions.TickResult.Engaging -> {
+                Log.d(TAG, "[BOSS] combat focus engaging (boss target kept)")
+                return CycleResult.OK
+            }
+            CombatFocusActions.TickResult.EnemyClearedNeedReturn -> {
+                return returnAfterCombatFocus(mapId)
+            }
+        }
+
         // Do not re-check focus in the same tick after acquire/auto — VFX made that a false kill.
         val elapsed = now - BossHuntState.fightStartedAtMs
         Log.d(TAG, "[BOSS] fighting ${elapsed / 1000}s")
         delay(FIGHT_POLL_MS)
+        return CycleResult.OK
+    }
+
+    private suspend fun handleCombatFocusDuringFight(
+        profile: BotProfile,
+        mapId: String,
+    ): CycleResult {
+        return when (val focus = CombatFocusActions.tickIfEnabled(profile)) {
+            CombatFocusActions.TickResult.Idle -> {
+                // Enemy gone without NeedReturn edge — still recover if we lost boss focus.
+                delay(FIGHT_POLL_MS)
+                CycleResult.OK
+            }
+            CombatFocusActions.TickResult.Engaging -> {
+                Log.d(TAG, "[BOSS] combat focus engaging mid-fight (boss target kept)")
+                CycleResult.OK
+            }
+            CombatFocusActions.TickResult.EnemyClearedNeedReturn -> {
+                returnAfterCombatFocus(mapId)
+            }
+        }
+    }
+
+    private suspend fun returnAfterCombatFocus(mapId: String): CycleResult {
+        val mapDef = MapDefinitionRepository.getById(mapId)
+        if (mapDef == null) {
+            Log.w(TAG, "[BOSS] combat focus return — map missing id=$mapId → HUNT")
+            BossHuntState.phase = BossHuntPhase.HUNT
+            BossHuntState.fightStartedAtMs = 0L
+            return CycleResult.SOFT_FAIL
+        }
+        val wire = BossHuntState.wireId.coerceAtLeast(1)
+        Log.d(
+            TAG,
+            "[BOSS] combat focus cleared → return boss " +
+                "(${BossHuntState.targetCoordX},${BossHuntState.targetCoordY})",
+        )
+        consecutiveFocusMisses = 0
+        val returned = BossMapHuntActions.returnToStoredBossTarget(mapDef, wire)
+        BossHuntState.fightStartedAtMs = 0L
+        BossHuntState.phase = BossHuntPhase.FIGHT
+        if (!returned) {
+            Log.w(TAG, "[BOSS] combat focus return failed → HUNT fallback")
+            BossHuntState.phase = BossHuntPhase.HUNT
+            return CycleResult.SOFT_FAIL
+        }
         return CycleResult.OK
     }
 

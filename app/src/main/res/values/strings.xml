@@ -119,6 +119,8 @@
 
     <!-- Profile configure (common) -->
     <string name="profile_config_title">Configurar perfil</string>
+    <string name="profile_info">Ver información</string>
+    <string name="profile_info_close">Entendido</string>
     <string name="profile_section_general">Generales del PJ</string>
     <string name="profile_section_mode">Modo</string>
     <string name="profile_section_mode_settings">Este modo</string>
@@ -167,11 +169,29 @@
     <string name="profile_delete_action">Eliminar</string>
     <string name="profile_random_title">Random Teleport Seal</string>
     <string name="profile_random_hint">Si el path verde es largo, usa Random en el mapa hasta acercarse. Con seal usado, la espera de llegada es 30s (sin seal, 90s).</string>
-    <string name="profile_elf_auto">Elf buff automático</string>
+    <string name="profile_random_dots_label">Puntos verdes (Far)</string>
+    <string name="profile_random_dots_hint">Usa Random solo si hay al menos esta cantidad de puntitos verdes en el path. Menos = más cerca → caminar. Rango %1$d–%2$d.</string>
+    <string name="profile_random_dots_save">Guardar umbral</string>
+    <string name="profile_combat_focus_title">Modo PK</string>
+    <string name="profile_combat_focus_hint">Solo Farm / Farm Bosses. Asegura el modo PK. Con Peace solo mantiene Peace (sin focus enemigo). Con Team/Union/All busca focus (HP rojo), spamea Attack y vuelve al spot o al boss.</string>
+    <string name="profile_combat_focus_pk_label">Modo PK</string>
+    <string name="profile_combat_focus_pk_peace">Peace</string>
+    <string name="profile_combat_focus_pk_team">Team</string>
+    <string name="profile_combat_focus_pk_union">Union</string>
+    <string name="profile_combat_focus_pk_union_kuafu">UnionKuaFu</string>
+    <string name="profile_combat_focus_pk_all">All</string>
+    <string name="profile_pet_title">Pet</string>
+    <string name="profile_pet_hint">Al iniciar y cada X minutos, verifica que el companion pet (Angel o Imp) esté equipado. Si falta, lo equipa desde el inventario o lo compra en el Store.</string>
+    <string name="profile_pet_angel">Angel</string>
+    <string name="profile_pet_imp">Imp</string>
+    <string name="profile_pet_check_interval_label">Minutos</string>
+    <string name="profile_pet_check_interval_hint">Cada cuántos minutos revisar si la pet sigue equipada (%1$d–%2$d). Al iniciar siempre se valida una vez.</string>
+    <string name="profile_pet_check_interval_save">Guardar intervalo</string>
+    <string name="profile_elf_auto">Zona Elf Buff</string>
     <string name="profile_elf_auto_hint">Zona compartida entre Farm y Farm Bosses. Desactívalo si la elf está offline o no quieres ir por buff.</string>
     <string name="profile_elf_off">Desactivado — el bot no buscará elf buff</string>
     <string name="profile_elf_on_no_zone">Activo, pero sin zona configurada</string>
-    <string name="profile_elf_edit_zone">Editar zona elf buff</string>
+    <string name="profile_elf_edit_zone">Editar</string>
     <string name="profile_elf_set_zone">Configurar zona elf buff</string>
     <string name="profile_bosses_hint">Agregá mapas en el orden del ciclo. El bot teleporta → wires → busca bosses vivos → Focus+Auto. Tras cada kill corre buff/pociones y vuelve al checkpoint.</string>
     <string name="profile_bosses_no_maps">Sin mapas — buscá y agregá al menos uno</string>
@@ -252,6 +272,9 @@
     <string name="telegram_alert_recovered">Juego recuperado — HUD detectado de nuevo</string>
 
     <string name="overlay_title">MU Bot</string>
+    <string name="overlay_mode_farm">Farm</string>
+    <string name="overlay_mode_elf">Elf</string>
+    <string name="overlay_mode_bosses">Boss</string>
     <string name="overlay_bosses_killed">Bosses killed: %1$d</string>
     <string name="overlay_input_off">Input off</string>
     <string name="overlay_capture_off">Captura off</string>

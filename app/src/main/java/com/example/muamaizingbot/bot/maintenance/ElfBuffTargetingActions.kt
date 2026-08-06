@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.graphics.Rect
 import android.util.Log
+import com.example.muamaizingbot.profile.CombatFocusPkMode
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.settings.BotTiming
 import com.example.muamaizingbot.settings.BotTimingCategory
@@ -97,6 +98,46 @@ object ElfBuffTargetingActions {
         val match: PcTemplateMatchResult,
     )
 
+    private data class PkModeSpec(
+        val barMode: PkBarMode,
+        val popupPath: String,
+        val label: String,
+        val tapLabel: String,
+    )
+
+    private fun pkModeSpec(mode: CombatFocusPkMode): PkModeSpec {
+        return when (mode) {
+            CombatFocusPkMode.ALL -> PkModeSpec(
+                barMode = PkBarMode.ALL,
+                popupPath = PK_MODE_ALL_POPUP,
+                label = "All",
+                tapLabel = "pk_all",
+            )
+            CombatFocusPkMode.PEACE -> PkModeSpec(
+                barMode = PkBarMode.PEACE,
+                popupPath = PK_MODE_PEACE_POPUP,
+                label = "Peace",
+                tapLabel = "pk_peace",
+            )
+            CombatFocusPkMode.TEAM -> PkModeSpec(
+                barMode = PkBarMode.TEAM,
+                popupPath = PK_MODE_TEAM_POPUP,
+                label = "Team",
+                tapLabel = "pk_team",
+            )
+            CombatFocusPkMode.UNION -> {
+                val isCross = resolveIsCross()
+                val label = if (isCross) "UnionKuaFu" else "Union"
+                PkModeSpec(
+                    barMode = PkBarMode.UNION,
+                    popupPath = unionPopupTemplatePath(isCross),
+                    label = label,
+                    tapLabel = "pk_union",
+                )
+            }
+        }
+    }
+
     /**
      * Match every supported closed-bar state and keep the strongest candidate.
      * This allows recovery even when the game changes the selector to Peace or Team.
@@ -123,6 +164,10 @@ object ElfBuffTargetingActions {
     /** True when the closed targeting bar shows Union. */
     suspend fun isPkModeUnion(): Boolean {
         return detectPkBarMode()?.mode == PkBarMode.UNION
+    }
+
+    private suspend fun isPkBarMode(mode: PkBarMode): Boolean {
+        return detectPkBarMode()?.mode == mode
     }
 
     private suspend fun waitPkOption(
@@ -205,15 +250,30 @@ object ElfBuffTargetingActions {
         )
     }
 
-    suspend fun ensurePkModeAll(): Boolean {
+    /** True when the closed targeting bar shows [mode]. */
+    suspend fun isPkMode(mode: CombatFocusPkMode): Boolean {
+        return isPkBarMode(pkModeSpec(mode).barMode)
+    }
+
+    /**
+     * Ensure the closed targeting bar shows [mode] (Peace / Team / Union / All).
+     * Opens the PK popup when needed and taps the matching row.
+     */
+    suspend fun ensurePkMode(mode: CombatFocusPkMode): Boolean {
+        val spec = pkModeSpec(mode)
         val currentBar = detectPkBarMode()
-        if (currentBar?.mode == PkBarMode.ALL) {
-            Log.d(TAG, "[ELF_GIVER] pk mode already All")
+        if (currentBar?.mode == spec.barMode) {
+            Log.d(TAG, "[ELF_GIVER] pk mode already ${spec.label}")
             return true
         }
         val popup = pkPopupRoi()
-        val allInPopup = NavigationVision.findTemplate(PK_MODE_ALL_POPUP, PK_TEMPLATE_THRESHOLD, popup)
+        val optionInPopup = NavigationVision.findTemplate(
+            spec.popupPath,
+            PK_TEMPLATE_THRESHOLD,
+            popup,
+        )
         val popupWitness = listOf(
+            PK_MODE_ALL_POPUP,
             unionPopupTemplatePath(),
             PK_MODE_PEACE_POPUP,
             PK_MODE_TEAM_POPUP,
@@ -222,33 +282,47 @@ object ElfBuffTargetingActions {
         }
 
         when {
-            allInPopup != null && popupWitness -> {
-                Log.d(TAG, "[ELF_GIVER] pk menu already open — tap All")
-                if (!NavigationVision.tapScreen(allInPopup.centerX, allInPopup.centerY, label = "pk_all")) {
+            optionInPopup != null && popupWitness -> {
+                Log.d(TAG, "[ELF_GIVER] pk menu already open — tap ${spec.label}")
+                if (!NavigationVision.tapScreen(
+                        optionInPopup.centerX,
+                        optionInPopup.centerY,
+                        label = spec.tapLabel,
+                    )
+                ) {
                     return false
                 }
             }
             currentBar != null -> {
-                Log.d(TAG, "[ELF_GIVER] pk mode ${currentBar.mode} — open menu to select All")
-                val allOpt = openPkMenuAndFindOption(
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] pk mode ${currentBar.mode} — open menu to select ${spec.label}",
+                )
+                val opt = openPkMenuAndFindOption(
                     currentBar.match,
-                    PK_MODE_ALL_POPUP,
-                    "All",
+                    spec.popupPath,
+                    spec.label,
                 ) ?: return false
-                if (!NavigationVision.tapScreen(allOpt.centerX, allOpt.centerY, label = "pk_all")) {
+                if (!NavigationVision.tapScreen(opt.centerX, opt.centerY, label = spec.tapLabel)) {
                     return false
                 }
             }
             else -> {
-                Log.w(TAG, "[ELF_GIVER] pk bar templates miss (All/Union/Peace/Team) — cannot ensure All")
+                Log.w(
+                    TAG,
+                    "[ELF_GIVER] pk bar templates miss (All/Union/Peace/Team) — " +
+                        "cannot ensure ${spec.label}",
+                )
                 return false
             }
         }
         delay(BotTiming.ms(POST_PK_TAP_MS, BotTimingCategory.POST_TAP))
-        val ok = isPkModeAll()
-        Log.d(TAG, "[ELF_GIVER] ensurePkModeAll ok=$ok")
+        val ok = isPkBarMode(spec.barMode)
+        Log.d(TAG, "[ELF_GIVER] ensurePkMode ${spec.label} ok=$ok")
         return ok
     }
+
+    suspend fun ensurePkModeAll(): Boolean = ensurePkMode(CombatFocusPkMode.ALL)
 
     /**
      * Switch to Union with All as the required initial closed-bar state.

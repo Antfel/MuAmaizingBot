@@ -42,6 +42,8 @@ object NavigationWaitActions {
      * Null OCR reads are ignored (do not reset the timer).
      */
     private const val COORD_STUCK_DEATH_CHECK_MS = 3_000L
+    /** Alive but not moving toward target — abort so caller can re-tap / retry nav. */
+    private const val COORD_STUCK_ABORT_MS = 8_000L
 
     suspend fun waitUntilMapLoaded(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return false
@@ -285,7 +287,7 @@ object NavigationWaitActions {
         return CurrentMapOcr.resolveKnownMapId(
             raw,
             MapDefinitionRepository.allMaps().map { map ->
-                map.id to map.name.ifBlank { map.id }
+                map.id to MapDefinitionRepository.ocrExpectedName(map)
             },
         )
     }
@@ -436,7 +438,15 @@ object NavigationWaitActions {
                             DeathActions.waitForAutoRevive()
                             return false
                         }
-                        // Alive but stuck: re-arm check every COORD_STUCK_DEATH_CHECK_MS.
+                        if (stableFor >= COORD_STUCK_ABORT_MS) {
+                            Log.w(
+                                TAG,
+                                "[COORD_ARRIVAL] stuck ${stableFor}ms " +
+                                    "at=(${current.first},${current.second}) dist=$dist — abort for re-nav",
+                            )
+                            return false
+                        }
+                        // Alive but stuck: re-arm death check every COORD_STUCK_DEATH_CHECK_MS.
                         stableSinceMs = now
                     }
                 } else {

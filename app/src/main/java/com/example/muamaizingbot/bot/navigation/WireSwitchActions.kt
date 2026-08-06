@@ -392,6 +392,9 @@ object WireSwitchActions {
         return switchMatch.centerX >= minX
     }
 
+    /** Close in-game chat if the panel is open (map/wire taps often hit the chat icon). */
+    suspend fun ensureChatClosed(): Boolean = closeChatIfOpen()
+
     private suspend fun closeChatIfOpen(): Boolean {
         val open = NavigationVision.findTemplate(CHAT_OPEN, CHAT_THRESHOLD) ?: return false
         Log.w(TAG, "[WIRE] chat open detected at=(${open.centerX},${open.centerY}) — closing")

@@ -19,6 +19,29 @@ data class BotProfile(
      * Arrival wait shortens to 30s if at least one seal was used (else 90s).
      */
     val enableRandomTeleport: Boolean = true,
+    /**
+     * Green-path dots threshold: `dots >=` this value → Far (use Random);
+     * `0 < dots <` this → Near (walk). Clamped to [MIN_RANDOM_FAR_MIN_DOTS, MAX_RANDOM_FAR_MIN_DOTS].
+     */
+    val randomTeleportFarMinDots: Int = DEFAULT_RANDOM_FAR_MIN_DOTS,
+    /**
+     * Farm / farm_bosses only: ensure PK mode, Focus enemies (red HUD), spam Attack,
+     * then return to farm spot or stored boss coords.
+     */
+    val enableCombatFocus: Boolean = false,
+    val combatFocusPkMode: CombatFocusPkMode = CombatFocusPkMode.DEFAULT,
+    /**
+     * When true, ensure the selected companion pet (Angel / Imp) is equipped:
+     * inventory equip, else MU Coin Store purchase, at startup and every
+     * [petCheckIntervalMinutes] while the bot runs.
+     */
+    val enablePet: Boolean = false,
+    val petType: PetType = PetType.DEFAULT,
+    /**
+     * Minutes between periodic pet-slot checks while the bot is running.
+     * Startup always validates once when [enablePet] is true.
+     */
+    val petCheckIntervalMinutes: Int = DEFAULT_PET_CHECK_INTERVAL_MINUTES,
     val farmEnabled: Boolean = true,
     /** Buff skill tap in logical 2560×1440 (giver mode). */
     val elfBuffSkillRefX: Int? = null,
@@ -47,6 +70,24 @@ data class BotProfile(
                 JSONObject().apply {
                     put("enable_elf_buff", enableElfBuff)
                     put("enable_random_teleport", enableRandomTeleport)
+                    put(
+                        "random_teleport_far_min_dots",
+                        randomTeleportFarMinDots.coerceIn(
+                            MIN_RANDOM_FAR_MIN_DOTS,
+                            MAX_RANDOM_FAR_MIN_DOTS,
+                        ),
+                    )
+                    put("enable_combat_focus", enableCombatFocus)
+                    put("combat_focus_pk_mode", combatFocusPkMode.toStorage())
+                    put("enable_pet", enablePet)
+                    put("pet_type", petType.toStorage())
+                    put(
+                        "pet_check_interval_minutes",
+                        petCheckIntervalMinutes.coerceIn(
+                            MIN_PET_CHECK_INTERVAL_MINUTES,
+                            MAX_PET_CHECK_INTERVAL_MINUTES,
+                        ),
+                    )
                 },
             )
             put("farm_config", JSONObject().put("enabled", farmEnabled))
@@ -74,6 +115,14 @@ data class BotProfile(
         const val MIN_ELF_CAST_INTERVAL_SEC = 1
         const val MAX_ELF_CAST_INTERVAL_SEC = 600
 
+        const val DEFAULT_RANDOM_FAR_MIN_DOTS = 10
+        const val MIN_RANDOM_FAR_MIN_DOTS = 3
+        const val MAX_RANDOM_FAR_MIN_DOTS = 40
+
+        const val DEFAULT_PET_CHECK_INTERVAL_MINUTES = 30
+        const val MIN_PET_CHECK_INTERVAL_MINUTES = 1
+        const val MAX_PET_CHECK_INTERVAL_MINUTES = 180
+
         fun fromJson(filename: String, json: JSONObject): BotProfile {
             val general = json.optJSONObject("general_config")
             val farm = json.optJSONObject("farm_config")
@@ -91,6 +140,22 @@ data class BotProfile(
                 enablePotionRecovery = json.optBoolean("enable_potion_recovery", true),
                 enableElfBuff = general?.optBoolean("enable_elf_buff", true) ?: true,
                 enableRandomTeleport = general?.optBoolean("enable_random_teleport", true) ?: true,
+                randomTeleportFarMinDots = general
+                    ?.optInt("random_teleport_far_min_dots", DEFAULT_RANDOM_FAR_MIN_DOTS)
+                    ?.coerceIn(MIN_RANDOM_FAR_MIN_DOTS, MAX_RANDOM_FAR_MIN_DOTS)
+                    ?: DEFAULT_RANDOM_FAR_MIN_DOTS,
+                enableCombatFocus = general?.optBoolean("enable_combat_focus", false) ?: false,
+                combatFocusPkMode = CombatFocusPkMode.parse(
+                    general?.optString("combat_focus_pk_mode", CombatFocusPkMode.DEFAULT.toStorage()),
+                ),
+                enablePet = general?.optBoolean("enable_pet", false) ?: false,
+                petType = PetType.parse(
+                    general?.optString("pet_type", PetType.DEFAULT.toStorage()),
+                ),
+                petCheckIntervalMinutes = general
+                    ?.optInt("pet_check_interval_minutes", DEFAULT_PET_CHECK_INTERVAL_MINUTES)
+                    ?.coerceIn(MIN_PET_CHECK_INTERVAL_MINUTES, MAX_PET_CHECK_INTERVAL_MINUTES)
+                    ?: DEFAULT_PET_CHECK_INTERVAL_MINUTES,
                 farmEnabled = farm?.optBoolean("enabled", true) ?: true,
                 elfBuffSkillRefX = giver?.optInt("skill_ref_x")
                     ?.takeIf { giver.has("skill_ref_x") && !giver.isNull("skill_ref_x") },

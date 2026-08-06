@@ -3,6 +3,7 @@ package com.example.muamaizingbot.bot.bosses
 import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
+import com.example.muamaizingbot.bot.maintenance.TopHudRailActions
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
@@ -49,6 +50,8 @@ object BossTargetingActions {
 
     /** True while the boss focus emblem is visible (circularMask match). */
     suspend fun hasBossFocus(): Boolean {
+        // Expanded Store/VIP rail overlaps the top boss emblem ROI.
+        TopHudRailActions.ensureCollapsed()
         val match = NavigationVision.findTemplate(
             BOSS_FOCUS,
             BOSS_FOCUS_THRESHOLD,

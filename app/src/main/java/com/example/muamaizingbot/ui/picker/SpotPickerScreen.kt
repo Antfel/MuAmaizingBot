@@ -94,9 +94,6 @@ fun SpotPickerScreen(
     }
     val maps = remember { MapDefinitionRepository.listForSpotPicker() }
 
-    var enableElfBuff by remember(profileFilename) {
-        mutableStateOf(profile?.enableElfBuff ?: true)
-    }
     val defaultFarmName = stringResource(R.string.spot_default_farm)
     val defaultElfName = stringResource(R.string.spot_default_elf)
     val msgUncalibratedSave = stringResource(R.string.spot_uncalibrated_save)
@@ -222,8 +219,8 @@ fun SpotPickerScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
         Text(
             text = when (locationType) {
@@ -240,43 +237,35 @@ fun SpotPickerScreen(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
-        if (locationType == LocationPickerType.ELF_BUFF) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = stringResource(R.string.profile_elf_auto), fontWeight = FontWeight.Medium)
-                    Text(
-                        text = stringResource(R.string.spot_elf_zone_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                androidx.compose.material3.Switch(
-                    checked = enableElfBuff,
-                    onCheckedChange = { enableElfBuff = it },
-                )
-            }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            MapSearchField(
+                maps = maps,
+                selectedMapId = selectedMapId,
+                onMapSelected = { mapId ->
+                    selectedMapId = mapId
+                    selectedX = -1
+                    selectedY = -1
+                    coordX = null
+                    coordY = null
+                    coordXText = ""
+                    coordYText = ""
+                    isCross = MapDefinitionRepository.getById(mapId)?.isCross ?: true
+                    statusMessage = ""
+                },
+                enabled = profile != null,
+                modifier = Modifier.weight(2f),
+            )
+            WireDropdown(
+                wires = wires,
+                selectedWire = selectedWire,
+                onWireSelected = { selectedWire = it },
+                modifier = Modifier.weight(1f),
+            )
         }
-
-        MapSearchField(
-            maps = maps,
-            selectedMapId = selectedMapId,
-            onMapSelected = { mapId ->
-                selectedMapId = mapId
-                selectedX = -1
-                selectedY = -1
-                coordX = null
-                coordY = null
-                coordXText = ""
-                coordYText = ""
-                isCross = MapDefinitionRepository.getById(mapId)?.isCross ?: true
-                statusMessage = ""
-            },
-            enabled = profile != null,
-        )
         if (maps.isEmpty()) {
             Text(
                 text = stringResource(R.string.spot_no_configured_maps),
@@ -284,25 +273,6 @@ fun SpotPickerScreen(
                 color = MaterialTheme.colorScheme.error,
             )
         }
-
-        UnionCrossDropdown(
-            isCross = isCross,
-            onSelected = { isCross = it },
-        )
-
-        WireDropdown(
-            wires = wires,
-            selectedWire = selectedWire,
-            onWireSelected = { selectedWire = it },
-        )
-
-        OutlinedTextField(
-            value = spotName,
-            onValueChange = { spotName = it },
-            label = { Text(stringResource(R.string.spot_name)) },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-        )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -382,6 +352,10 @@ fun SpotPickerScreen(
             )
         }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
         Button(
             onClick = {
                 val currentProfile = profile
@@ -430,12 +404,13 @@ fun SpotPickerScreen(
                             coordY = coordY,
                             isCross = isCross,
                         )
-                        ProfileRepository.saveProfile(currentProfile.copy(enableElfBuff = enableElfBuff))
                     }
                 }
                 statusMessage = msgSaved
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .weight(1f)
+                .height(42.dp),
             enabled = profile != null,
         ) {
             Text(stringResource(R.string.action_save))
@@ -443,9 +418,12 @@ fun SpotPickerScreen(
 
         OutlinedButton(
             onClick = onBack,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .weight(1f)
+                .height(42.dp),
         ) {
             Text(stringResource(R.string.action_back))
+        }
         }
     }
 }
@@ -509,13 +487,14 @@ private fun WireDropdown(
     wires: List<Int>,
     selectedWire: Int,
     onWireSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
     ) {
         OutlinedTextField(
             value = stringResource(R.string.spot_wire_n, selectedWire),
