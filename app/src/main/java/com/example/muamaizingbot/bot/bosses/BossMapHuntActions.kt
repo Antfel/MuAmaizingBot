@@ -194,23 +194,31 @@ object BossMapHuntActions {
                 "[HUNT] wait arrival game=(${gameCoords.first},${gameCoords.second}) " +
                     "r=$ARRIVAL_RADIUS sealsUsed=$sealsUsed timeoutMs=$arrivalTimeoutMs",
             )
-            val arrived = NavigationWaitActions.waitUntilArrivesAtCoord(
+            val arrival = NavigationWaitActions.waitUntilArrivesAtCoordResult(
                 target,
                 mapDef,
                 timeoutMs = arrivalTimeoutMs,
+                acceptPathEndedAsArrival = true,
             )
-            if (arrived) {
-                return true
+            return when (arrival) {
+                NavigationWaitActions.CoordArrivalResult.ARRIVED -> {
+                    Log.d(TAG, "[HUNT] arrival confirmed → FIGHT (ensureFocusBoss next)")
+                    true
+                }
+                // OCR often wrong at destination; hand off so FIGHT taps Focus Boss.
+                NavigationWaitActions.CoordArrivalResult.TIMEOUT -> {
+                    Log.w(TAG, "[HUNT] arrival timeout — proceed FIGHT for Focus Boss tap")
+                    true
+                }
+                NavigationWaitActions.CoordArrivalResult.STUCK,
+                NavigationWaitActions.CoordArrivalResult.DEAD,
+                NavigationWaitActions.CoordArrivalResult.NO_COORDS,
+                -> {
+                    Log.w(TAG, "[HUNT] arrival $arrival — abort hop")
+                    BossHuntState.clearBossTarget()
+                    false
+                }
             }
-            // Timeout: only proceed to FIGHT if boss focus HUD is already up.
-            // Otherwise abort hop — avoids skull/seal loops on false arrivals (e.g. OCR trunc).
-            if (BossTargetingActions.hasBossFocus()) {
-                Log.d(TAG, "[HUNT] arrival timeout but boss_focus present — proceed")
-                return true
-            }
-            Log.w(TAG, "[HUNT] arrival timeout and no boss_focus — abort hop")
-            BossHuntState.clearBossTarget()
-            return false
         }
 
         Log.w(TAG, "[HUNT] no affine for ${mapDef.id} — fallback auto_nav wait")
@@ -280,12 +288,21 @@ object BossMapHuntActions {
             coordY = gy,
             arrivalRadius = ARRIVAL_RADIUS,
         )
-        val arrived = NavigationWaitActions.waitUntilArrivesAtCoord(
+        val arrival = NavigationWaitActions.waitUntilArrivesAtCoordResult(
             target,
             mapDef,
             timeoutMs = arrivalTimeoutMs,
+            acceptPathEndedAsArrival = true,
         )
-        Log.d(TAG, "[COMBAT_FOCUS] returnToBoss arrived=$arrived")
-        return true
+        Log.d(TAG, "[COMBAT_FOCUS] returnToBoss arrival=$arrival")
+        return when (arrival) {
+            NavigationWaitActions.CoordArrivalResult.ARRIVED,
+            NavigationWaitActions.CoordArrivalResult.TIMEOUT,
+            -> true
+            NavigationWaitActions.CoordArrivalResult.STUCK,
+            NavigationWaitActions.CoordArrivalResult.DEAD,
+            NavigationWaitActions.CoordArrivalResult.NO_COORDS,
+            -> false
+        }
     }
 }

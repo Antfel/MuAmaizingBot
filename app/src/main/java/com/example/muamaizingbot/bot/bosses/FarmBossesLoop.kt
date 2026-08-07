@@ -21,7 +21,8 @@ object FarmBossesLoop {
     private const val TAG = "FarmBosses"
     private const val INVENTORY_OPEN = "templates/mu/ui/inventory_open.png"
     private const val FIGHT_POLL_MS = 2_000L
-    private const val POST_FOCUS_LOST_WAIT_MS = 5_000L
+    /** Confirm boss really gone after failed re-acquire (was 5s — too slow post-kill). */
+    private const val POST_FOCUS_LOST_WAIT_MS = 1_500L
     private const val FOCUS_FAIL_BEFORE_REHUNT = 4
     /** Mid-fight focus can flicker under VFX; require several failed re-acquires before kill. */
     private const val FOCUS_MISS_BEFORE_KILL = 3
@@ -199,27 +200,37 @@ object FarmBossesLoop {
                         CombatFocusActions.TickResult.Idle -> Unit
                     }
                 }
-                Log.d(TAG, "[BOSS] focus missing mid-fight — one acquire round")
+                Log.d(
+                    TAG,
+                    "[BOSS] focus missing mid-fight — fast re-acquire " +
+                        "attempts=$FOCUS_MISS_BEFORE_KILL settle=${BossTargetingActions.FAST_SETTLE_MS}ms",
+                )
                 if (BossTargetingActions.ensureFocusBoss(
                         includeGolden = includeGolden,
-                        maxAttempts = 1,
+                        maxAttempts = FOCUS_MISS_BEFORE_KILL,
+                        settleMs = BossTargetingActions.FAST_SETTLE_MS,
                     )
                 ) {
                     consecutiveFocusMisses = 0
                 } else {
-                    consecutiveFocusMisses++
-                    Log.d(
-                        TAG,
-                        "[BOSS] focus miss $consecutiveFocusMisses/$FOCUS_MISS_BEFORE_KILL",
-                    )
-                    if (consecutiveFocusMisses >= FOCUS_MISS_BEFORE_KILL) {
-                        return finishKillAfterFocusLost(mapId)
-                    }
-                    delay(FIGHT_POLL_MS)
-                    return CycleResult.OK
+                    Log.d(TAG, "[BOSS] focus re-acquire failed ×$FOCUS_MISS_BEFORE_KILL → confirm kill")
+                    return finishKillAfterFocusLost(mapId)
                 }
             } else {
                 consecutiveFocusMisses = 0
+                // Boss emblem still up — still probe nearby enemies each fight tick.
+                if (profile.enableCombatFocus) {
+                    when (val focus = CombatFocusActions.tickIfEnabled(profile)) {
+                        CombatFocusActions.TickResult.Engaging -> {
+                            Log.d(TAG, "[BOSS] combat focus engaging mid-boss")
+                            return CycleResult.OK
+                        }
+                        CombatFocusActions.TickResult.EnemyClearedNeedReturn -> {
+                            return returnAfterCombatFocus(mapId)
+                        }
+                        CombatFocusActions.TickResult.Idle -> Unit
+                    }
+                }
             }
         } else {
             // First acquire after arriving on boss — allow a few soft retries then re-hunt.

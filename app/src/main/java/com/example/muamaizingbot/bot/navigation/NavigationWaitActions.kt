@@ -45,6 +45,22 @@ object NavigationWaitActions {
     private const val COORD_STUCK_DEATH_CHECK_MS = 3_000L
     /** Alive but not moving toward target — abort so caller can re-tap / retry nav. */
     private const val COORD_STUCK_ABORT_MS = 8_000L
+    /**
+     * Boss hunt: after auto_nav was seen then gone for this long, and HUD coords
+     * stay unchanged for [PATH_ENDED_STABLE_MS], treat as arrived (OCR may be wrong).
+     * Arrival ≠ boss focus HUD — FIGHT taps Focus Boss afterward.
+     */
+    private const val PATH_ENDED_GONE_MS = 1_500L
+    private const val PATH_ENDED_STABLE_MS = 2_000L
+
+    /** Result of HUD-coordinate arrival wait (boss hunt uses non-ARRIVED branches). */
+    enum class CoordArrivalResult {
+        ARRIVED,
+        TIMEOUT,
+        STUCK,
+        DEAD,
+        NO_COORDS,
+    }
 
     suspend fun waitUntilMapLoaded(mapDef: MapDefinition): Boolean {
         val navigation = mapDef.navigation ?: return false
@@ -386,30 +402,71 @@ object NavigationWaitActions {
         location: FarmLocation,
         mapDef: MapDefinition?,
         timeoutMs: Long = RandomSealActions.ARRIVAL_TIMEOUT_WALK_MS,
+        acceptPathEndedAsArrival: Boolean = false,
     ): Boolean {
+        return waitUntilArrivesAtCoordResult(
+            location = location,
+            mapDef = mapDef,
+            timeoutMs = timeoutMs,
+            acceptPathEndedAsArrival = acceptPathEndedAsArrival,
+        ) == CoordArrivalResult.ARRIVED
+    }
+
+    /**
+     * Poll HUD coords until near [location], truncated-OCR sticky match, optional path-end,
+     * stuck abort, death, or timeout.
+     *
+     * @param acceptPathEndedAsArrival when true (boss hunt): auto_nav seen then gone +
+     *   stable coords counts as [CoordArrivalResult.ARRIVED] even if OCR dist is large.
+     *   Does not require boss focus HUD (Focus Boss tap happens in FIGHT).
+     */
+    suspend fun waitUntilArrivesAtCoordResult(
+        location: FarmLocation,
+        mapDef: MapDefinition?,
+        timeoutMs: Long = RandomSealActions.ARRIVAL_TIMEOUT_WALK_MS,
+        acceptPathEndedAsArrival: Boolean = false,
+    ): CoordArrivalResult {
         if (location.coordX == null || location.coordY == null) {
             Log.w(TAG, "[COORD_ARRIVAL] no coordinates")
-            return false
+            return CoordArrivalResult.NO_COORDS
         }
 
         val targetX = location.coordX
         val targetY = location.coordY
         val radius = location.arrivalRadius
-        Log.d(TAG, "[COORD_ARRIVAL] target=($targetX,$targetY) radius=$radius")
+        Log.d(
+            TAG,
+            "[COORD_ARRIVAL] target=($targetX,$targetY) radius=$radius " +
+                "pathEnded=$acceptPathEndedAsArrival timeoutMs=$timeoutMs",
+        )
 
         var lastCoord: Pair<Int, Int>? = null
         var stableSinceMs = 0L
         var lastDeathCheckAtMs = 0L
+        var sawAutoNav = false
+        var pathGoneSinceMs = 0L
 
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
+            val nowPoll = System.currentTimeMillis()
+            if (acceptPathEndedAsArrival) {
+                if (isAutoNavigating()) {
+                    sawAutoNav = true
+                    pathGoneSinceMs = 0L
+                } else if (sawAutoNav) {
+                    if (pathGoneSinceMs == 0L) {
+                        pathGoneSinceMs = nowPoll
+                    }
+                }
+            }
+
             val current = readHudCoordinates(mapDef)
             if (current != null) {
                 val dist = manhattanDistance(current.first, current.second, targetX, targetY)
                 Log.d(TAG, "[COORD_ARRIVAL] current=(${current.first},${current.second}) dist=$dist")
                 if (dist <= radius) {
                     Log.d(TAG, "[COORD_ARRIVAL] arrived")
-                    return true
+                    return CoordArrivalResult.ARRIVED
                 }
                 // HUD often drops leading digits (179→7). Same heuristic as farm-spot sticky:
                 // require Y near target so a real x=7 elsewhere does not count as arrived.
@@ -427,7 +484,7 @@ object NavigationWaitActions {
                             "current=(${current.first},${current.second}) " +
                             "target=($targetX,$targetY) → arrived",
                     )
-                    return true
+                    return CoordArrivalResult.ARRIVED
                 }
 
                 val now = System.currentTimeMillis()
@@ -439,6 +496,23 @@ object NavigationWaitActions {
                         stableSinceMs = now
                     }
                     val stableFor = now - stableSinceMs
+                    val pathGoneFor = if (pathGoneSinceMs > 0L) now - pathGoneSinceMs else 0L
+
+                    // Path finished + standing still: arrived for boss even when OCR dist is wrong.
+                    if (acceptPathEndedAsArrival &&
+                        sawAutoNav &&
+                        pathGoneFor >= PATH_ENDED_GONE_MS &&
+                        stableFor >= PATH_ENDED_STABLE_MS
+                    ) {
+                        Log.d(
+                            TAG,
+                            "[COORD_ARRIVAL] path ended + stable ${stableFor}ms " +
+                                "pathGone=${pathGoneFor}ms " +
+                                "at=(${current.first},${current.second}) dist=$dist → arrived",
+                        )
+                        return CoordArrivalResult.ARRIVED
+                    }
+
                     if (stableFor >= COORD_STUCK_DEATH_CHECK_MS &&
                         now - lastDeathCheckAtMs >= COORD_STUCK_DEATH_CHECK_MS
                     ) {
@@ -455,18 +529,29 @@ object NavigationWaitActions {
                                     "(${DeathActions.DEATH_LOCKOUT_MS}ms lockout)",
                             )
                             DeathActions.waitForAutoRevive()
-                            return false
+                            return CoordArrivalResult.DEAD
                         }
+                        // Do not reset stableSinceMs — death checks must not block stuck abort.
                         if (stableFor >= COORD_STUCK_ABORT_MS) {
+                            // Boss: path gone long enough — prefer arrived over stuck (OCR may lie).
+                            if (acceptPathEndedAsArrival &&
+                                sawAutoNav &&
+                                pathGoneFor >= PATH_ENDED_GONE_MS
+                            ) {
+                                Log.d(
+                                    TAG,
+                                    "[COORD_ARRIVAL] stuck but path ended — arrived " +
+                                        "at=(${current.first},${current.second}) dist=$dist",
+                                )
+                                return CoordArrivalResult.ARRIVED
+                            }
                             Log.w(
                                 TAG,
                                 "[COORD_ARRIVAL] stuck ${stableFor}ms " +
                                     "at=(${current.first},${current.second}) dist=$dist — abort for re-nav",
                             )
-                            return false
+                            return CoordArrivalResult.STUCK
                         }
-                        // Alive but stuck: re-arm death check every COORD_STUCK_DEATH_CHECK_MS.
-                        stableSinceMs = now
                     }
                 } else {
                     lastCoord = current
@@ -477,7 +562,7 @@ object NavigationWaitActions {
         }
 
         Log.w(TAG, "[COORD_ARRIVAL] timeout")
-        return false
+        return CoordArrivalResult.TIMEOUT
     }
 
     suspend fun waitForSpotArrival(

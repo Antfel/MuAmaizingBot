@@ -6,7 +6,7 @@ import android.graphics.Rect
 object MuCombatRois {
 
     /**
-     * Solo el label Auto/Manual. Medido en 1280×720:
+     * Solo el label Auto / Manual / Pause. Medido en 1280×720:
      * (1209,340)-(1275,370) → ref 2560×1440 ×2.
      */
     private const val AUTO_HUD_LEFT = 2418

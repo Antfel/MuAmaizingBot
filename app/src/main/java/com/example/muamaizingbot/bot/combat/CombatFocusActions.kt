@@ -29,8 +29,13 @@ object CombatFocusActions {
 
     private const val TAG = "CombatFocus"
     private const val ATTACK_MAIN = "templates/mu/ui/targeting/attack_main.png"
+    private const val FOCUS_PLAYER = "templates/mu/ui/targeting/focus_player.png"
     private const val ATTACK_THRESHOLD = 0.75f
+    private const val FOCUS_PLAYER_THRESHOLD = 0.62f
     private const val POST_ATTACK_TAP_MS = 160L
+    private const val POST_FOCUS_PROBE_MS = 180L
+    /** Log continuous focus spam every N taps while boss emblem is up. */
+    private const val FOCUS_PROBE_LOG_EVERY = 10
     /** Log attack spam progress every N taps (loop is unbounded until focus lost). */
     private const val ATTACK_LOG_EVERY = 10
     /**
@@ -109,7 +114,7 @@ object CombatFocusActions {
     }
 
     /**
-     * One combat-focus tick. Safe no-op when disabled or not farm/farm_bosses.
+     * One combat-focus tick. Call only from active **farming** / **farm_bosses FIGHT**.
      * Does not re-force PK every cycle — only confirms / repairs drift.
      */
     suspend fun tickIfEnabled(profile: BotProfile): TickResult {
@@ -139,14 +144,11 @@ object CombatFocusActions {
             return TickResult.Idle
         }
 
-        // farm_bosses: boss red HP uses the same HUD template as players.
-        // While boss_focus emblem is up, do not treat that red bar as an enemy.
+        // farm_bosses FIGHT: boss red HP shares the player template. Keep spamming
+        // focus_player for the whole fight until the boss emblem drops (kill → nav)
+        // or a player target is acquired.
         if (profile.isFarmBossesMode() && BossTargetingActions.hasBossFocus()) {
-            if (engagingEnemy) {
-                engagingEnemy = false
-            }
-            Log.d(TAG, "[COMBAT_FOCUS] boss focus active — skip enemy engage")
-            return TickResult.Idle
+            return spamFocusDuringBossFight()
         }
 
         if (!ElfBuffFocusHud.isRedHpBarVisible()) {
@@ -169,6 +171,70 @@ object CombatFocusActions {
 
         engagingEnemy = true
         return spamAttackWhileRedHud()
+    }
+
+    /**
+     * Continuous [FOCUS_PLAYER] spam for the active boss FIGHT.
+     * Runs until:
+     * - a player focus is acquired (red HUD, no boss emblem) → attack spam, or
+     * - boss emblem is gone → Idle so [FarmBossesLoop] can finish kill / navigate.
+     */
+    private suspend fun spamFocusDuringBossFight(): TickResult {
+        Log.d(TAG, "[COMBAT_FOCUS] boss fight — continuous focus_player spam start")
+        val (w, h) = RefCoords.activeScreenSize()
+        val roi = MuCombatRois.targetingHudRoi(w, h)
+        var taps = 0
+        while (true) {
+            if (DeathActions.isDead()) {
+                engagingEnemy = false
+                Log.w(TAG, "[COMBAT_FOCUS] dead during boss-fight focus spam after $taps taps")
+                return TickResult.Idle
+            }
+
+            val bossEmblem = BossTargetingActions.hasBossFocus()
+            val red = ElfBuffFocusHud.isRedHpBarVisible()
+            if (red && !bossEmblem) {
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] enemy focus acquired mid-boss fight after $taps focus taps",
+                )
+                engagingEnemy = true
+                return spamAttackWhileRedHud()
+            }
+            if (!bossEmblem) {
+                if (engagingEnemy) {
+                    engagingEnemy = false
+                }
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] boss emblem gone after $taps focus taps → yield for kill/nav",
+                )
+                return TickResult.Idle
+            }
+
+            val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_PLAYER_THRESHOLD, roi)
+            if (match == null) {
+                if (taps == 0 || (taps + 1) % FOCUS_PROBE_LOG_EVERY == 0) {
+                    Log.d(
+                        TAG,
+                        "[COMBAT_FOCUS] focus_player miss spam tap=${taps + 1}",
+                    )
+                    NavigationVision.logBestScore(FOCUS_PLAYER, roi)
+                }
+            } else {
+                if (taps == 0 || (taps + 1) % FOCUS_PROBE_LOG_EVERY == 0) {
+                    Log.d(
+                        TAG,
+                        "[COMBAT_FOCUS] focus spam tap=${taps + 1} " +
+                            "at=(${match.centerX},${match.centerY}) " +
+                            "score=${"%.3f".format(match.score)}",
+                    )
+                }
+                NavigationVision.tapScreen(match.centerX, match.centerY, label = "focus_player")
+            }
+            delay(BotTiming.ms(POST_FOCUS_PROBE_MS, BotTimingCategory.POST_TAP))
+            taps++
+        }
     }
 
     /**

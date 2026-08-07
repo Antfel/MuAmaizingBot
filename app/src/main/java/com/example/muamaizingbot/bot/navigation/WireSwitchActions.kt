@@ -47,12 +47,6 @@ object WireSwitchActions {
     /** Same cadence as map-list scroll ([MapEntryActions] / [NavigationVision]). */
     private const val SCROLL_WAIT_MS = 1000L
     private const val POPUP_OPEN_WAIT_MS = 1500L
-    /**
-     * Minimum settle after tapping a wire row before Switch Line may be pressed.
-     * Enter is often already on-screen, so we poll for it immediately and only
-     * pad up to this floor (was a blind 1500ms sleep).
-     */
-    private const val WIRE_SELECT_MIN_SETTLE_MS = 350L
     private const val WIRE_ENTER_WAIT_MS = 4000L
     private const val HUD_WAIT_MS = 12_000L
     /** Longer drag than a flick; short travel keeps it map-list soft. */
@@ -569,37 +563,39 @@ object WireSwitchActions {
         val enterPath = config.templates.enterButton
         val enterRoi = NavigationVision.wirePopupEnterRoiFromList(layout.listRoi)
         val selectAtMs = System.currentTimeMillis()
-        val minSettleMs = BotTiming.ms(WIRE_SELECT_MIN_SETTLE_MS, BotTimingCategory.POST_TAP)
 
-        var enter = NavigationVision.waitForTemplate(
-            assetPath = enterPath,
-            threshold = WIRE_ENTER_THRESHOLD,
-            timeoutMs = BotTiming.ms(WIRE_ENTER_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
-            pollMs = 300L,
-            roi = enterRoi,
-        )
+        // Switch Line is usually already visible — tap as soon as we see it (no settle pad).
+        var enter = NavigationVision.findTemplate(enterPath, WIRE_ENTER_THRESHOLD, enterRoi)
+            ?: NavigationVision.findTemplate(enterPath, WIRE_ENTER_THRESHOLD)
+        if (enter == null) {
+            enter = NavigationVision.waitForTemplate(
+                assetPath = enterPath,
+                threshold = WIRE_ENTER_THRESHOLD,
+                timeoutMs = BotTiming.ms(WIRE_ENTER_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
+                pollMs = 100L,
+                roi = enterRoi,
+            )
+        }
         if (enter == null) {
             enter = NavigationVision.waitForTemplate(
                 assetPath = enterPath,
                 threshold = WIRE_ENTER_THRESHOLD,
                 timeoutMs = BotTiming.ms(1500L, BotTimingCategory.SCREEN_LOAD),
-                pollMs = 300L,
+                pollMs = 100L,
             )
         }
 
+        val switchWaitMs = BotTiming.ms(
+            config.switchWaitSeconds * 1000L,
+            BotTimingCategory.FIXED_SETTLE,
+        )
         if (enter != null) {
             val sinceSelect = System.currentTimeMillis() - selectAtMs
-            if (sinceSelect < minSettleMs) {
-                delay(minSettleMs - sinceSelect)
-            }
-            val switchWaitMs = BotTiming.ms(
-                config.switchWaitSeconds * 1000L,
-                BotTimingCategory.FIXED_SETTLE,
-            )
             Log.d(
                 TAG,
-                "[WIRE] confirming switch score=${enter.score} at=(${enter.centerX},${enter.centerY}) " +
-                    "settle=${minSettleMs}ms sinceSelect=${sinceSelect}ms wait=${switchWaitMs}ms",
+                "[WIRE] confirming switch IMMEDIATE score=${enter.score} " +
+                    "at=(${enter.centerX},${enter.centerY}) sinceSelect=${sinceSelect}ms " +
+                    "postWait=${switchWaitMs}ms",
             )
             NavigationVision.tapMatch(enter)
             delay(switchWaitMs)
@@ -607,20 +603,15 @@ object WireSwitchActions {
         }
 
         NavigationVision.logBestScore(enterPath, enterRoi)
-        Log.w(TAG, "[WIRE] enter button not found — fallback ref tap ($WIRE_ENTER_REF_X,$WIRE_ENTER_REF_Y)")
-        val sinceSelect = System.currentTimeMillis() - selectAtMs
-        if (sinceSelect < minSettleMs) {
-            delay(minSettleMs - sinceSelect)
-        }
+        Log.w(
+            TAG,
+            "[WIRE] enter button not found — fallback IMMEDIATE ref tap " +
+                "($WIRE_ENTER_REF_X,$WIRE_ENTER_REF_Y)",
+        )
         if (!NavigationVision.tap(WIRE_ENTER_REF_X, WIRE_ENTER_REF_Y)) {
             return false
         }
-        delay(
-            BotTiming.ms(
-                config.switchWaitSeconds * 1000L,
-                BotTimingCategory.FIXED_SETTLE,
-            ),
-        )
+        delay(switchWaitMs)
         return true
     }
 

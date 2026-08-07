@@ -17,15 +17,18 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 
 /**
- * Detect Auto vs Manual combat toggle via OCR inside a tight [MuCombatRois.autoHudRoi]
+ * Detect Auto / Manual / Pause combat toggle via OCR inside [MuCombatRois.autoHudRoi]
  * (excludes Inventory). Text is normalized (accents stripped) so `Aüto` → auto.
+ *
+ * MU cycle on the same button: Manual → Auto → Pause → Manual…
+ * [GameActions.ensureAutoMode] taps Manual **or** Pause until Auto.
  */
 object AutoModeDetector {
 
     private const val TAG = "AutoModeDetector"
     private const val OCR_UPSCALE = 3.0
     /** ROI is the label band only (~30px on 1280); keep tap near text center. */
-    private const val MANUAL_TAP_OFFSET_UP_PX = 6
+    private const val TOGGLE_TAP_OFFSET_UP_PX = 6
 
     private val recognizer by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -55,6 +58,7 @@ object AutoModeDetector {
             val rawAll = text.text.replace('\n', ' ').trim()
             var autoHit: TextHit? = null
             var manualHit: TextHit? = null
+            var pauseHit: TextHit? = null
 
             for (block in text.textBlocks) {
                 for (line in block.lines) {
@@ -69,6 +73,11 @@ object AutoModeDetector {
                                 manualHit = hit
                             }
                         }
+                        Label.PAUSE -> {
+                            if (pauseHit == null || hit.area() > pauseHit.area()) {
+                                pauseHit = hit
+                            }
+                        }
                         Label.AUTO -> {
                             if (autoHit == null || hit.area() > autoHit.area()) {
                                 autoHit = hit
@@ -80,32 +89,39 @@ object AutoModeDetector {
             }
 
             // Whole-ROI fallback when lines split oddly ("A" + "üto").
-            if (manualHit == null && autoHit == null) {
+            if (manualHit == null && autoHit == null && pauseHit == null) {
                 when (classifyLabel(rawAll)) {
                     Label.MANUAL -> manualHit = TextHit(rawAll, hudRoi)
+                    Label.PAUSE -> pauseHit = TextHit(rawAll, hudRoi)
                     Label.AUTO -> autoHit = TextHit(rawAll, hudRoi)
                     Label.NONE -> Unit
                 }
             }
 
             val isManual = manualHit != null
-            val isAuto = !isManual && autoHit != null
-            val tapY = manualHit?.bounds?.centerY()?.let { (it - MANUAL_TAP_OFFSET_UP_PX).coerceAtLeast(0) }
+            val isPause = !isManual && pauseHit != null
+            val isAuto = !isManual && !isPause && autoHit != null
+
+            // Prefer Manual hit; otherwise Pause — both need a tap to leave non-Auto.
+            val toggleHit = manualHit ?: pauseHit
+            val tapY = toggleHit?.bounds?.centerY()
+                ?.let { (it - TOGGLE_TAP_OFFSET_UP_PX).coerceAtLeast(0) }
 
             Log.d(
                 TAG,
                 "[AUTO_OCR] raw=\"$rawAll\" norm=\"${normalizeOcr(rawAll)}\" " +
-                    "manual=${manualHit?.text} auto=${autoHit?.text} " +
-                    "→ isAuto=$isAuto isManual=$isManual " +
+                    "manual=${manualHit?.text} pause=${pauseHit?.text} auto=${autoHit?.text} " +
+                    "→ isAuto=$isAuto isManual=$isManual isPause=$isPause " +
                     "roi=${hudRoi.left},${hudRoi.top}-${hudRoi.right},${hudRoi.bottom}",
             )
 
             AutoModeDetection(
                 isAutoMode = isAuto,
                 isManualMode = isManual,
+                isPauseMode = isPause,
                 autoScore = if (isAuto) 1f else 0f,
                 manualScore = if (isManual) 1f else 0f,
-                manualTapX = manualHit?.bounds?.centerX(),
+                manualTapX = toggleHit?.bounds?.centerX(),
                 manualTapY = tapY,
                 ocrRaw = rawAll,
             )
@@ -114,7 +130,7 @@ object AutoModeDetector {
         }
     }
 
-    private enum class Label { AUTO, MANUAL, NONE }
+    internal enum class Label { AUTO, MANUAL, PAUSE, NONE }
 
     /** Strip accents / junk so OCR noise like `Aüto` still matches. */
     fun normalizeOcr(raw: String): String {
@@ -125,10 +141,12 @@ object AutoModeDetector {
             .replace(Regex("[^a-z]"), "")
     }
 
-    private fun classifyLabel(raw: String): Label {
+    internal fun classifyLabel(raw: String): Label {
         val n = normalizeOcr(raw)
         if (n.isEmpty()) return Label.NONE
         if (n.contains("manual")) return Label.MANUAL
+        // Pause before auto: "autopaused" unlikely; "pause" must not match via "auto".
+        if (n.contains("pause") || n == "paus" || n.startsWith("paus")) return Label.PAUSE
         if (n.contains("autoplay") || n.contains("autonav") || n.contains("navigat")) {
             return Label.NONE
         }
@@ -217,8 +235,10 @@ object AutoModeDetector {
 data class AutoModeDetection(
     val isAutoMode: Boolean,
     val isManualMode: Boolean,
+    val isPauseMode: Boolean = false,
     val autoScore: Float,
     val manualScore: Float,
+    /** Tap target for Manual **or** Pause (same HUD button). */
     val manualTapX: Int?,
     val manualTapY: Int?,
     val ocrRaw: String = "",
@@ -228,6 +248,7 @@ data class AutoModeDetection(
             AutoModeDetection(
                 isAutoMode = false,
                 isManualMode = false,
+                isPauseMode = false,
                 autoScore = 0f,
                 manualScore = 0f,
                 manualTapX = null,

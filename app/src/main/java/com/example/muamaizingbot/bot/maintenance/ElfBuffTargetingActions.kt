@@ -2,8 +2,13 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.graphics.Rect
 import android.util.Log
+import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
+import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
+import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.CombatFocusPkMode
 import com.example.muamaizingbot.profile.LocationRepository
+import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.settings.BotTiming
 import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.coord.RefCoords
@@ -46,7 +51,7 @@ object ElfBuffTargetingActions {
     private const val PK_MODE_TEAM_BAR = "templates/mu/ui/targeting/pk_mode_team_bar.png"
 
     private const val PK_TEMPLATE_THRESHOLD = 0.85f
-    private const val FOCUS_TEMPLATE_THRESHOLD = 0.68f
+    private const val FOCUS_TEMPLATE_THRESHOLD = 0.62f
     private const val POST_PK_TAP_MS = 350L
     private const val PK_POPUP_QUICK_WAIT_MS = 800L
     private const val PK_POPUP_SECOND_WAIT_MS = 1_500L
@@ -66,14 +71,37 @@ object ElfBuffTargetingActions {
     }
 
     /**
-     * Active farm/elf spot decides Cross vs Local Union template.
-     * Falls back to Cross (legacy UnionKuaFu) when no location is configured.
+     * PK Union template variant from the **map** [MapDefinition.isCross], not the
+     * saved spot override. UnionKuaFu when cross; short Union otherwise.
+     *
+     * Resolution order: trusted HUD map → farm_bosses active map → farm/elf spot map.
      */
     fun resolveIsCross(): Boolean {
-        val location = LocationRepository.farmSpot.value
-            ?: LocationRepository.elfBuff.value
-            ?: return true
-        return location.isCross
+        TrustedCurrentMapMemory.trustedMapId()?.let { mapId ->
+            MapDefinitionRepository.getById(mapId)?.let { def ->
+                Log.d(TAG, "[ELF_GIVER] pk isCross=${def.isCross} from trusted map=${def.id}")
+                return def.isCross
+            }
+        }
+        val profile = ProfileRepository.currentProfile.value
+        if (profile != null && profile.isFarmBossesMode()) {
+            FarmBossesLoop.currentMapId(profile)?.let { mapId ->
+                MapDefinitionRepository.getById(mapId)?.let { def ->
+                    Log.d(TAG, "[ELF_GIVER] pk isCross=${def.isCross} from boss map=${def.id}")
+                    return def.isCross
+                }
+            }
+        }
+        val spotMapId = LocationRepository.farmSpot.value?.map
+            ?: LocationRepository.elfBuff.value?.map
+        if (spotMapId != null) {
+            MapDefinitionRepository.getById(spotMapId)?.let { def ->
+                Log.d(TAG, "[ELF_GIVER] pk isCross=${def.isCross} from spot map=${def.id}")
+                return def.isCross
+            }
+        }
+        Log.d(TAG, "[ELF_GIVER] pk isCross=true (fallback, no map)")
+        return true
     }
 
     /** Template for open-menu / popup Union option. */

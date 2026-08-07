@@ -26,7 +26,10 @@ object BossTargetingActions {
     private const val FALLBACK_BOSS_X_1280 = 1115
     private const val FALLBACK_BOSS_Y_720 = 656
     private const val MAX_ATTEMPTS = 4
+    /** Post-skull settle before reading boss emblem (initial acquire). */
     private const val SETTLE_MS = 1_200L
+    /** Faster settle for mid-fight re-acquire / post-kill confirm taps. */
+    const val FAST_SETTLE_MS = 400L
 
     /**
      * Search box for [BOSS_FOCUS] authored at 1280×720:
@@ -71,11 +74,13 @@ object BossTargetingActions {
     /**
      * Ensure boss focus HUD is up (skull → confirm via [hasBossFocus]).
      * @param maxAttempts skull taps before giving up (use 1 mid-fight).
+     * @param settleMs wait after each skull tap before reading the emblem.
      * @param includeGolden same elite skull path; reserved for future golden-specific templates.
      */
     suspend fun ensureFocusBoss(
         includeGolden: Boolean = false,
         maxAttempts: Int = MAX_ATTEMPTS,
+        settleMs: Long = SETTLE_MS,
     ): Boolean {
         if (includeGolden) {
             Log.d(TAG, "[BOSS] include_golden_mobs=true (elite skull path)")
@@ -88,15 +93,16 @@ object BossTargetingActions {
         if (ElfBuffFocusHud.isGreenHpBarVisible()) {
             Log.d(TAG, "[BOSS] green focus present; clearing before acquire")
             ElfBuffFocusHud.clearFocus()
-            delay(SETTLE_MS)
+            delay(settleMs)
         }
 
         val attempts = maxAttempts.coerceAtLeast(1)
+        val settle = settleMs.coerceAtLeast(0L)
         repeat(attempts) { attempt ->
             if (!tapFocusBossSkull()) {
                 Log.w(TAG, "[BOSS] Focus Boss tap failed attempt=${attempt + 1}")
             }
-            delay(SETTLE_MS)
+            delay(settle)
             if (hasBossFocus()) {
                 Log.d(TAG, "[BOSS] focus acquired attempt=${attempt + 1}")
                 return true

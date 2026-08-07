@@ -544,10 +544,10 @@ object BotPriorityLoop {
     }
 
     /**
-     * Shared general maintenance for Farm Bosses: potions, inventory, pet, then elf buff.
+     * Shared general maintenance for Farm Bosses: potions, inventory, pet (interval), then elf buff.
      * Used at startup, post-revive, and post-kill (preparation before the next hunt).
      * Potions / inventory / elf also run every loop tick before the farm-bosses branch;
-     * pet is **not** probed mid-FIGHT — only here and via the normal interval outside FIGHT.
+     * pet is **not** probed mid-FIGHT — only via [PetCheckGate] outside FIGHT / in this window.
      * Return to checkpoint is the caller's job.
      */
     private suspend fun runFarmBossesGeneralChecks(
@@ -586,12 +586,13 @@ object BotPriorityLoop {
             }
         }
 
-        // Preparation pet check after fight / death (and startup general pass).
-        // Force regardless of interval — this is the farm_bosses prep window.
-        if (profile.enablePet) {
+        // Pet: respect petCheckIntervalMinutes. Mid-FIGHT is skipped in the main loop;
+        // this is the prep window after kill/death/startup — still gated by interval.
+        if (PetCheckGate.shouldCheck(profile)) {
             Log.d(
                 TAG,
                 "[LOOP] farm_bosses pet_validate reason=$reason " +
+                    "intervalMin=${profile.petCheckIntervalMinutes} " +
                     "want=${profile.petType.toStorage()}",
             )
             val pet = PetActions.validateIfEnabled(profile)
@@ -600,6 +601,12 @@ object BotPriorityLoop {
                 TAG,
                 "[LOOP] farm_bosses pet_validate result=$pet reason=$reason " +
                     "want=${profile.petType.toStorage()}",
+            )
+        } else if (profile.enablePet) {
+            Log.d(
+                TAG,
+                "[LOOP] farm_bosses skip pet_validate reason=$reason " +
+                    "intervalMin=${profile.petCheckIntervalMinutes} (not due)",
             )
         }
 

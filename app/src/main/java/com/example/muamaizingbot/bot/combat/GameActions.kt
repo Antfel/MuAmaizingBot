@@ -61,15 +61,20 @@ object GameActions {
             if (tapX == null || tapY == null) {
                 Log.w(
                     TAG,
-                    "[COMBAT] ensureAutoMode failed reason=no_manual_ocr " +
+                    "[COMBAT] ensureAutoMode failed reason=no_toggle_ocr " +
                         "ocr=\"${detection.ocrRaw}\""
                 )
                 return false
             }
 
+            val fromLabel = when {
+                detection.isManualMode -> "manual"
+                detection.isPauseMode -> "pause"
+                else -> "toggle"
+            }
             Log.d(
                 TAG,
-                "[COMBAT] manual OCR → tap toggle at ($tapX,$tapY) ocr=\"${detection.ocrRaw}\""
+                "[COMBAT] $fromLabel OCR → tap toggle at ($tapX,$tapY) ocr=\"${detection.ocrRaw}\""
             )
             val tapped = suspendCancellableCoroutine { continuation ->
                 InputController.tap(tapX, tapY) { result ->
