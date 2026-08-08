@@ -21,7 +21,7 @@ object InventoryRecycleActions {
 
     private const val TAG = "InventoryRecycle"
 
-    private const val INVENTORY_FULL = "templates/mu/ui/inventory_full.png"
+    private const val INVENTORY_FULL = InventoryCheckActions.INVENTORY_FULL
     private const val RECYCLE_BUTTON = "templates/mu/ui/recycle_button.png"
     private const val RECYCLE_INTERNAL = "templates/mu/ui/recycle_button_internal.png"
     /** Optional daily/periodic "Clue" dialog after internal confirm. */
@@ -30,7 +30,7 @@ object InventoryRecycleActions {
     private const val RECYCLE_CLUE_RECYCLE = "templates/mu/ui/recycle_clue_recycle_button.png"
     private const val CLOSE_X = MapWindowActions.CLOSE_X
 
-    private const val FULL_THRESHOLD = 0.92f
+    private const val FULL_THRESHOLD = InventoryCheckActions.FULL_THRESHOLD
     private const val BUTTON_THRESHOLD = 0.80f
     private const val INTERNAL_THRESHOLD = 0.80f
     private const val CLUE_THRESHOLD = 0.80f
@@ -56,8 +56,9 @@ object InventoryRecycleActions {
                 return true
             }
 
-            Log.d(TAG, "[RECYCLE] start: tap inventory_full")
-            if (!NavigationVision.tapTemplate(INVENTORY_FULL, FULL_THRESHOLD)) {
+            val roi = InventoryCheckActions.inventoryFullRoi()
+            Log.d(TAG, "[RECYCLE] start: tap inventory_full roi=$roi")
+            if (!NavigationVision.tapTemplate(INVENTORY_FULL, FULL_THRESHOLD, roi)) {
                 Log.w(TAG, "[RECYCLE] inventory_full tap failed")
                 return BotRecoveryActions.recoverFromLostState("recycle-open-failed")
             }
@@ -94,7 +95,15 @@ object InventoryRecycleActions {
             dismissRecycleClueIfPresent()
 
             Log.d(TAG, "[RECYCLE] tap close_x")
-            if (!NavigationVision.tapTemplate(CLOSE_X, NavigationTemplateThresholds.closeX())) {
+            val (w, h) = com.example.muamaizingbot.capture.ScreenCaptureManager.peekLatestBitmapSize()
+                ?: com.example.muamaizingbot.vision.coord.RefCoords.activeScreenSize()
+            val invClose = com.example.muamaizingbot.vision.roi.MuCombatRois.inventoryCloseXRoi(w, h)
+            if (!NavigationVision.tapTemplate(
+                    CLOSE_X,
+                    NavigationTemplateThresholds.closeX(),
+                    invClose,
+                )
+            ) {
                 Log.w(TAG, "[RECYCLE] close_x not found after recycle")
             }
             delay(UI_SETTLE_MS)
@@ -136,10 +145,19 @@ object InventoryRecycleActions {
     }
 
     private suspend fun dismissPanels() {
+        val (w, h) = com.example.muamaizingbot.capture.ScreenCaptureManager.peekLatestBitmapSize()
+            ?: com.example.muamaizingbot.vision.coord.RefCoords.activeScreenSize()
+        val invClose = com.example.muamaizingbot.vision.roi.MuCombatRois.inventoryCloseXRoi(w, h)
+        val gearClose = com.example.muamaizingbot.vision.roi.MuCombatRois.gearCloseXRoi(w, h)
         repeat(2) {
             val close = NavigationVision.findTemplate(
                 CLOSE_X,
                 NavigationTemplateThresholds.closeX(),
+                invClose,
+            ) ?: NavigationVision.findTemplate(
+                CLOSE_X,
+                NavigationTemplateThresholds.closeX(),
+                gearClose,
             ) ?: return
             NavigationVision.tapMatch(close)
             delay(UI_SETTLE_MS)

@@ -9,6 +9,7 @@ import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.map.MapPathLengthVision
 import com.example.muamaizingbot.vision.navigation.NavigationVision
+import com.example.muamaizingbot.vision.roi.MuCombatRois
 import com.example.muamaizingbot.vision.store.StoreMuCoinOcr
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
 import kotlinx.coroutines.delay
@@ -277,8 +278,17 @@ object RandomSealActions {
                 continue
             }
             try {
-                val hit = NavigationVision.findOnFrame(frame, STORE_TAB, STORE_OPEN_THRESHOLD)
-                    ?: NavigationVision.findOnFrame(frame, STORE_TITLE, STORE_OPEN_THRESHOLD)
+                val hit = NavigationVision.findOnFrame(
+                    frame,
+                    STORE_TAB,
+                    STORE_OPEN_THRESHOLD,
+                    MuCombatRois.storeTabRoi(frame),
+                ) ?: NavigationVision.findOnFrame(
+                    frame,
+                    STORE_TITLE,
+                    STORE_OPEN_THRESHOLD,
+                    MuCombatRois.storeTitleRoi(frame),
+                )
                 if (hit != null) {
                     Log.d(TAG, "[SEAL_BUY] store detected score=${"%.3f".format(hit.score)}")
                     return true
@@ -364,9 +374,13 @@ object RandomSealActions {
     private suspend fun closeShop(): Boolean {
         repeat(CLOSE_STORE_ATTEMPTS) { attempt ->
             // Prefer close_x template (same orange X as map/store); fallback to store coords.
+            val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+                ?: RefCoords.activeScreenSize()
+            val closeRoi = MuCombatRois.storeCloseXRoi(w, h)
             val closedByTemplate = NavigationVision.tapTemplate(
                 MapWindowActions.CLOSE_X,
                 NavigationTemplateThresholds.closeX(),
+                closeRoi,
             )
             if (!closedByTemplate) {
                 Log.d(TAG, "[SEAL_BUY] close_x miss — fallback store close tap")

@@ -24,9 +24,9 @@ object PotionPurchaseActions {
 
     private const val TAG = "PotionPurchase"
 
-    private const val HP_OUT = "templates/mu/ui/hp_potion_out.png"
-    private const val MP_OUT = "templates/mu/ui/mana_potion_out.png"
-    private const val POTION_THRESHOLD = 0.96f
+    private const val HP_OUT = PotionCheckActions.HP_OUT
+    private const val MP_OUT = PotionCheckActions.MP_OUT
+    private const val POTION_THRESHOLD = PotionCheckActions.POTION_THRESHOLD
     private const val POTION_CLUE = "templates/mu/ui/potion_clue_popup.png"
     private const val POTION_TELEPORT = "templates/mu/ui/potion_teleport_button.png"
     private const val SHOP_OPEN = "templates/mu/ui/common/shop_open.png"
@@ -186,14 +186,15 @@ object PotionPurchaseActions {
     }
 
     private suspend fun tapEmptyPotionSlot(hpEmpty: Boolean, mpEmpty: Boolean): Boolean {
+        val roi = PotionCheckActions.potionSlotsRoi()
         return when {
             hpEmpty -> {
-                Log.d(TAG, "[POTION] tapping empty HP slot")
-                NavigationVision.tapTemplate(HP_OUT, POTION_THRESHOLD)
+                Log.d(TAG, "[POTION] tapping empty HP slot roi=$roi")
+                NavigationVision.tapTemplate(HP_OUT, POTION_THRESHOLD, roi)
             }
             mpEmpty -> {
-                Log.d(TAG, "[POTION] tapping empty MP slot")
-                NavigationVision.tapTemplate(MP_OUT, POTION_THRESHOLD)
+                Log.d(TAG, "[POTION] tapping empty MP slot roi=$roi")
+                NavigationVision.tapTemplate(MP_OUT, POTION_THRESHOLD, roi)
             }
             else -> false
         }

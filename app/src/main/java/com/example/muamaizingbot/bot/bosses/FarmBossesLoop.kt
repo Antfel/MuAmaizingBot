@@ -382,12 +382,16 @@ object FarmBossesLoop {
     }
 
     private suspend fun ensureInventoryClosed(): Boolean {
-        val open = NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f)
+        val (w, h) = com.example.muamaizingbot.capture.ScreenCaptureManager.peekLatestBitmapSize()
+            ?: com.example.muamaizingbot.vision.coord.RefCoords.activeScreenSize()
+        val roi = com.example.muamaizingbot.vision.roi.MuCombatRois.inventoryOpenRoi(w, h)
+        val open = NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f, roi)
         if (open == null) return true
-        Log.d(TAG, "[BOSS] closing inventory")
-        if (NavigationVision.tapTemplate(MapWindowActions.CLOSE_X, 0.8f)) {
+        Log.d(TAG, "[BOSS] closing inventory roi=$roi")
+        val closeRoi = com.example.muamaizingbot.vision.roi.MuCombatRois.inventoryCloseXRoi(w, h)
+        if (NavigationVision.tapTemplate(MapWindowActions.CLOSE_X, 0.8f, closeRoi)) {
             delay(500)
-            return NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f) == null
+            return NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f, roi) == null
         }
         return false
     }

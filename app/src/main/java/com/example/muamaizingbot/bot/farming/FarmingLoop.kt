@@ -6,8 +6,11 @@ import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
+import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
+import com.example.muamaizingbot.vision.roi.MuCombatRois
 import kotlinx.coroutines.delay
 
 object FarmingLoop {
@@ -75,14 +78,20 @@ object FarmingLoop {
     }
 
     private suspend fun ensureInventoryClosed(): Boolean {
-        val open = NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f)
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        val roi = MuCombatRois.inventoryOpenRoi(w, h)
+        val open = NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f, roi)
         if (open == null) {
             return true
         }
-        Log.d(TAG, "[FARMING] closing inventory")
-        if (NavigationVision.tapTemplate(MapWindowActions.CLOSE_X, 0.8f)) {
+        Log.d(TAG, "[FARMING] closing inventory roi=$roi")
+        val (cw, ch) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        val closeRoi = MuCombatRois.inventoryCloseXRoi(cw, ch)
+        if (NavigationVision.tapTemplate(MapWindowActions.CLOSE_X, 0.8f, closeRoi)) {
             delay(500)
-            return NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f) == null
+            return NavigationVision.findTemplate(INVENTORY_OPEN, 0.8f, roi) == null
         }
         return false
     }

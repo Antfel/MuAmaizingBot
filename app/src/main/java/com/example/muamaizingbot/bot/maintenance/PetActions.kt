@@ -6,12 +6,15 @@ import android.util.Log
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationTemplateThresholds
+import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.PetType
 import com.example.muamaizingbot.settings.BotTiming
 import com.example.muamaizingbot.settings.BotTimingCategory
+import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.navigation.ScrollSettleWait
+import com.example.muamaizingbot.vision.roi.MuCombatRois
 import com.example.muamaizingbot.vision.store.StoreMuCoinOcr
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
 import kotlinx.coroutines.delay
@@ -346,8 +349,18 @@ object PetActions {
     private suspend fun isStoreOpen(): Boolean {
         val frame = NavigationVision.captureFrame() ?: return false
         return try {
-            NavigationVision.findOnFrame(frame, STORE_TAB, STORE_OPEN_THRESHOLD) != null ||
-                NavigationVision.findOnFrame(frame, STORE_TITLE, STORE_OPEN_THRESHOLD) != null
+            NavigationVision.findOnFrame(
+                frame,
+                STORE_TAB,
+                STORE_OPEN_THRESHOLD,
+                MuCombatRois.storeTabRoi(frame),
+            ) != null ||
+                NavigationVision.findOnFrame(
+                    frame,
+                    STORE_TITLE,
+                    STORE_OPEN_THRESHOLD,
+                    MuCombatRois.storeTitleRoi(frame),
+                ) != null
         } finally {
             frame.recycle()
         }
@@ -364,8 +377,17 @@ object PetActions {
                 continue
             }
             try {
-                val hit = NavigationVision.findOnFrame(frame, STORE_TAB, STORE_OPEN_THRESHOLD)
-                    ?: NavigationVision.findOnFrame(frame, STORE_TITLE, STORE_OPEN_THRESHOLD)
+                val hit = NavigationVision.findOnFrame(
+                    frame,
+                    STORE_TAB,
+                    STORE_OPEN_THRESHOLD,
+                    MuCombatRois.storeTabRoi(frame),
+                ) ?: NavigationVision.findOnFrame(
+                    frame,
+                    STORE_TITLE,
+                    STORE_OPEN_THRESHOLD,
+                    MuCombatRois.storeTitleRoi(frame),
+                )
                 if (hit != null) {
                     Log.d(TAG, "[PET_BUY] store detected score=${"%.3f".format(hit.score)}")
                     return true
@@ -481,9 +503,13 @@ object PetActions {
             return true
         }
         repeat(CLOSE_STORE_ATTEMPTS) { attempt ->
+            val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+                ?: RefCoords.activeScreenSize()
+            val closeRoi = MuCombatRois.storeCloseXRoi(w, h)
             val closedByTemplate = NavigationVision.tapTemplate(
                 MapWindowActions.CLOSE_X,
                 NavigationTemplateThresholds.closeX(),
+                closeRoi,
             )
             if (!closedByTemplate) {
                 Log.d(TAG, "[PET_BUY] close_x miss — fallback store close tap")
@@ -756,8 +782,15 @@ object PetActions {
             PetType.IMP -> listOf(PET_INV_IMP, PET_INV_IMP_PLAIN)
         }
 
-    suspend fun isGearOpen(): Boolean =
-        NavigationVision.findTemplate(GEAR_OPEN, PANEL_THRESHOLD) != null
+    suspend fun isGearOpen(): Boolean {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        return NavigationVision.findTemplate(
+            GEAR_OPEN,
+            PANEL_THRESHOLD,
+            MuCombatRois.gearOpenRoi(w, h),
+        ) != null
+    }
 
     private suspend fun openGearPanel(): Boolean {
         if (isGearOpen() || canReadPetSlot()) {
@@ -773,6 +806,11 @@ object PetActions {
         }
         delay(UI_SETTLE_MS)
 
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        val invRoi = MuCombatRois.inventoryOpenRoi(w, h)
+        val gearRoi = MuCombatRois.gearOpenRoi(w, h)
+
         val deadline = System.currentTimeMillis() + OPEN_TIMEOUT_MS
         while (System.currentTimeMillis() < deadline) {
             if (isGearOpen()) {
@@ -780,7 +818,7 @@ object PetActions {
                 return true
             }
             // Dual layout: Inventory bag on the right, Gear on the left — both appear together.
-            val bag = NavigationVision.findTemplate(INVENTORY_OPEN, PANEL_THRESHOLD)
+            val bag = NavigationVision.findTemplate(INVENTORY_OPEN, PANEL_THRESHOLD, invRoi)
             if (bag != null) {
                 Log.d(TAG, "[PET] Inventory bag open — waiting for Gear title / pet slot")
                 if (canReadPetSlot()) {
@@ -791,8 +829,8 @@ object PetActions {
             delay(POLL_MS)
         }
 
-        NavigationVision.logBestScore(GEAR_OPEN)
-        NavigationVision.logBestScore(INVENTORY_OPEN)
+        NavigationVision.logBestScore(GEAR_OPEN, gearRoi)
+        NavigationVision.logBestScore(INVENTORY_OPEN, invRoi)
         NavigationVision.logBestScore(PET_EMPTY)
         NavigationVision.logBestScore(PET_ANGEL)
         NavigationVision.logBestScore(PET_IMP)
@@ -871,17 +909,27 @@ object PetActions {
     }
 
     private suspend fun closePanels() {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        val invRoi = MuCombatRois.inventoryOpenRoi(w, h)
+        val gearCloseRoi = MuCombatRois.gearCloseXRoi(w, h)
+        val invCloseRoi = MuCombatRois.inventoryCloseXRoi(w, h)
         repeat(2) {
             val open = isGearOpen() ||
-                NavigationVision.findTemplate(INVENTORY_OPEN, PANEL_THRESHOLD) != null
+                NavigationVision.findTemplate(INVENTORY_OPEN, PANEL_THRESHOLD, invRoi) != null
             if (!open) {
                 return
             }
-            if (!NavigationVision.tapTemplate(
-                    MapWindowActions.CLOSE_X,
-                    NavigationTemplateThresholds.closeX(),
-                )
-            ) {
+            val closed = NavigationVision.tapTemplate(
+                MapWindowActions.CLOSE_X,
+                NavigationTemplateThresholds.closeX(),
+                gearCloseRoi,
+            ) || NavigationVision.tapTemplate(
+                MapWindowActions.CLOSE_X,
+                NavigationTemplateThresholds.closeX(),
+                invCloseRoi,
+            )
+            if (!closed) {
                 Log.d(TAG, "[PET] close_x miss")
                 return
             }
