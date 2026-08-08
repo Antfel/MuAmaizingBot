@@ -58,7 +58,6 @@ object PetActions {
     private const val STORE_IMP_ICON = "templates/mu/ui/store/store_imp_icon.png"
     private const val STORE_ANGEL_ITEM = "templates/mu/ui/store/store_angel_item.png"
     private const val STORE_ANGEL_ICON = "templates/mu/ui/store/store_angel_icon.png"
-    private const val PURCHASE_BUTTON = "templates/mu/ui/store/store_purchase_button.png"
 
     private const val INVENTORY_BUTTON_THRESHOLD = 0.80f
     private const val PANEL_THRESHOLD = 0.75f
@@ -70,7 +69,6 @@ object PetActions {
     private const val HUD_STORE_THRESHOLD = 0.75f
     private const val STORE_OPEN_THRESHOLD = 0.75f
     private const val STORE_ITEM_THRESHOLD = 0.80f
-    private const val PURCHASE_THRESHOLD = 0.80f
     /** Title band sits above the tile centre; tap the icon area instead. */
     private const val STORE_TITLE_TAP_OFFSET_RATIO = 0.10f
 
@@ -97,7 +95,6 @@ object PetActions {
     /** Extra settle after Store buy before reopening Gear / searching bag. */
     private const val POST_BUY_EQUIP_SETTLE_MS = 1_200L
     private const val STORE_OPEN_TIMEOUT_MS = 8_000L
-    private const val PURCHASE_TIMEOUT_MS = 5_000L
     private const val POST_EXPAND_MS = 800L
     private const val POST_ITEM_TAP_MS = 700L
     private const val POST_PURCHASE_MS = 2_000L
@@ -140,15 +137,16 @@ object PetActions {
     }
 
     /**
-     * When [BotProfile.enablePet] is true: open Gear, validate slot, equip from
+     * When effective pet is enabled: open Gear, validate slot, equip from
      * inventory if needed (else buy from Store then equip), then close panels.
      */
     suspend fun validateIfEnabled(profile: BotProfile): CheckResult {
-        if (!profile.enablePet) {
+        val pet = profile.effectivePetConfig()
+        if (!pet.enablePet) {
             return CheckResult.SKIPPED
         }
         return DisconnectDetector.withUiAction("pet-validate") {
-            val want = profile.petType
+            val want = pet.petType
             Log.d(TAG, "[PET] validate start want=${want.toStorage()}")
 
             if (!openGearPanel()) {
@@ -260,7 +258,7 @@ object PetActions {
         delay(BotTiming.ms(POST_ITEM_TAP_MS, BotTimingCategory.POST_TAP))
 
         if (!tapPurchaseButton()) {
-            Log.w(TAG, "[PET_BUY] Purchase button not found")
+            Log.w(TAG, "[PET_BUY] Purchase static tap failed")
             closeStoreIfOpen()
             return false
         }
@@ -466,36 +464,10 @@ object PetActions {
         }
 
     private suspend fun tapPurchaseButton(): Boolean {
-        val deadline = System.currentTimeMillis() + BotTiming.ms(
-            PURCHASE_TIMEOUT_MS,
-            BotTimingCategory.SCREEN_LOAD,
-        )
-        while (System.currentTimeMillis() < deadline) {
-            val frame = NavigationVision.captureFrame() ?: run {
-                delay(POLL_MS)
-                continue
-            }
-            try {
-                val hit = NavigationVision.findOnFrame(
-                    frame,
-                    PURCHASE_BUTTON,
-                    PURCHASE_THRESHOLD,
-                )
-                if (hit != null) {
-                    Log.d(
-                        TAG,
-                        "[PET_BUY] Purchase score=${"%.3f".format(hit.score)} " +
-                            "at=(${hit.centerX},${hit.centerY})",
-                    )
-                    return NavigationVision.tapMatch(hit)
-                }
-            } finally {
-                frame.recycle()
-            }
-            delay(POLL_MS)
-        }
-        NavigationVision.logBestScore(PURCHASE_BUTTON)
-        return false
+        val refX = MuCombatRois.STORE_PURCHASE_TAP_REF_X
+        val refY = MuCombatRois.STORE_PURCHASE_TAP_REF_Y
+        Log.d(TAG, "[PET_BUY] Purchase STATIC tap ref=($refX,$refY)")
+        return NavigationVision.tap(refX, refY, label = "store_purchase")
     }
 
     private suspend fun closeStoreIfOpen(): Boolean {

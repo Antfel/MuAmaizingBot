@@ -2,6 +2,8 @@ package com.example.muamaizingbot.bot.maintenance
 
 import android.graphics.Rect
 import android.util.Log
+import com.example.muamaizingbot.bot.BotController
+import com.example.muamaizingbot.bot.BotRuntimeState
 import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
 import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
 import com.example.muamaizingbot.maps.MapDefinitionRepository
@@ -413,6 +415,10 @@ object ElfBuffTargetingActions {
         }
         val roi = barRoi()
         for (attempt in 1..maxAttempts) {
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                Log.d(TAG, "[ELF_GIVER] focus spam aborted — bot not running at attempt=$attempt")
+                return ElfBuffFocusHud.isRedHpBarVisible()
+            }
             val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_TEMPLATE_THRESHOLD, roi)
             if (match == null) {
                 Log.w(TAG, "[ELF_GIVER] focus_player miss attempt=$attempt/$maxAttempts")

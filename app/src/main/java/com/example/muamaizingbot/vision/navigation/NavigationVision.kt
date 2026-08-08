@@ -361,20 +361,6 @@ object NavigationVision {
         return ok
     }
 
-    /** Enter button strip under a wire-list ROI anchored to the Switch Channel title. */
-    fun wirePopupEnterRoiFromList(listRoi: Rect): Rect {
-        val (screenW, screenH) = ScreenCaptureManager.peekLatestBitmapSize()
-            ?: RefCoords.activeScreenSize()
-        val top = minOf(screenH - 8, listRoi.bottom)
-        val bottom = minOf(screenH, top + RefCoords.scaleY(180, screenH))
-        return Rect(
-            maxOf(0, listRoi.left - RefCoords.scaleX(40, screenW)),
-            top,
-            minOf(screenW, listRoi.right + RefCoords.scaleX(40, screenW)),
-            bottom,
-        )
-    }
-
     fun wireRowRegion(match: PcTemplateMatchResult): Rect {
         val (w, h) = ScreenCaptureManager.peekLatestBitmapSize() ?: RefCoords.activeScreenSize()
         return wireRowRegion(match, w, h)

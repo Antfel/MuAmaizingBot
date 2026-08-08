@@ -3,8 +3,9 @@ package com.example.muamaizingbot.bot.navigation
 /**
  * Short-lived, in-process memory of the last positively observed map.
  *
- * This may suppress map-window OCR when the current HUD read is garbage. It must
- * never be used as proof of farm-spot coordinates or survive a map-changing event.
+ * Callers may skip HUD map-name OCR while [isTrusted] for the expected map
+ * (see NavigationWaitActions MAP_HUD_OCR_TRUST_SKIP_MS). It must never be used
+ * as proof of farm-spot coordinates or survive a map-changing event.
  */
 object TrustedCurrentMapMemory {
 

@@ -13,6 +13,7 @@ import com.example.muamaizingbot.settings.BotTiming
 import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
+import com.example.muamaizingbot.vision.roi.MuWireRois
 import com.example.muamaizingbot.vision.roi.ScaledRoi
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
 import com.example.muamaizingbot.vision.template.TemplateRepository
@@ -39,15 +40,10 @@ object WireSwitchActions {
     private const val WIRE_HUD_THRESHOLD = 0.82f
     /** Contenders within this of the best HUD score trigger OCR desempate. */
     private const val WIRE_HUD_TIE_MARGIN = 0.05f
-    private const val WIRE_ENTER_THRESHOLD = 0.52f
     private const val CHAT_THRESHOLD = 0.70f
-    /** PC bot tap on Switch Line @ 2560×1440 (log: tap 1279 1102). */
-    private const val WIRE_ENTER_REF_X = 1279
-    private const val WIRE_ENTER_REF_Y = 1102
     /** Same cadence as map-list scroll ([MapEntryActions] / [NavigationVision]). */
     private const val SCROLL_WAIT_MS = 1000L
     private const val POPUP_OPEN_WAIT_MS = 1500L
-    private const val WIRE_ENTER_WAIT_MS = 4000L
     private const val HUD_WAIT_MS = 12_000L
     /** Longer drag than a flick; short travel keeps it map-list soft. */
     private const val SWIPE_DURATION_MS = 550L
@@ -129,7 +125,27 @@ object WireSwitchActions {
             return false
         }
 
-        if (!confirmWireSwitch(config, layout)) {
+        val selectedPath = config.templates.selected
+        if (selectedPath.isNotBlank() && TemplateRepository.getByPath(selectedPath) != null) {
+            val selectedRoi = selectedRowRoi()
+            val selected = NavigationVision.waitForTemplate(
+                assetPath = selectedPath,
+                threshold = WIRE_THRESHOLD,
+                timeoutMs = BotTiming.ms(1_500L, BotTimingCategory.SCREEN_LOAD),
+                pollMs = 100L,
+                roi = selectedRoi,
+            )
+            if (selected != null) {
+                Log.d(
+                    TAG,
+                    "[WIRE] selected row confirmed score=${selected.score} roi=$selectedRoi",
+                )
+            } else {
+                Log.d(TAG, "[WIRE] selected row template miss — continuing to enter")
+            }
+        }
+
+        if (!confirmWireSwitch(config)) {
             dismissWirePopup(config)
             return false
         }
@@ -177,7 +193,7 @@ object WireSwitchActions {
     ): Int? {
         val probes = config.availableWires.mapNotNull { id ->
             val path = hudTemplate(config, id) ?: return@mapNotNull null
-            WireProbe(id, NavigationVision.probeOnFrame(frame, path))
+            WireProbe(id, NavigationVision.probeOnFrame(frame, path, wireHudRoi(frame)))
         }
         if (probes.isEmpty()) {
             return null
@@ -259,9 +275,14 @@ object WireSwitchActions {
 
             closeChatIfOpen()
 
-            val alreadyOpen = NavigationVision.findTemplate(templates.popupOpen, WIRE_THRESHOLD)
+            val popupRoi = popupTitleRoi()
+            val alreadyOpen = NavigationVision.findTemplate(
+                templates.popupOpen,
+                WIRE_THRESHOLD,
+                popupRoi,
+            )
             if (alreadyOpen != null) {
-                Log.d(TAG, "[WIRE] popup already open score=${alreadyOpen.score}")
+                Log.d(TAG, "[WIRE] popup already open score=${alreadyOpen.score} roi=$popupRoi")
                 return layoutFromTitle(alreadyOpen, config.popupScroll)
             }
 
@@ -309,15 +330,21 @@ object WireSwitchActions {
                 continue
             }
 
-            val popup = NavigationVision.findTemplate(templates.popupOpen, WIRE_THRESHOLD)
+            val popup = NavigationVision.findTemplate(
+                templates.popupOpen,
+                WIRE_THRESHOLD,
+                popupRoi,
+            )
             if (popup != null) {
                 Log.d(
                     TAG,
-                    "[WIRE] popup open score=${popup.score} at=(${popup.centerX},${popup.centerY})",
+                    "[WIRE] popup open score=${popup.score} at=(${popup.centerX},${popup.centerY}) " +
+                        "roi=$popupRoi",
                 )
                 return layoutFromTitle(popup, config.popupScroll)
             }
             Log.w(TAG, "[WIRE] popup not visible attempt=$attempt")
+            NavigationVision.logBestScore(templates.popupOpen, popupRoi)
         }
 
         Log.w(TAG, "[WIRE] popup did not open")
@@ -336,13 +363,15 @@ object WireSwitchActions {
                 return null
             }
             closeChatIfOpen()
+            val hudRoi = wireHudRoi()
             for (path in paths) {
-                val match = NavigationVision.findTemplate(path, WIRE_HUD_THRESHOLD) ?: continue
+                val match = NavigationVision.findTemplate(path, WIRE_HUD_THRESHOLD, hudRoi)
+                    ?: continue
                 return match
             }
             delay(350L)
         }
-        paths.firstOrNull()?.let { NavigationVision.logBestScore(it) }
+        paths.firstOrNull()?.let { NavigationVision.logBestScore(it, wireHudRoi()) }
         return null
     }
 
@@ -409,19 +438,9 @@ object WireSwitchActions {
         val (screenW, screenH) = ScreenCaptureManager.peekLatestBitmapSize()
             ?: RefCoords.activeScreenSize()
 
-        val gap = RefCoords.scaleY(24, screenH)
-        val listTop = min(screenH - 8, title.bestY + title.templateHeight + gap)
-        // Must include 3 channel rows (~y256/360/464 @720p). Prior height capped at ~458 and
-        // clipped wire 6 so OCR never saw it. Leave a strip for the Switch Line button.
-        val listBottom = min(
-            screenH - RefCoords.scaleY(160, screenH),
-            listTop + RefCoords.scaleY(900, screenH),
-        )
-        val halfW = RefCoords.scaleX(480, screenW)
-        val cx = title.centerX.coerceIn(halfW, screenW - halfW)
-        val left = max(0, cx - halfW)
-        val right = min(screenW, cx + halfW)
-        val listRoi = Rect(left, listTop, right, max(listTop + 8, listBottom))
+        // Static orange list band (ANN_2) — rows only, not Switch Line / title chrome.
+        val listRoi = MuWireRois.listOcrRoi(screenW, screenH)
+        val cx = title.centerX.coerceIn(listRoi.left + 8, listRoi.right - 8)
 
         val swipePad = RefCoords.scaleY(28, screenH)
         val travel = RefCoords.scaleY(SWIPE_TRAVEL_REF_Y, screenH)
@@ -434,7 +453,7 @@ object WireSwitchActions {
         Log.d(
             TAG,
             "[WIRE] layout title=(${title.centerX},${title.centerY}) " +
-                "roi=[$left,$listTop-$right,$listBottom] " +
+                "listRoi=[${listRoi.left},${listRoi.top}-${listRoi.right},${listRoi.bottom}] " +
                 "swipe (${forward.x1},${forward.y1})->(${forward.x2},${forward.y2}) " +
                 "dur=${forward.durationMs}ms travel=${forward.y1 - forward.y2} " +
                 "fallbackRef=(${fallbackScroll.x1},${fallbackScroll.y1})",
@@ -551,64 +570,27 @@ object WireSwitchActions {
         layout: PopupLayout,
         config: WireSwitchConfig,
     ): PopupLayout? {
-        val title = NavigationVision.findTemplate(config.templates.popupOpen, WIRE_THRESHOLD)
-            ?: return null
+        val title = NavigationVision.findTemplate(
+            config.templates.popupOpen,
+            WIRE_THRESHOLD,
+            popupTitleRoi(),
+        ) ?: return null
         return layoutFromTitle(title, config.popupScroll)
     }
 
-    private suspend fun confirmWireSwitch(
-        config: WireSwitchConfig,
-        layout: PopupLayout,
-    ): Boolean {
-        val enterPath = config.templates.enterButton
-        val enterRoi = NavigationVision.wirePopupEnterRoiFromList(layout.listRoi)
-        val selectAtMs = System.currentTimeMillis()
-
-        // Switch Line is usually already visible — tap as soon as we see it (no settle pad).
-        var enter = NavigationVision.findTemplate(enterPath, WIRE_ENTER_THRESHOLD, enterRoi)
-            ?: NavigationVision.findTemplate(enterPath, WIRE_ENTER_THRESHOLD)
-        if (enter == null) {
-            enter = NavigationVision.waitForTemplate(
-                assetPath = enterPath,
-                threshold = WIRE_ENTER_THRESHOLD,
-                timeoutMs = BotTiming.ms(WIRE_ENTER_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
-                pollMs = 100L,
-                roi = enterRoi,
-            )
-        }
-        if (enter == null) {
-            enter = NavigationVision.waitForTemplate(
-                assetPath = enterPath,
-                threshold = WIRE_ENTER_THRESHOLD,
-                timeoutMs = BotTiming.ms(1500L, BotTimingCategory.SCREEN_LOAD),
-                pollMs = 100L,
-            )
-        }
-
+    private suspend fun confirmWireSwitch(config: WireSwitchConfig): Boolean {
         val switchWaitMs = BotTiming.ms(
             config.switchWaitSeconds * 1000L,
             BotTimingCategory.FIXED_SETTLE,
         )
-        if (enter != null) {
-            val sinceSelect = System.currentTimeMillis() - selectAtMs
-            Log.d(
-                TAG,
-                "[WIRE] confirming switch IMMEDIATE score=${enter.score} " +
-                    "at=(${enter.centerX},${enter.centerY}) sinceSelect=${sinceSelect}ms " +
-                    "postWait=${switchWaitMs}ms",
-            )
-            NavigationVision.tapMatch(enter)
-            delay(switchWaitMs)
-            return true
-        }
-
-        NavigationVision.logBestScore(enterPath, enterRoi)
-        Log.w(
+        val refX = MuWireRois.ENTER_TAP_REF_X
+        val refY = MuWireRois.ENTER_TAP_REF_Y
+        Log.d(
             TAG,
-            "[WIRE] enter button not found — fallback IMMEDIATE ref tap " +
-                "($WIRE_ENTER_REF_X,$WIRE_ENTER_REF_Y)",
+            "[WIRE] confirming switch STATIC Switch Line tap ref=($refX,$refY) " +
+                "postWait=${switchWaitMs}ms",
         )
-        if (!NavigationVision.tap(WIRE_ENTER_REF_X, WIRE_ENTER_REF_Y)) {
+        if (!NavigationVision.tap(refX, refY, label = "wire_switch_line")) {
             return false
         }
         delay(switchWaitMs)
@@ -616,24 +598,55 @@ object WireSwitchActions {
     }
 
     private suspend fun dismissWirePopup(config: WireSwitchConfig) {
-        if (NavigationVision.findTemplate(config.templates.popupOpen, WIRE_THRESHOLD) == null) {
+        val popupRoi = popupTitleRoi()
+        if (NavigationVision.findTemplate(config.templates.popupOpen, WIRE_THRESHOLD, popupRoi) == null) {
             return
         }
         Log.d(TAG, "[WIRE] dismissing open popup after failure")
-        NavigationVision.findTemplate(config.templates.switchButton, WIRE_THRESHOLD)?.let {
+        val hudRoi = wireHudRoi()
+        NavigationVision.findTemplate(config.templates.switchButton, WIRE_THRESHOLD, hudRoi)?.let {
             NavigationVision.tapMatch(it)
             delay(800L)
         }
-        if (NavigationVision.findTemplate(config.templates.popupOpen, WIRE_THRESHOLD) != null) {
+        if (NavigationVision.findTemplate(config.templates.popupOpen, WIRE_THRESHOLD, popupRoi) != null) {
+            val closeRoi = popupCloseXRoi()
             NavigationVision.findTemplate(
                 MapWindowActions.CLOSE_X,
                 NavigationTemplateThresholds.closeX(),
+                closeRoi,
             )?.let { close ->
                 NavigationVision.tapMatch(close)
                 delay(600L)
             }
         }
         closeChatIfOpen()
+    }
+
+    private fun wireHudRoi(frame: android.graphics.Bitmap? = null): Rect {
+        if (frame != null) {
+            return MuWireRois.wireHudRoi(frame)
+        }
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        return MuWireRois.wireHudRoi(w, h)
+    }
+
+    private fun popupTitleRoi(): Rect {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        return MuWireRois.popupTitleRoi(w, h)
+    }
+
+    private fun popupCloseXRoi(): Rect {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        return MuWireRois.popupCloseXRoi(w, h)
+    }
+
+    private fun selectedRowRoi(): Rect {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        return MuWireRois.selectedRowRoi(w, h)
     }
 
     private fun hudTemplate(config: WireSwitchConfig, wireId: Int): String? {

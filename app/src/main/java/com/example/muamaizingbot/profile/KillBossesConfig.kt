@@ -6,6 +6,7 @@ import org.json.JSONObject
 /**
  * Farm Bosses config: ordered list of map ids to hunt.
  * No manual spots/coords — bosses are found via map templates.
+ * Pet settings are mode-local (not shared with Farm general_config).
  */
 data class KillBossesConfig(
     val includeGoldenMobs: Boolean = false,
@@ -13,6 +14,8 @@ data class KillBossesConfig(
     val holdSec: Int = DEFAULT_HOLD_SEC,
     /** Ordered map definition ids (e.g. plain_of_four_winds_2). */
     val maps: List<String> = emptyList(),
+    /** Companion pet for farm_bosses mode only. */
+    val pet: PetConfig = PetConfig(),
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -27,6 +30,7 @@ data class KillBossesConfig(
             )
             // Legacy key (spots-based MVP) — keep empty for old readers.
             put("spots", JSONArray())
+            pet.writeTo(this)
         }
     }
 
@@ -35,8 +39,13 @@ data class KillBossesConfig(
         const val MIN_HOLD_SEC = 15
         const val MAX_HOLD_SEC = 600
 
-        fun fromJson(json: JSONObject?): KillBossesConfig {
-            if (json == null) return KillBossesConfig()
+        fun fromJson(
+            json: JSONObject?,
+            fallbackPet: PetConfig = PetConfig(),
+        ): KillBossesConfig {
+            if (json == null) {
+                return KillBossesConfig(pet = fallbackPet)
+            }
             val mapsArr = json.optJSONArray("maps")
             val maps = buildList {
                 if (mapsArr != null) {
@@ -67,6 +76,7 @@ data class KillBossesConfig(
                 holdSec = json.optInt("hold_sec", DEFAULT_HOLD_SEC)
                     .coerceIn(MIN_HOLD_SEC, MAX_HOLD_SEC),
                 maps = migrated,
+                pet = PetConfig.fromJson(json, fallbackPet),
             )
         }
     }

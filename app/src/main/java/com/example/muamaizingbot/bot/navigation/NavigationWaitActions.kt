@@ -24,6 +24,12 @@ object NavigationWaitActions {
     /** Near spot tolerance when HUD OCR failed but farm coords still align (map check only). */
     private const val MAP_CHECK_NEAR_SPOT_TOLERANCE = 25
     private const val OPEN_MAP_OCR_SETTLE_MS = 500L
+    /**
+     * While [TrustedCurrentMapMemory] confirms the expected map within this age,
+     * skip HUD map-name OCR (coords still validated every tick). Renews when a
+     * fresh OCR match calls [rememberMap]. Invalidated on nav/death/stop/teleport.
+     */
+    private const val MAP_HUD_OCR_TRUST_SKIP_MS = 15_000L
     private const val AUTO_NAV_TEMPLATE = "templates/mu/ui/common/auto_navigating.png"
     private const val AUTO_NAV_THRESHOLD = 0.70f
     private const val AUTO_NAV_TIMEOUT_MS = 180_000L
@@ -169,6 +175,14 @@ object NavigationWaitActions {
      */
     @Suppress("UNUSED_PARAMETER")
     suspend fun isCurrentMap(mapDef: MapDefinition, threshold: Float? = null): Boolean {
+        if (TrustedCurrentMapMemory.isTrusted(mapDef.id, maxAgeMs = MAP_HUD_OCR_TRUST_SKIP_MS)) {
+            Log.d(
+                TAG,
+                "[MAP_MEMORY] skip hud OCR expected=${mapDef.id} " +
+                    "maxAgeMs=$MAP_HUD_OCR_TRUST_SKIP_MS",
+            )
+            return true
+        }
         val frame = NavigationVision.captureFrame() ?: return false
         val hud = try {
             CurrentMapOcr.read(frame, mapDef)
@@ -211,6 +225,14 @@ object NavigationWaitActions {
         mapDef: MapDefinition,
         farmSpot: FarmLocation?,
     ): MapPresence {
+        if (TrustedCurrentMapMemory.isTrusted(mapDef.id, maxAgeMs = MAP_HUD_OCR_TRUST_SKIP_MS)) {
+            Log.d(
+                TAG,
+                "[MAP_MEMORY] skip hud OCR expected=${mapDef.id} " +
+                    "maxAgeMs=$MAP_HUD_OCR_TRUST_SKIP_MS",
+            )
+            return MapPresence.TRUSTED_MEMORY
+        }
         val frame = NavigationVision.captureFrame() ?: return MapPresence.NONE
         val ocr = try {
             CurrentMapOcr.read(frame, mapDef)

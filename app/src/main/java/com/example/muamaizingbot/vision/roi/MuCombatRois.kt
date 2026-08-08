@@ -287,4 +287,19 @@ object MuCombatRois {
     }
 
     fun storeCloseXRoi(frame: Bitmap): Rect = storeCloseXRoi(frame.width, frame.height)
+
+    /**
+     * Random Teleport Seal tile tap in MU Coin Store (icon under title).
+     * Authored from 5584 seal buy: title~(625,208) effective tapY=280 → (625,280).
+     * REF 2560×1440.
+     */
+    const val STORE_SEAL_ITEM_TAP_REF_X = 1250
+    const val STORE_SEAL_ITEM_TAP_REF_Y = 560
+
+    /**
+     * Store "Purchase" button center — fixed while item confirm chrome is open.
+     * Authored from 5584: score 1.0 at~(862,329). REF 2560×1440.
+     */
+    const val STORE_PURCHASE_TAP_REF_X = 1724
+    const val STORE_PURCHASE_TAP_REF_Y = 658
 }

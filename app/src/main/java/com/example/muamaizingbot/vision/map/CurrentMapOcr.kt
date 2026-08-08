@@ -36,13 +36,14 @@ object CurrentMapOcr {
     private const val NATIVE_H = 720
 
     /**
-     * Top-right map-name band, left of the wire Switch chip.
-     * Still expressed in legacy REF 2560×1440 via [ScaledRoi] until HUD ROI is migrated.
+     * Top-right map-name band (purple horizontal span on ANN_1_hud), name line only.
+     * Native @1280×720: (1068,2)–(1230,30). Excludes `[Wire N]` under the name.
+     * Still expressed in legacy REF 2560×1440 via [ScaledRoi].
      */
-    private const val ROI_REF_LEFT = 2080
-    private const val ROI_REF_TOP = 0
-    private const val ROI_REF_RIGHT = 2470
-    private const val ROI_REF_BOTTOM = 72
+    private const val ROI_REF_LEFT = 2136
+    private const val ROI_REF_TOP = 4
+    private const val ROI_REF_RIGHT = 2460
+    private const val ROI_REF_BOTTOM = 60
 
     /**
      * Open-map title band @ 1280×720: (400,90)–(750,120).

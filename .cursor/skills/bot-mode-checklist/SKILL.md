@@ -26,6 +26,7 @@ Modes (`BotMode` / `bot_mode`):
 - [ ] `MapCheckActions.isInConfiguredMap()` already mode-aware — do not reuse its `true` plus **farm spot coords** for bosses/war.
 - [ ] Logs include `mode=` or branch that makes the destination obvious (`boss checkpoint` vs `go_to_active_farm_spot`).
 - [ ] War skips map validation; do not force farm OCR/spot checks there.
+- [ ] `farm_bosses` **FIGHT**: inventory + pet deferred to post-kill / post-revive / startup general checks. Potions + elf buff are owned by CombatFocus spam interrupt (pause spam → action → resume; after elf, return to stored boss target).
 
 ## Code hotspots
 

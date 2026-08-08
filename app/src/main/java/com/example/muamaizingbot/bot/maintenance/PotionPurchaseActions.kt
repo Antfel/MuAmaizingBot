@@ -10,6 +10,7 @@ import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isHpPotionEm
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isManaPotionEmpty
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
+import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
@@ -241,6 +242,8 @@ object PotionPurchaseActions {
                 return false
             }
         Log.d(TAG, "[POTION] accepting teleport to shop")
+        TrustedCurrentMapMemory.invalidate()
+        Log.d(TAG, "[MAP_MEMORY] invalidate reason=potion_teleport")
         NavigationVision.tapMatch(teleport)
         delay(BotTiming.ms(TELEPORT_ACCEPT_WAIT_MS, BotTimingCategory.FIXED_SETTLE))
         return true

@@ -122,8 +122,14 @@ object BotPriorityLoop {
             // Still allow mode branch / farming; do not treat as missing buff/potion.
         }
 
-        // Potions + inventory: any time (farm, open-world elf, and Farm Bosses mid-hunt).
-        if (hudClear && profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
+        // Mid-FIGHT (farm_bosses): potions + elf are owned by CombatFocusActions spam
+        // interrupt; inventory + pet stay deferred to post-kill / post-revive / startup.
+        val skipMaintDuringBossFight =
+            profile.isFarmBossesMode() && BossHuntState.phase == BossHuntPhase.FIGHT
+
+        if (hudClear && !skipMaintDuringBossFight &&
+            profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()
+        ) {
             Log.d(TAG, "[LOOP] branch=empty_potions")
             BotDiagnosticJournal.record(TAG, "branch=empty_potions")
             consecutiveFarmSoftFails = 0
@@ -137,7 +143,7 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
-        if (hudClear && InventoryCheckActions.isInventoryFull()) {
+        if (hudClear && !skipMaintDuringBossFight && InventoryCheckActions.isInventoryFull()) {
             Log.d(TAG, "[LOOP] branch=inventory_full")
             BotDiagnosticJournal.record(TAG, "branch=inventory_full")
             consecutiveFarmSoftFails = 0
@@ -152,30 +158,29 @@ object BotPriorityLoop {
 
         // Pet: farm / giver / war keep interval checks. Farm Bosses skip while FIGHT
         // (prep runs in post-kill / post-revive general checks instead).
-        val skipPetDuringBossFight =
-            profile.isFarmBossesMode() && BossHuntState.phase == BossHuntPhase.FIGHT
-        if (hudClear && !skipPetDuringBossFight && PetCheckGate.shouldCheck(profile)) {
+        if (hudClear && !skipMaintDuringBossFight && PetCheckGate.shouldCheck(profile)) {
+            val petCfg = profile.effectivePetConfig()
             Log.d(
                 TAG,
-                "[LOOP] branch=pet_validate intervalMin=${profile.petCheckIntervalMinutes} " +
-                    "want=${profile.petType.toStorage()}",
+                "[LOOP] branch=pet_validate intervalMin=${petCfg.petCheckIntervalMinutes} " +
+                    "want=${petCfg.petType.toStorage()}",
             )
             BotDiagnosticJournal.record(TAG, "branch=pet_validate")
             consecutiveFarmSoftFails = 0
             val pet = PetActions.validateIfEnabled(profile)
             PetCheckGate.noteCheckDone()
-            Log.d(TAG, "[LOOP] pet_validate result=$pet want=${profile.petType.toStorage()}")
+            Log.d(TAG, "[LOOP] pet_validate result=$pet want=${petCfg.petType.toStorage()}")
             if (profile.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
                 return navigateToBossCheckpoint("post-pet")
             }
             return IterationResult.OK
         }
-        if (skipPetDuringBossFight && PetCheckGate.shouldCheck(profile)) {
+        if (skipMaintDuringBossFight && PetCheckGate.shouldCheck(profile)) {
             Log.d(TAG, "[LOOP] skip pet_validate during boss FIGHT (prep after kill/death)")
         }
 
-        // Elf buff: any time (farm + Farm Bosses mid-hunt). Giver / War never seek.
-        if (hudClear && ElfBuffSeekGate.shouldAttemptSeek(profile)) {
+        // Elf buff: farm + Farm Bosses outside FIGHT. Mid-FIGHT → CombatFocus spam interrupt.
+        if (hudClear && !skipMaintDuringBossFight && ElfBuffSeekGate.shouldAttemptSeek(profile)) {
             if (!ElfBuffCheckActions.hasElfBuff()) {
                 // Death screen can hide the buff icon; prefer revive over seeking.
                 if (DeathActions.isDead()) {
@@ -309,34 +314,35 @@ object BotPriorityLoop {
             }
         }
 
-        if (profile.enablePet) {
+        val startupPet = profile.effectivePetConfig()
+        if (startupPet.enablePet) {
             when (val pet = PetActions.validateIfEnabled(profile)) {
                 PetActions.CheckResult.MATCH ->
-                    Log.d(TAG, "[STARTUP] pet ok type=${profile.petType.toStorage()}")
+                    Log.d(TAG, "[STARTUP] pet ok type=${startupPet.petType.toStorage()}")
                 PetActions.CheckResult.EQUIPPED ->
                     Log.d(
                         TAG,
-                        "[STARTUP] pet equipped from inventory type=${profile.petType.toStorage()}",
+                        "[STARTUP] pet equipped from inventory type=${startupPet.petType.toStorage()}",
                     )
                 PetActions.CheckResult.PURCHASED ->
                     Log.d(
                         TAG,
-                        "[STARTUP] pet purchased+equipped type=${profile.petType.toStorage()}",
+                        "[STARTUP] pet purchased+equipped type=${startupPet.petType.toStorage()}",
                     )
                 PetActions.CheckResult.NEED_PURCHASE ->
                     Log.w(
                         TAG,
-                        "[STARTUP] pet need_purchase want=${profile.petType.toStorage()}",
+                        "[STARTUP] pet need_purchase want=${startupPet.petType.toStorage()}",
                     )
                 PetActions.CheckResult.BUY_FAILED ->
                     Log.w(
                         TAG,
-                        "[STARTUP] pet buy_failed want=${profile.petType.toStorage()}",
+                        "[STARTUP] pet buy_failed want=${startupPet.petType.toStorage()}",
                     )
                 PetActions.CheckResult.EQUIP_FAILED ->
                     Log.w(
                         TAG,
-                        "[STARTUP] pet equip_failed want=${profile.petType.toStorage()}",
+                        "[STARTUP] pet equip_failed want=${startupPet.petType.toStorage()}",
                     )
                 PetActions.CheckResult.OPEN_FAILED,
                 PetActions.CheckResult.READ_FAILED,
@@ -546,8 +552,8 @@ object BotPriorityLoop {
     /**
      * Shared general maintenance for Farm Bosses: potions, inventory, pet (interval), then elf buff.
      * Used at startup, post-revive, and post-kill (preparation before the next hunt).
-     * Potions / inventory / elf also run every loop tick before the farm-bosses branch;
-     * pet is **not** probed mid-FIGHT — only via [PetCheckGate] outside FIGHT / in this window.
+     * Mid-FIGHT: CombatFocus spam owns potions + elf (interrupt → action → resume spam).
+     * Inventory + pet are **not** probed mid-FIGHT — only outside FIGHT / in this window.
      * Return to checkpoint is the caller's job.
      */
     private suspend fun runFarmBossesGeneralChecks(
@@ -586,27 +592,28 @@ object BotPriorityLoop {
             }
         }
 
-        // Pet: respect petCheckIntervalMinutes. Mid-FIGHT is skipped in the main loop;
+        // Pet: respect effective interval. Mid-FIGHT is skipped in the main loop;
         // this is the prep window after kill/death/startup — still gated by interval.
+        val bossPet = profile.effectivePetConfig()
         if (PetCheckGate.shouldCheck(profile)) {
             Log.d(
                 TAG,
                 "[LOOP] farm_bosses pet_validate reason=$reason " +
-                    "intervalMin=${profile.petCheckIntervalMinutes} " +
-                    "want=${profile.petType.toStorage()}",
+                    "intervalMin=${bossPet.petCheckIntervalMinutes} " +
+                    "want=${bossPet.petType.toStorage()}",
             )
             val pet = PetActions.validateIfEnabled(profile)
             PetCheckGate.noteCheckDone()
             Log.d(
                 TAG,
                 "[LOOP] farm_bosses pet_validate result=$pet reason=$reason " +
-                    "want=${profile.petType.toStorage()}",
+                    "want=${bossPet.petType.toStorage()}",
             )
-        } else if (profile.enablePet) {
+        } else if (bossPet.enablePet) {
             Log.d(
                 TAG,
                 "[LOOP] farm_bosses skip pet_validate reason=$reason " +
-                    "intervalMin=${profile.petCheckIntervalMinutes} (not due)",
+                    "intervalMin=${bossPet.petCheckIntervalMinutes} (not due)",
             )
         }
 

@@ -35,16 +35,9 @@ object RandomSealActions {
     const val MAP_RANDOM_BUTTON_EMPTY = "templates/mu/ui/common/map_random_button_empty.png"
     private const val STORE_TAB = "templates/mu/ui/store/store_open_tab.png"
     private const val STORE_TITLE = "templates/mu/ui/store/store_title.png"
-    private const val SEAL_ITEM = "templates/mu/ui/store/random_teleport_seal_item.png"
-    private const val SEAL_ICON = "templates/mu/ui/store/random_teleport_seal_icon.png"
-    private const val PURCHASE_BUTTON = "templates/mu/ui/store/store_purchase_button.png"
 
     private const val RANDOM_THRESHOLD = 0.82f
     private const val STORE_OPEN_THRESHOLD = 0.75f
-    private const val SEAL_ITEM_THRESHOLD = 0.80f
-    private const val PURCHASE_THRESHOLD = 0.80f
-    /** Seal title band sits above the tile centre; tap the icon area instead. */
-    private const val SEAL_TITLE_TAP_OFFSET_RATIO = 0.10f
     /** Same idea as [BossMapHuntActions] alive-over-dead; device deltas are tiny. */
     private const val ACTIVE_OVER_EMPTY_MARGIN = 0.0f
 
@@ -59,7 +52,6 @@ object RandomSealActions {
     private const val POST_RANDOM_MS = 1_400L
 
     private const val STORE_OPEN_TIMEOUT_MS = 8_000L
-    private const val PURCHASE_TIMEOUT_MS = 5_000L
     private const val POST_EMPTY_TAP_MS = 800L
     private const val POST_ITEM_TAP_MS = 700L
     /** "Obtain Item" animation swallows taps right after Purchase. */
@@ -213,7 +205,7 @@ object RandomSealActions {
         Log.d(TAG, "[SEAL_BUY] balance ok — tap Random Teleport Seal")
 
         if (!tapSealItem()) {
-            Log.w(TAG, "[SEAL_BUY] seal item not found")
+            Log.w(TAG, "[SEAL_BUY] seal item static tap failed")
             closeShop()
             ensureMapOpenAfterShop()
             return false
@@ -221,7 +213,7 @@ object RandomSealActions {
         delay(BotTiming.ms(POST_ITEM_TAP_MS, BotTimingCategory.POST_TAP))
 
         if (!tapPurchaseButton()) {
-            Log.w(TAG, "[SEAL_BUY] Purchase button not found")
+            Log.w(TAG, "[SEAL_BUY] Purchase static tap failed")
             closeShop()
             ensureMapOpenAfterShop()
             return false
@@ -304,70 +296,17 @@ object RandomSealActions {
     }
 
     private suspend fun tapSealItem(): Boolean {
-        val frame = NavigationVision.captureFrame() ?: return false
-        val roi = storeItemRoi(frame)
-        val frameHeight = frame.height
-        val found = try {
-            val title = NavigationVision.findOnFrame(frame, SEAL_ITEM, SEAL_ITEM_THRESHOLD, roi)
-            if (title != null) {
-                title to true
-            } else {
-                NavigationVision.findOnFrame(frame, SEAL_ICON, SEAL_ITEM_THRESHOLD, roi)
-                    ?.let { it to false }
-            }
-        } finally {
-            frame.recycle()
-        }
-        if (found == null) {
-            NavigationVision.logBestScore(SEAL_ITEM, roi)
-            NavigationVision.logBestScore(SEAL_ICON, roi)
-            return false
-        }
-        val (item, byTitle) = found
-        val tapY = if (byTitle) {
-            item.centerY + (frameHeight * SEAL_TITLE_TAP_OFFSET_RATIO).toInt()
-        } else {
-            item.centerY
-        }
-        Log.d(
-            TAG,
-            "[SEAL_BUY] seal item score=${"%.3f".format(item.score)} " +
-                "at=(${item.centerX},${item.centerY}) tapY=$tapY byTitle=$byTitle",
-        )
-        return NavigationVision.tapScreen(item.centerX, tapY)
+        val refX = MuCombatRois.STORE_SEAL_ITEM_TAP_REF_X
+        val refY = MuCombatRois.STORE_SEAL_ITEM_TAP_REF_Y
+        Log.d(TAG, "[SEAL_BUY] seal item STATIC tap ref=($refX,$refY)")
+        return NavigationVision.tap(refX, refY, label = "store_seal_item")
     }
 
     private suspend fun tapPurchaseButton(): Boolean {
-        val deadline = System.currentTimeMillis() + BotTiming.ms(
-            PURCHASE_TIMEOUT_MS,
-            BotTimingCategory.SCREEN_LOAD,
-        )
-        while (System.currentTimeMillis() < deadline) {
-            val frame = NavigationVision.captureFrame() ?: run {
-                delay(PATH_POLL_MS)
-                continue
-            }
-            try {
-                val hit = NavigationVision.findOnFrame(
-                    frame,
-                    PURCHASE_BUTTON,
-                    PURCHASE_THRESHOLD,
-                )
-                if (hit != null) {
-                    Log.d(
-                        TAG,
-                        "[SEAL_BUY] Purchase score=${"%.3f".format(hit.score)} " +
-                            "at=(${hit.centerX},${hit.centerY})",
-                    )
-                    return NavigationVision.tapMatch(hit)
-                }
-            } finally {
-                frame.recycle()
-            }
-            delay(PATH_POLL_MS)
-        }
-        NavigationVision.logBestScore(PURCHASE_BUTTON)
-        return false
+        val refX = MuCombatRois.STORE_PURCHASE_TAP_REF_X
+        val refY = MuCombatRois.STORE_PURCHASE_TAP_REF_Y
+        Log.d(TAG, "[SEAL_BUY] Purchase STATIC tap ref=($refX,$refY)")
+        return NavigationVision.tap(refX, refY, label = "store_purchase")
     }
 
     /** Retries because the post-purchase item animation can swallow the first tap. */
@@ -407,16 +346,6 @@ object RandomSealActions {
      */
     private suspend fun ensureMapOpenAfterShop(): Boolean =
         MapWindowActions.openMapWindow(retries = 2, timeoutMs = 4_000)
-
-    /** Common Items grid (exclude left category sidebar). */
-    private fun storeItemRoi(frame: Bitmap): Rect {
-        return Rect(
-            (frame.width * 0.28f).toInt(),
-            (frame.height * 0.12f).toInt(),
-            (frame.width * 0.92f).toInt(),
-            (frame.height * 0.72f).toInt(),
-        )
-    }
 
     /**
      * Wait for green path to paint; return last measure (Far/Near/Unknown).

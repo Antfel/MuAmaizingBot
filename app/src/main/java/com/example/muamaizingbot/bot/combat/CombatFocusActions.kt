@@ -1,9 +1,20 @@
 package com.example.muamaizingbot.bot.combat
 
 import android.util.Log
+import com.example.muamaizingbot.bot.BotController
+import com.example.muamaizingbot.bot.BotRuntimeState
+import com.example.muamaizingbot.bot.bosses.BossHuntState
+import com.example.muamaizingbot.bot.bosses.BossMapHuntActions
 import com.example.muamaizingbot.bot.bosses.BossTargetingActions
+import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
+import com.example.muamaizingbot.bot.maintenance.ElfBuffCheckActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
+import com.example.muamaizingbot.bot.maintenance.ElfBuffNavigationActions
+import com.example.muamaizingbot.bot.maintenance.ElfBuffSeekGate
 import com.example.muamaizingbot.bot.maintenance.ElfBuffTargetingActions
+import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
+import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
+import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.CombatFocusPkMode
 import com.example.muamaizingbot.profile.isFarmBossesMode
@@ -19,6 +30,9 @@ import kotlinx.coroutines.delay
  * Farm / farm_bosses defense: PK prevalidation at startup, then Focus enemies
  * (red HUD) → spam Attack until the enemy focus disappears.
  * Caller handles return to farm spot / boss.
+ *
+ * Mid-spam: periodically checks potions + elf buff; pauses spam, runs the action,
+ * then resumes the same loop (farm_bosses returns to stored boss target after elf).
  *
  * Does **not** clear [com.example.muamaizingbot.bot.bosses.BossHuntState] targets.
  *
@@ -38,6 +52,9 @@ object CombatFocusActions {
     private const val FOCUS_PROBE_LOG_EVERY = 10
     /** Log attack spam progress every N taps (loop is unbounded until focus lost). */
     private const val ATTACK_LOG_EVERY = 10
+    /** Probe potions/buff about every ~1.5–2s of spam taps. */
+    private const val MAINT_EVERY_TAPS = 10
+    private const val MAINT_MIN_INTERVAL_MS = 2_000L
     /**
      * Red HP can flicker under VFX while still chasing — require this many
      * consecutive misses before ending attack and returning to spot/boss.
@@ -54,6 +71,15 @@ object CombatFocusActions {
         Engaging,
         /** Had enemy focus and it disappeared — caller should recover position. */
         EnemyClearedNeedReturn,
+    }
+
+    private enum class FightMaintResult {
+        /** No potions/buff work this probe. */
+        None,
+        /** Ran maintenance — re-evaluate emblem / red HUD before next spam tap. */
+        Ran,
+        /** Leave spam as Idle (dead, pause, or boss gone after return). */
+        AbortIdle,
     }
 
     fun reset() {
@@ -148,7 +174,7 @@ object CombatFocusActions {
         // focus_player for the whole fight until the boss emblem drops (kill → nav)
         // or a player target is acquired.
         if (profile.isFarmBossesMode() && BossTargetingActions.hasBossFocus()) {
-            return spamFocusDuringBossFight()
+            return spamFocusDuringBossFight(profile)
         }
 
         if (!ElfBuffFocusHud.isRedHpBarVisible()) {
@@ -159,7 +185,7 @@ object CombatFocusActions {
                     return TickResult.EnemyClearedNeedReturn
                 }
                 // Flicker — still engaging; resume attack.
-                return spamAttackWhileRedHud()
+                return spamAttackWhileRedHud(profile)
             }
             val found = ElfBuffTargetingActions.spamFocusUntilRedHud()
             if (!found) {
@@ -170,7 +196,7 @@ object CombatFocusActions {
         }
 
         engagingEnemy = true
-        return spamAttackWhileRedHud()
+        return spamAttackWhileRedHud(profile)
     }
 
     /**
@@ -179,16 +205,40 @@ object CombatFocusActions {
      * - a player focus is acquired (red HUD, no boss emblem) → attack spam, or
      * - boss emblem is gone → Idle so [FarmBossesLoop] can finish kill / navigate.
      */
-    private suspend fun spamFocusDuringBossFight(): TickResult {
+    private suspend fun spamFocusDuringBossFight(profile: BotProfile): TickResult {
         Log.d(TAG, "[COMBAT_FOCUS] boss fight — continuous focus_player spam start")
         val (w, h) = RefCoords.activeScreenSize()
         val roi = MuCombatRois.targetingHudRoi(w, h)
         var taps = 0
+        var lastMaintMs = 0L
         while (true) {
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] boss-fight focus spam aborted — bot not running " +
+                        "after $taps taps",
+                )
+                return if (engagingEnemy) TickResult.Engaging else TickResult.Idle
+            }
             if (DeathActions.isDead()) {
                 engagingEnemy = false
                 Log.w(TAG, "[COMBAT_FOCUS] dead during boss-fight focus spam after $taps taps")
                 return TickResult.Idle
+            }
+
+            if (shouldProbeFightMaintenance(taps, lastMaintMs)) {
+                lastMaintMs = System.currentTimeMillis()
+                when (maybeRunFightMaintenance(profile)) {
+                    FightMaintResult.None -> Unit
+                    FightMaintResult.AbortIdle -> {
+                        engagingEnemy = false
+                        return TickResult.Idle
+                    }
+                    FightMaintResult.Ran -> {
+                        Log.d(TAG, "[COMBAT_FOCUS] spam resume after maintenance")
+                        continue
+                    }
+                }
             }
 
             val bossEmblem = BossTargetingActions.hasBossFocus()
@@ -199,7 +249,7 @@ object CombatFocusActions {
                     "[COMBAT_FOCUS] enemy focus acquired mid-boss fight after $taps focus taps",
                 )
                 engagingEnemy = true
-                return spamAttackWhileRedHud()
+                return spamAttackWhileRedHud(profile)
             }
             if (!bossEmblem) {
                 if (engagingEnemy) {
@@ -250,6 +300,9 @@ object CombatFocusActions {
             )
         }
         while (misses < FOCUS_LOST_CONFIRM_MISSES) {
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                return false
+            }
             delay(BotTiming.ms(POST_ATTACK_TAP_MS, BotTimingCategory.POST_TAP))
             if (ElfBuffFocusHud.isRedHpBarVisible()) {
                 Log.d(
@@ -271,17 +324,41 @@ object CombatFocusActions {
      * Continuous Attack spam until enemy red focus disappears (or death).
      * Focus loss requires [FOCUS_LOST_CONFIRM_MISSES] consecutive misses.
      */
-    private suspend fun spamAttackWhileRedHud(): TickResult {
+    private suspend fun spamAttackWhileRedHud(profile: BotProfile): TickResult {
         val (w, h) = RefCoords.activeScreenSize()
         val roi = MuCombatRois.targetingHudRoi(w, h)
         var taps = 0
+        var lastMaintMs = 0L
         Log.d(TAG, "[COMBAT_FOCUS] attack spam continuous start")
         while (true) {
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] attack spam aborted — bot not running after $taps taps",
+                )
+                return TickResult.Engaging
+            }
             if (DeathActions.isDead()) {
                 engagingEnemy = false
                 Log.w(TAG, "[COMBAT_FOCUS] dead during attack spam after $taps taps")
                 return TickResult.Idle
             }
+
+            if (shouldProbeFightMaintenance(taps, lastMaintMs)) {
+                lastMaintMs = System.currentTimeMillis()
+                when (maybeRunFightMaintenance(profile)) {
+                    FightMaintResult.None -> Unit
+                    FightMaintResult.AbortIdle -> {
+                        engagingEnemy = false
+                        return TickResult.Idle
+                    }
+                    FightMaintResult.Ran -> {
+                        Log.d(TAG, "[COMBAT_FOCUS] spam resume after maintenance")
+                        continue
+                    }
+                }
+            }
+
             if (!ElfBuffFocusHud.isRedHpBarVisible()) {
                 if (!confirmEnemyFocusLost(alreadyMissedOnce = true)) {
                     continue
@@ -316,5 +393,86 @@ object CombatFocusActions {
             delay(BotTiming.ms(POST_ATTACK_TAP_MS, BotTimingCategory.POST_TAP))
             taps++
         }
+    }
+
+    /** True every [MAINT_EVERY_TAPS] taps, or when [MAINT_MIN_INTERVAL_MS] elapsed after a prior probe. */
+    private fun shouldProbeFightMaintenance(taps: Int, lastMaintMs: Long): Boolean {
+        if (taps <= 0) {
+            return false
+        }
+        if (taps % MAINT_EVERY_TAPS == 0) {
+            return true
+        }
+        return lastMaintMs > 0L &&
+            System.currentTimeMillis() - lastMaintMs >= MAINT_MIN_INTERVAL_MS
+    }
+
+    /**
+     * Potions first, then elf buff. Returns [FightMaintResult.Ran] after work so the
+     * spam loop re-evaluates HUD before the next tap.
+     */
+    private suspend fun maybeRunFightMaintenance(profile: BotProfile): FightMaintResult {
+        if (BotController.state.value != BotRuntimeState.RUNNING) {
+            return FightMaintResult.AbortIdle
+        }
+
+        if (profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
+            Log.d(TAG, "[COMBAT_FOCUS] spam pause → potions")
+            val ok = PotionPurchaseActions.handleEmptyPotions()
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                return FightMaintResult.AbortIdle
+            }
+            if (DeathActions.isDead()) {
+                return FightMaintResult.AbortIdle
+            }
+            if (!ok) {
+                Log.w(TAG, "[COMBAT_FOCUS] potion recovery failed mid-spam — resume anyway")
+            }
+            return FightMaintResult.Ran
+        }
+
+        if (ElfBuffSeekGate.shouldAttemptSeek(profile) && !ElfBuffCheckActions.hasElfBuff()) {
+            Log.d(TAG, "[COMBAT_FOCUS] spam pause → buff")
+            val ok = ElfBuffNavigationActions.goToElfBuffAndReturn()
+            if (!ok) {
+                ElfBuffSeekGate.noteSeekFailed()
+                Log.w(TAG, "[COMBAT_FOCUS] elf buff route failed mid-spam")
+            }
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                return FightMaintResult.AbortIdle
+            }
+            if (DeathActions.isDead()) {
+                return FightMaintResult.AbortIdle
+            }
+
+            if (profile.isFarmBossesMode()) {
+                val mapId = FarmBossesLoop.currentMapId(profile)
+                    ?: BossHuntState.checkpoint?.mapId
+                val mapDef = mapId?.let { MapDefinitionRepository.getById(it) }
+                val wire = BossHuntState.wireId.coerceAtLeast(1)
+                if (mapDef == null) {
+                    Log.w(TAG, "[COMBAT_FOCUS] post-elf no map — abort spam")
+                    return FightMaintResult.AbortIdle
+                }
+                Log.d(TAG, "[COMBAT_FOCUS] post-elf return to boss target wire=$wire")
+                val returned = BossMapHuntActions.returnToStoredBossTarget(mapDef, wire)
+                if (!returned) {
+                    Log.w(TAG, "[COMBAT_FOCUS] post-elf returnToBoss failed — abort spam")
+                    return FightMaintResult.AbortIdle
+                }
+                val bossEmblem = BossTargetingActions.hasBossFocus()
+                val red = ElfBuffFocusHud.isRedHpBarVisible()
+                if (!bossEmblem && !red) {
+                    Log.d(
+                        TAG,
+                        "[COMBAT_FOCUS] post-elf no boss emblem / red HUD — yield Idle",
+                    )
+                    return FightMaintResult.AbortIdle
+                }
+            }
+            return FightMaintResult.Ran
+        }
+
+        return FightMaintResult.None
     }
 }

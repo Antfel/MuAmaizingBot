@@ -134,11 +134,6 @@ fun ProfileConfigureScreen(
             profileFilename = profileFilename,
         )
 
-        PetConfigCard(
-            profile = profile,
-            profileFilename = profileFilename,
-        )
-
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -198,6 +193,10 @@ fun ProfileConfigureScreen(
                     profile = profile,
                     profileFilename = profileFilename,
                 )
+                PetConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
                 ElfBuffSeekConfigCard(
                     profile = profile,
                     profileFilename = profileFilename,
@@ -216,6 +215,10 @@ fun ProfileConfigureScreen(
                     ) ?: stringResource(R.string.profiles_unset),
                     onClick = onOpenFarmSpot,
                 )
+                PetConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
                 ElfBuffParamsCard(
                     profile = profile,
                     profileFilename = profileFilename,
@@ -228,6 +231,10 @@ fun ProfileConfigureScreen(
                         MapDefinitionRepository.getById(farmSpot.map)?.name
                     ) ?: stringResource(R.string.profiles_unset),
                     onClick = onOpenFarmSpot,
+                )
+                PetConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
                 )
                 ElfBuffSeekConfigCard(
                     profile = profile,
@@ -543,21 +550,22 @@ private fun PetConfigCard(
     profile: BotProfile?,
     profileFilename: String,
 ) {
-    val enabled = profile?.enablePet == true
-    val selected = profile?.petType ?: PetType.DEFAULT
+    val pet = profile?.effectivePetConfig()
+    val enabled = pet?.enablePet == true
+    val selected = pet?.petType ?: PetType.DEFAULT
     val petTypes = PetType.entries
     val petLabels = listOf(
         stringResource(R.string.profile_pet_angel),
         stringResource(R.string.profile_pet_imp),
     )
-    var intervalText by remember(profile?.filename, profile?.petCheckIntervalMinutes) {
+    var intervalText by remember(profile?.filename, profile?.botMode, pet?.petCheckIntervalMinutes) {
         mutableStateOf(
-            (profile?.petCheckIntervalMinutes
+            (pet?.petCheckIntervalMinutes
                 ?: BotProfile.DEFAULT_PET_CHECK_INTERVAL_MINUTES).toString(),
         )
     }
-    LaunchedEffect(profile?.petCheckIntervalMinutes) {
-        intervalText = (profile?.petCheckIntervalMinutes
+    LaunchedEffect(profile?.botMode, pet?.petCheckIntervalMinutes) {
+        intervalText = (pet?.petCheckIntervalMinutes
             ?: BotProfile.DEFAULT_PET_CHECK_INTERVAL_MINUTES).toString()
     }
 
@@ -740,6 +748,7 @@ private fun FarmBossesConfigCard(
                 includeGoldenMobs = goldenOverride ?: golden,
                 holdSec = hold,
                 maps = maps,
+                pet = config.pet,
             ),
         )
     }

@@ -31,15 +31,14 @@ data class BotProfile(
     val enableCombatFocus: Boolean = false,
     val combatFocusPkMode: CombatFocusPkMode = CombatFocusPkMode.DEFAULT,
     /**
-     * When true, ensure the selected companion pet (Angel / Imp) is equipped:
-     * inventory equip, else MU Coin Store purchase, at startup and every
-     * [petCheckIntervalMinutes] while the bot runs.
+     * Farm / Elf companion pet (stored in `general_config`).
+     * Farm Bosses uses [KillBossesConfig.pet] instead — see [effectivePetConfig].
      */
     val enablePet: Boolean = false,
     val petType: PetType = PetType.DEFAULT,
     /**
      * Minutes between periodic pet-slot checks while the bot is running.
-     * Startup always validates once when [enablePet] is true.
+     * Startup always validates once when effective pet is enabled.
      */
     val petCheckIntervalMinutes: Int = DEFAULT_PET_CHECK_INTERVAL_MINUTES,
     val farmEnabled: Boolean = true,
@@ -54,6 +53,18 @@ data class BotProfile(
 ) {
     val fileStem: String
         get() = filename.removeSuffix(".json")
+
+    /** Active pet for the current [botMode] (Farm Bosses vs Farm/Elf). */
+    fun effectivePetConfig(): PetConfig =
+        if (isFarmBossesMode()) {
+            killBossesConfig.pet
+        } else {
+            PetConfig(
+                enablePet = enablePet,
+                petType = petType,
+                petCheckIntervalMinutes = petCheckIntervalMinutes,
+            )
+        }
 
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -127,6 +138,7 @@ data class BotProfile(
             val general = json.optJSONObject("general_config")
             val farm = json.optJSONObject("farm_config")
             val giver = json.optJSONObject("elf_giver_config")
+            val generalPet = PetConfig.fromJson(general)
             return BotProfile(
                 filename = filename,
                 displayName = json.optString("display_name").ifBlank { filename.removeSuffix(".json") },
@@ -148,14 +160,9 @@ data class BotProfile(
                 combatFocusPkMode = CombatFocusPkMode.parse(
                     general?.optString("combat_focus_pk_mode", CombatFocusPkMode.DEFAULT.toStorage()),
                 ),
-                enablePet = general?.optBoolean("enable_pet", false) ?: false,
-                petType = PetType.parse(
-                    general?.optString("pet_type", PetType.DEFAULT.toStorage()),
-                ),
-                petCheckIntervalMinutes = general
-                    ?.optInt("pet_check_interval_minutes", DEFAULT_PET_CHECK_INTERVAL_MINUTES)
-                    ?.coerceIn(MIN_PET_CHECK_INTERVAL_MINUTES, MAX_PET_CHECK_INTERVAL_MINUTES)
-                    ?: DEFAULT_PET_CHECK_INTERVAL_MINUTES,
+                enablePet = generalPet.enablePet,
+                petType = generalPet.petType,
+                petCheckIntervalMinutes = generalPet.petCheckIntervalMinutes,
                 farmEnabled = farm?.optBoolean("enabled", true) ?: true,
                 elfBuffSkillRefX = giver?.optInt("skill_ref_x")
                     ?.takeIf { giver.has("skill_ref_x") && !giver.isNull("skill_ref_x") },
@@ -166,7 +173,11 @@ data class BotProfile(
                     ?.coerceIn(MIN_ELF_CAST_INTERVAL_SEC, MAX_ELF_CAST_INTERVAL_SEC)
                     ?: DEFAULT_ELF_CAST_INTERVAL_SEC,
                 elfBuffAutoCast = giver?.optBoolean("auto_cast", true) ?: true,
-                killBossesConfig = KillBossesConfig.fromJson(json.optJSONObject("kill_bosses_config")),
+                // Migrate: missing boss pet keys inherit general pet once.
+                killBossesConfig = KillBossesConfig.fromJson(
+                    json.optJSONObject("kill_bosses_config"),
+                    fallbackPet = generalPet,
+                ),
             )
         }
 
