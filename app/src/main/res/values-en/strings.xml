@@ -151,6 +151,18 @@
     <string name="profile_mode_farm">Farm</string>
     <string name="profile_mode_elf">Elf Buff</string>
     <string name="profile_mode_bosses">Bosses</string>
+    <string name="profile_mode_rotation_title">Schedule</string>
+    <string name="profile_mode_rotation_hint">Switches Farm and Farm Bosses. Cycles = finish boss maps then rest on farm spot. Schedule = Spot/Bosses times (HH:MM, local).</string>
+    <string name="profile_mode_rotation_strategy">Strategy</string>
+    <string name="profile_mode_rotation_map_lap">Cycles</string>
+    <string name="profile_mode_rotation_clock">Schedule</string>
+    <string name="profile_mode_rotation_rest_label">Spot rest (min)</string>
+    <string name="profile_mode_rotation_rest_hint">After one full pass of Farm Bosses maps, farm the spot for this many minutes (%1$d–%2$d) before bosses again.</string>
+    <string name="profile_mode_rotation_rest_save">Save rest</string>
+    <string name="profile_mode_rotation_spot_time">Spot</string>
+    <string name="profile_mode_rotation_bosses_time">Bosses</string>
+    <string name="profile_mode_rotation_time_hint">HH:MM format (device local time).</string>
+    <string name="profile_mode_rotation_preview_note">Cycles: after a map lap → spot. Schedule: Spot/Bosses as HH:MM (local time).</string>
     <string name="profile_war_post_title">War event (post on Start)</string>
     <string name="profile_buff_post_title">Buff post (Farm Spot)</string>
     <string name="profile_delete">Delete profile</string>

@@ -53,8 +53,11 @@ object ElfBuffNavigationActions {
 
             if (!goToElfBuff(elfLocation)) {
                 // Mode-aware: farm → farm spot; farm_bosses → boss checkpoint; war → war post.
+                // Recovery may succeed while buff was never picked up — always return false
+                // so callers do not treat this as a successful buff run (e.g. skip returnToBoss).
                 Log.w(TAG, "[ELF] route to buff failed; mode-aware recovery checkpoint")
-                return BotRecoveryActions.recoverFromLostState("elf-route-failed")
+                BotRecoveryActions.recoverFromLostState("elf-route-failed")
+                return false
             }
 
             // Farm Bosses: post-kill resumes via FarmBossesLoop.resumeAfterMaintenance.

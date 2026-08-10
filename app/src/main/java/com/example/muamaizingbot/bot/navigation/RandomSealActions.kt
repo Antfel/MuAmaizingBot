@@ -3,6 +3,7 @@ package com.example.muamaizingbot.bot.navigation
 import android.graphics.Bitmap
 import android.graphics.Rect
 import android.util.Log
+import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.settings.BotTiming
 import com.example.muamaizingbot.settings.BotTimingCategory
@@ -171,6 +172,15 @@ object RandomSealActions {
      * → close store → reopen map. Character keeps auto-navigating underneath.
      */
     private suspend fun purchaseSealPack(emptyMatch: PcTemplateMatchResult?): Boolean {
+        DisconnectDetector.beginUiAction("seal-shop")
+        try {
+            return purchaseSealPackUnlocked(emptyMatch)
+        } finally {
+            DisconnectDetector.endUiAction("seal-shop")
+        }
+    }
+
+    private suspend fun purchaseSealPackUnlocked(emptyMatch: PcTemplateMatchResult?): Boolean {
         val tappedEmpty = when {
             emptyMatch != null -> NavigationVision.tapMatch(emptyMatch)
             else -> NavigationVision.tapTemplate(

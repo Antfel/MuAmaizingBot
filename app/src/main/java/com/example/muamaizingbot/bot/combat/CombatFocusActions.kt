@@ -7,6 +7,7 @@ import com.example.muamaizingbot.bot.bosses.BossHuntState
 import com.example.muamaizingbot.bot.bosses.BossMapHuntActions
 import com.example.muamaizingbot.bot.bosses.BossTargetingActions
 import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
+import com.example.muamaizingbot.bot.loop.ModeRotationGate
 import com.example.muamaizingbot.bot.maintenance.ElfBuffCheckActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
 import com.example.muamaizingbot.bot.maintenance.ElfBuffNavigationActions
@@ -17,6 +18,7 @@ import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.CombatFocusPkMode
+import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.profile.isFarmMode
 import com.example.muamaizingbot.settings.BotTiming
@@ -28,11 +30,14 @@ import kotlinx.coroutines.delay
 
 /**
  * Farm / farm_bosses defense: PK prevalidation at startup, then Focus enemies
- * (red HUD) → spam Attack until the enemy focus disappears.
+ * (enemy focus = red HUD **or** clear-X) → spam Attack until that panel disappears.
+ * Boss fights use [BossTargetingActions.hasBossFocus]; mid-boss PJ needs clear-X
+ * without the boss emblem. On arrival, [probeEnemyOnBossArrival] runs before skull settle.
  * Caller handles return to farm spot / boss.
  *
  * Mid-spam: periodically checks potions + elf buff; pauses spam, runs the action,
- * then resumes the same loop (farm_bosses returns to stored boss target after elf).
+ * then resumes (farm_bosses returns to boss only if buff is present). Elf is skipped
+ * while [engagingEnemy] (attack spam).
  *
  * Does **not** clear [com.example.muamaizingbot.bot.bosses.BossHuntState] targets.
  *
@@ -48,6 +53,11 @@ object CombatFocusActions {
     private const val FOCUS_PLAYER_THRESHOLD = 0.62f
     private const val POST_ATTACK_TAP_MS = 160L
     private const val POST_FOCUS_PROBE_MS = 180L
+    /** Arrival burst: find a PJ already on the boss before spending settle on skull. */
+    private const val ARRIVAL_ENEMY_BURST_TAPS = 8
+    private const val ARRIVAL_ENEMY_TAP_MS = 120L
+    /** Second look after a hit — reject one-frame clear-X false positives. */
+    private const val ARRIVAL_ENEMY_CONFIRM_MS = 150L
     /** Log continuous focus spam every N taps while boss emblem is up. */
     private const val FOCUS_PROBE_LOG_EVERY = 10
     /** Log attack spam progress every N taps (loop is unbounded until focus lost). */
@@ -56,7 +66,7 @@ object CombatFocusActions {
     private const val MAINT_EVERY_TAPS = 10
     private const val MAINT_MIN_INTERVAL_MS = 2_000L
     /**
-     * Red HP can flicker under VFX while still chasing — require this many
+     * Red HP / clear-X can flicker under VFX while still chasing — require this many
      * consecutive misses before ending attack and returning to spot/boss.
      */
     private const val FOCUS_LOST_CONFIRM_MISSES = 4
@@ -67,7 +77,7 @@ object CombatFocusActions {
     enum class TickResult {
         /** Toggle off, wrong mode, or no enemy found this tick. */
         Idle,
-        /** Enemy red HUD still visible — attack spam in progress. */
+        /** Enemy focus still visible — attack spam in progress. */
         Engaging,
         /** Had enemy focus and it disappeared — caller should recover position. */
         EnemyClearedNeedReturn,
@@ -96,7 +106,7 @@ object CombatFocusActions {
         if (!isApplicable(profile)) return false
         if (profile.combatFocusPkMode == CombatFocusPkMode.PEACE) return false
         if (engagingEnemy) return true
-        return ElfBuffFocusHud.isRedHpBarVisible()
+        return ElfBuffFocusHud.isEnemyFocusVisible()
     }
 
     private fun isApplicable(profile: BotProfile): Boolean {
@@ -140,6 +150,79 @@ object CombatFocusActions {
     }
 
     /**
+     * On boss arrival (before [BossTargetingActions.ensureFocusBoss]): burst
+     * [FOCUS_PLAYER] taps so a PJ already fighting the boss is acquired first.
+     * Avoids ~1s+ skull settle while taking free hits.
+     */
+    suspend fun probeEnemyOnBossArrival(profile: BotProfile): TickResult {
+        if (!isApplicable(profile) || profile.combatFocusPkMode == CombatFocusPkMode.PEACE) {
+            return TickResult.Idle
+        }
+        if (!confirmPkModeOrRepair(profile)) {
+            return TickResult.Idle
+        }
+
+        if (hasEnemyPanelWithoutBoss()) {
+            if (confirmArrivalEnemyPanel()) {
+                Log.d(TAG, "[COMBAT_FOCUS] arrival — enemy panel already up (no boss emblem)")
+                engagingEnemy = true
+                return spamAttackWhileRedHud(profile)
+            }
+        }
+
+        Log.d(
+            TAG,
+            "[COMBAT_FOCUS] arrival — enemy probe burst " +
+                "taps=$ARRIVAL_ENEMY_BURST_TAPS settle=${ARRIVAL_ENEMY_TAP_MS}ms",
+        )
+        val (w, h) = RefCoords.activeScreenSize()
+        val roi = MuCombatRois.targetingHudRoi(w, h)
+        repeat(ARRIVAL_ENEMY_BURST_TAPS) { i ->
+            if (BotController.state.value != BotRuntimeState.RUNNING) {
+                return TickResult.Idle
+            }
+            if (DeathActions.isDead()) {
+                return TickResult.Idle
+            }
+            val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_PLAYER_THRESHOLD, roi)
+            if (match != null) {
+                NavigationVision.tapScreen(match.centerX, match.centerY, label = "focus_player_arrival")
+            }
+            delay(BotTiming.ms(ARRIVAL_ENEMY_TAP_MS, BotTimingCategory.POST_TAP))
+            if (confirmArrivalEnemyPanel()) {
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] arrival — enemy acquired after ${i + 1} focus taps",
+                )
+                engagingEnemy = true
+                return spamAttackWhileRedHud(profile)
+            }
+        }
+        Log.d(TAG, "[COMBAT_FOCUS] arrival — no enemy in probe burst → boss focus next")
+        return TickResult.Idle
+    }
+
+    /**
+     * Arrival enemy must be a stable PJ panel: clear-X twice (not a one-frame FP),
+     * and no boss emblem. Avoids open-map [returnToBoss] after a ghost acquire.
+     */
+    private suspend fun confirmArrivalEnemyPanel(): Boolean {
+        if (!hasEnemyPanelWithoutBoss()) return false
+        delay(BotTiming.ms(ARRIVAL_ENEMY_CONFIRM_MS, BotTimingCategory.POST_TAP))
+        if (!hasEnemyPanelWithoutBoss()) {
+            Log.d(TAG, "[COMBAT_FOCUS] arrival — enemy panel flicker, ignore")
+            return false
+        }
+        return true
+    }
+
+    /** PJ panel via clear-X with no boss emblem (red alone is too flickery on arrival). */
+    private suspend fun hasEnemyPanelWithoutBoss(): Boolean {
+        if (BossTargetingActions.hasBossFocus()) return false
+        return ElfBuffFocusHud.isClearXVisible()
+    }
+
+    /**
      * One combat-focus tick. Call only from active **farming** / **farm_bosses FIGHT**.
      * Does not re-force PK every cycle — only confirms / repairs drift.
      */
@@ -177,7 +260,7 @@ object CombatFocusActions {
             return spamFocusDuringBossFight(profile)
         }
 
-        if (!ElfBuffFocusHud.isRedHpBarVisible()) {
+        if (!ElfBuffFocusHud.isEnemyFocusVisible()) {
             if (engagingEnemy) {
                 if (confirmEnemyFocusLost(alreadyMissedOnce = true)) {
                     engagingEnemy = false
@@ -192,7 +275,7 @@ object CombatFocusActions {
                 Log.d(TAG, "[COMBAT_FOCUS] no enemy focus this tick")
                 return TickResult.Idle
             }
-            Log.d(TAG, "[COMBAT_FOCUS] enemy red HUD acquired")
+            Log.d(TAG, "[COMBAT_FOCUS] enemy focus acquired")
         }
 
         engagingEnemy = true
@@ -242,11 +325,12 @@ object CombatFocusActions {
             }
 
             val bossEmblem = BossTargetingActions.hasBossFocus()
-            val red = ElfBuffFocusHud.isRedHpBarVisible()
-            if (red && !bossEmblem) {
+            // Boss HUD also has a clear-X — only treat as PJ when the boss emblem is gone.
+            if (!bossEmblem && ElfBuffFocusHud.isClearXVisible()) {
                 Log.d(
                     TAG,
-                    "[COMBAT_FOCUS] enemy focus acquired mid-boss fight after $taps focus taps",
+                    "[COMBAT_FOCUS] enemy focus (clear_x, no boss emblem) " +
+                        "mid-boss fight after $taps focus taps",
                 )
                 engagingEnemy = true
                 return spamAttackWhileRedHud(profile)
@@ -288,7 +372,7 @@ object CombatFocusActions {
     }
 
     /**
-     * @param alreadyMissedOnce true when caller already observed one red-HUD miss.
+     * @param alreadyMissedOnce true when caller already observed one enemy-focus miss.
      * @return true when focus stays gone for [FOCUS_LOST_CONFIRM_MISSES] checks.
      */
     private suspend fun confirmEnemyFocusLost(alreadyMissedOnce: Boolean): Boolean {
@@ -296,7 +380,7 @@ object CombatFocusActions {
         if (misses > 0) {
             Log.d(
                 TAG,
-                "[COMBAT_FOCUS] red HUD miss $misses/$FOCUS_LOST_CONFIRM_MISSES (confirming loss)",
+                "[COMBAT_FOCUS] enemy focus miss $misses/$FOCUS_LOST_CONFIRM_MISSES (confirming loss)",
             )
         }
         while (misses < FOCUS_LOST_CONFIRM_MISSES) {
@@ -304,24 +388,24 @@ object CombatFocusActions {
                 return false
             }
             delay(BotTiming.ms(POST_ATTACK_TAP_MS, BotTimingCategory.POST_TAP))
-            if (ElfBuffFocusHud.isRedHpBarVisible()) {
+            if (ElfBuffFocusHud.isEnemyFocusVisible()) {
                 Log.d(
                     TAG,
-                    "[COMBAT_FOCUS] red HUD returned after miss_streak=$misses — keep attacking",
+                    "[COMBAT_FOCUS] enemy focus returned after miss_streak=$misses — keep attacking",
                 )
                 return false
             }
             misses++
             Log.d(
                 TAG,
-                "[COMBAT_FOCUS] red HUD miss $misses/$FOCUS_LOST_CONFIRM_MISSES (confirming loss)",
+                "[COMBAT_FOCUS] enemy focus miss $misses/$FOCUS_LOST_CONFIRM_MISSES (confirming loss)",
             )
         }
         return true
     }
 
     /**
-     * Continuous Attack spam until enemy red focus disappears (or death).
+     * Continuous Attack spam until enemy focus (red **or** clear-X) disappears (or death).
      * Focus loss requires [FOCUS_LOST_CONFIRM_MISSES] consecutive misses.
      */
     private suspend fun spamAttackWhileRedHud(profile: BotProfile): TickResult {
@@ -359,11 +443,32 @@ object CombatFocusActions {
                 }
             }
 
-            if (!ElfBuffFocusHud.isRedHpBarVisible()) {
+            // Misclassified boss-as-enemy: emblem still/again visible → resume boss focus spam.
+            if (profile.isFarmBossesMode() && BossTargetingActions.hasBossFocus()) {
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] boss emblem during enemy attack spam after $taps taps " +
+                        "→ resume boss-fight focus spam",
+                )
+                engagingEnemy = false
+                return spamFocusDuringBossFight(profile)
+            }
+
+            if (!ElfBuffFocusHud.isEnemyFocusVisible()) {
                 if (!confirmEnemyFocusLost(alreadyMissedOnce = true)) {
                     continue
                 }
                 engagingEnemy = false
+                // Ghost acquire (panel vanished before any Attack) — do NOT open map /
+                // returnToBoss; let the boss loop continue with skull focus.
+                if (taps == 0) {
+                    Log.d(
+                        TAG,
+                        "[COMBAT_FOCUS] enemy focus cleared after 0 attack taps — " +
+                            "false acquire → Idle (no returnToBoss)",
+                    )
+                    return TickResult.Idle
+                }
                 Log.d(
                     TAG,
                     "[COMBAT_FOCUS] enemy focus cleared after $taps attack taps → need return",
@@ -410,6 +515,8 @@ object CombatFocusActions {
     /**
      * Potions first, then elf buff. Returns [FightMaintResult.Ran] after work so the
      * spam loop re-evaluates HUD before the next tap.
+     * If Programación flips mode after the action, abort spam so the priority loop
+     * can navigate (pending nav).
      */
     private suspend fun maybeRunFightMaintenance(profile: BotProfile): FightMaintResult {
         if (BotController.state.value != BotRuntimeState.RUNNING) {
@@ -428,10 +535,17 @@ object CombatFocusActions {
             if (!ok) {
                 Log.w(TAG, "[COMBAT_FOCUS] potion recovery failed mid-spam — resume anyway")
             }
+            if (modeRotationSwitchedAfterAction()) {
+                return FightMaintResult.AbortIdle
+            }
             return FightMaintResult.Ran
         }
 
-        if (ElfBuffSeekGate.shouldAttemptSeek(profile) && !ElfBuffCheckActions.hasElfBuff()) {
+        // Do not leave an enemy fight for elf — buff after engage ends / mid-boss only.
+        if (!engagingEnemy &&
+            ElfBuffSeekGate.shouldAttemptSeek(profile) &&
+            !ElfBuffCheckActions.hasElfBuff()
+        ) {
             Log.d(TAG, "[COMBAT_FOCUS] spam pause → buff")
             val ok = ElfBuffNavigationActions.goToElfBuffAndReturn()
             if (!ok) {
@@ -444,9 +558,24 @@ object CombatFocusActions {
             if (DeathActions.isDead()) {
                 return FightMaintResult.AbortIdle
             }
+            if (modeRotationSwitchedAfterAction()) {
+                return FightMaintResult.AbortIdle
+            }
 
-            if (profile.isFarmBossesMode()) {
-                val mapId = FarmBossesLoop.currentMapId(profile)
+            val stillMissingBuff = !ElfBuffCheckActions.hasElfBuff()
+            if (stillMissingBuff) {
+                // e.g. died mid-route, revived on boss map — do NOT walk to boss naked;
+                // yield so the priority loop can branch=elf_buff before fight resume.
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] post-elf still missing buff — skip returnToBoss, yield loop",
+                )
+                return FightMaintResult.AbortIdle
+            }
+
+            val live = ProfileRepository.currentProfile.value ?: profile
+            if (live.isFarmBossesMode()) {
+                val mapId = FarmBossesLoop.currentMapId(live)
                     ?: BossHuntState.checkpoint?.mapId
                 val mapDef = mapId?.let { MapDefinitionRepository.getById(it) }
                 val wire = BossHuntState.wireId.coerceAtLeast(1)
@@ -461,11 +590,11 @@ object CombatFocusActions {
                     return FightMaintResult.AbortIdle
                 }
                 val bossEmblem = BossTargetingActions.hasBossFocus()
-                val red = ElfBuffFocusHud.isRedHpBarVisible()
-                if (!bossEmblem && !red) {
+                val enemyFocus = ElfBuffFocusHud.isEnemyFocusVisible()
+                if (!bossEmblem && !enemyFocus) {
                     Log.d(
                         TAG,
-                        "[COMBAT_FOCUS] post-elf no boss emblem / red HUD — yield Idle",
+                        "[COMBAT_FOCUS] post-elf no boss emblem / enemy focus — yield Idle",
                     )
                     return FightMaintResult.AbortIdle
                 }
@@ -474,5 +603,20 @@ object CombatFocusActions {
         }
 
         return FightMaintResult.None
+    }
+
+    /** Apply due Programación flip now that UI action finished; leave nav to the loop. */
+    private fun modeRotationSwitchedAfterAction(): Boolean {
+        val live = ProfileRepository.currentProfile.value ?: return false
+        val result = ModeRotationGate.maybeApply(live)
+        return when (result) {
+            ModeRotationGate.ApplyResult.SWITCHED_TO_FARM,
+            ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES,
+            -> {
+                Log.d(TAG, "[COMBAT_FOCUS] mode_rotation switched mid-maint result=$result — abort spam")
+                true
+            }
+            else -> false
+        }
     }
 }

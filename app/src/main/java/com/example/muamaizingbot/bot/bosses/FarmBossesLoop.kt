@@ -4,12 +4,15 @@ import android.util.Log
 import com.example.muamaizingbot.bot.combat.CombatFocusActions
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
+import com.example.muamaizingbot.bot.loop.ModeRotationGate
 import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.maps.MapDefinition
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotProfile
+import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isFarmBossesMode
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
@@ -97,11 +100,17 @@ object FarmBossesLoop {
             return CycleResult.SOFT_FAIL
         }
 
+        val live = ProfileRepository.currentProfile.value
+        if (live == null || !live.isFarmBossesMode()) {
+            Log.d(TAG, "[BOSS] yield — mode left farm_bosses (programación)")
+            return CycleResult.OK
+        }
+
         return when (BossHuntState.phase) {
             BossHuntPhase.POST_KILL -> CycleResult.NEED_MAINTENANCE
-            BossHuntPhase.ENSURE_LOCATION -> ensureLocation(profile)
-            BossHuntPhase.HUNT -> hunt(profile)
-            BossHuntPhase.FIGHT -> fight(profile)
+            BossHuntPhase.ENSURE_LOCATION -> ensureLocation(live)
+            BossHuntPhase.HUNT -> hunt(live)
+            BossHuntPhase.FIGHT -> fight(live)
         }
     }
 
@@ -179,9 +188,14 @@ object FarmBossesLoop {
         val fightInProgress = BossHuntState.fightStartedAtMs != 0L
 
         // Enemy player focus takes priority over boss-focus-lost kill detection.
+        // Boss panel also trips isEnemyFocusVisible (red/clear-X) — if emblem is up,
+        // mark fight started so we never fall back into arrival-probe after Auto soft-fail.
         if (profile.enableCombatFocus &&
-            (CombatFocusActions.isEngagingEnemy() || ElfBuffFocusHud.isRedHpBarVisible())
+            (CombatFocusActions.isEngagingEnemy() || ElfBuffFocusHud.isEnemyFocusVisible())
         ) {
+            if (BossHuntState.fightStartedAtMs == 0L && BossTargetingActions.hasBossFocus()) {
+                markFightStartedIfNeeded("combat-focus with boss emblem")
+            }
             return handleCombatFocusDuringFight(profile, mapId)
         }
 
@@ -233,25 +247,50 @@ object FarmBossesLoop {
                 }
             }
         } else {
-            // First acquire after arriving on boss — allow a few soft retries then re-hunt.
-            if (!BossTargetingActions.ensureFocusBoss(includeGolden = includeGolden)) {
-                consecutiveFocusFails++
-                Log.w(
-                    TAG,
-                    "[BOSS] ensureFocusBoss fail $consecutiveFocusFails/$FOCUS_FAIL_BEFORE_REHUNT " +
-                        "(no Auto until HUD)",
-                )
-                if (consecutiveFocusFails >= FOCUS_FAIL_BEFORE_REHUNT) {
-                    consecutiveFocusFails = 0
-                    BossHuntState.phase = BossHuntPhase.HUNT
-                    BossHuntState.clearBossTarget()
-                    Log.w(TAG, "[BOSS] focus fail limit → re-hunt")
+            // Already have boss HUD (e.g. ensureAuto soft-failed last tick) — don't
+            // re-run arrival enemy burst; mark fight started and continue.
+            if (BossTargetingActions.hasBossFocus()) {
+                markFightStartedIfNeeded("boss focus already up")
+                consecutiveFocusFails = 0
+                consecutiveFocusMisses = 0
+            } else {
+                // Arrival: PJ on boss first — only on the first acquire attempt.
+                if (profile.enableCombatFocus && consecutiveFocusFails == 0) {
+                    when (val focus = CombatFocusActions.probeEnemyOnBossArrival(profile)) {
+                        CombatFocusActions.TickResult.Engaging -> {
+                            markFightStartedIfNeeded("arrival enemy")
+                            Log.d(TAG, "[BOSS] arrival enemy engaged before boss focus")
+                            return CycleResult.OK
+                        }
+                        CombatFocusActions.TickResult.EnemyClearedNeedReturn -> {
+                            return returnAfterCombatFocus(mapId)
+                        }
+                        CombatFocusActions.TickResult.Idle -> Unit
+                    }
                 }
-                delay(FIGHT_POLL_MS)
-                return CycleResult.SOFT_FAIL
+                // First acquire after arriving on boss — allow a few soft retries then re-hunt.
+                if (!BossTargetingActions.ensureFocusBoss(includeGolden = includeGolden)) {
+                    consecutiveFocusFails++
+                    Log.w(
+                        TAG,
+                        "[BOSS] ensureFocusBoss fail $consecutiveFocusFails/$FOCUS_FAIL_BEFORE_REHUNT " +
+                            "(no Auto until HUD)",
+                    )
+                    if (consecutiveFocusFails >= FOCUS_FAIL_BEFORE_REHUNT) {
+                        consecutiveFocusFails = 0
+                        BossHuntState.phase = BossHuntPhase.HUNT
+                        BossHuntState.clearBossTarget()
+                        Log.w(TAG, "[BOSS] focus fail limit → re-hunt")
+                    }
+                    delay(FIGHT_POLL_MS)
+                    return CycleResult.SOFT_FAIL
+                }
+                consecutiveFocusFails = 0
+                consecutiveFocusMisses = 0
+                // Mark started as soon as boss HUD is up — before ensureAuto — so a soft-fail
+                // on Auto cannot reset us into arrival-probe / miss the kill-confirm path.
+                markFightStartedIfNeeded("boss focus acquired")
             }
-            consecutiveFocusFails = 0
-            consecutiveFocusMisses = 0
         }
 
         if (!GameActions.ensureAutoMode()) {
@@ -260,15 +299,7 @@ object FarmBossesLoop {
             return CycleResult.SOFT_FAIL
         }
 
-        val now = System.currentTimeMillis()
-        if (BossHuntState.fightStartedAtMs == 0L) {
-            BossHuntState.fightStartedAtMs = now
-            Log.d(
-                TAG,
-                "[BOSS] fight start target=" +
-                    "(${BossHuntState.targetCoordX},${BossHuntState.targetCoordY})",
-            )
-        }
+        markFightStartedIfNeeded("auto ok")
 
         when (val focus = CombatFocusActions.tickIfEnabled(profile)) {
             CombatFocusActions.TickResult.Idle -> Unit
@@ -282,10 +313,20 @@ object FarmBossesLoop {
         }
 
         // Do not re-check focus in the same tick after acquire/auto — VFX made that a false kill.
-        val elapsed = now - BossHuntState.fightStartedAtMs
+        val elapsed = System.currentTimeMillis() - BossHuntState.fightStartedAtMs
         Log.d(TAG, "[BOSS] fighting ${elapsed / 1000}s")
         delay(FIGHT_POLL_MS)
         return CycleResult.OK
+    }
+
+    private fun markFightStartedIfNeeded(reason: String) {
+        if (BossHuntState.fightStartedAtMs != 0L) return
+        BossHuntState.fightStartedAtMs = System.currentTimeMillis()
+        Log.d(
+            TAG,
+            "[BOSS] fight start ($reason) target=" +
+                "(${BossHuntState.targetCoordX},${BossHuntState.targetCoordY})",
+        )
     }
 
     private suspend fun handleCombatFocusDuringFight(
@@ -379,6 +420,9 @@ object FarmBossesLoop {
         Log.d(TAG, "[BOSS] advance map ${BossHuntState.mapIndex + 1}→${next + 1}/${maps.size}")
         BossHuntState.mapIndex = next
         BossHuntState.wireId = 1
+        if (next == 0) {
+            ModeRotationGate.noteBossLapComplete(profile)
+        }
     }
 
     private suspend fun ensureInventoryClosed(): Boolean {

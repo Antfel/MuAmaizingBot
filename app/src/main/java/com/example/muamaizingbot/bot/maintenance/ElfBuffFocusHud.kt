@@ -13,6 +13,11 @@ import kotlinx.coroutines.delay
  * Target-focus HUD (top center).
  * Under PK All the HP bar is red; under Union an ally's bar turns green.
  * Giver mode: clear via Focus Boss template. War mode: hard tap @ (516,26).
+ *
+ * Combat-focus (farm / farm_bosses):
+ * - Boss → [com.example.muamaizingbot.bot.bosses.BossTargetingActions.hasBossFocus]
+ * - Enemy PJ → [isEnemyFocusVisible] = red HP bar OR [FOCUS_CLEAR_X]
+ * Mid-boss PJ acquire requires clear-X **and** no boss emblem (boss HUD also has an X).
  */
 object ElfBuffFocusHud {
 
@@ -21,6 +26,11 @@ object ElfBuffFocusHud {
     private const val HP_BAR_RED = "templates/mu/ui/focus_hp_bar.png"
     private const val HP_BAR_GREEN = "templates/mu/ui/focus_hp_bar_green.png"
     private const val HP_BAR_THRESHOLD = 0.80f
+
+    /** Player-focus clear button (absent on boss focus HUD). */
+    const val FOCUS_CLEAR_X = "templates/mu/ui/focus_clear_x.png"
+    /** Bench: true focus ~0.87; terrain FP ~0.78 — keep above FP band. */
+    private const val FOCUS_CLEAR_X_THRESHOLD = 0.85f
 
     private const val FOCUS_BOSS = "templates/mu/ui/targeting/focus_elite_skull.png"
     private const val FOCUS_BOSS_THRESHOLD = 0.70f
@@ -35,6 +45,16 @@ object ElfBuffFocusHud {
     private const val WAR_CLEAR_VERIFY_ATTEMPTS = 8
     private const val WAR_CLEAR_VERIFY_POLL_MS = 200L
 
+    /**
+     * Search box for [FOCUS_CLEAR_X] authored at 1280×720, centered on the
+     * War clear tap (516,26): (488,0)–(544,54). Pad ≈±28 around the 23×24 icon.
+     * Distinct from [com.example.muamaizingbot.bot.bosses.BossTargetingActions.bossFocusRoi].
+     */
+    private const val CLEAR_X_ROI_LEFT_1280 = 488
+    private const val CLEAR_X_ROI_TOP_1280 = 0
+    private const val CLEAR_X_ROI_RIGHT_1280 = 544
+    private const val CLEAR_X_ROI_BOTTOM_1280 = 54
+
     enum class HpBarColor { RED, GREEN }
 
     fun hudRoi(frameWidth: Int, frameHeight: Int): Rect {
@@ -48,9 +68,26 @@ object ElfBuffFocusHud {
         )
     }
 
+    /** Tight ROI around the player-focus clear (X) button. */
+    fun clearXRoi(frameWidth: Int, frameHeight: Int): Rect {
+        return ScaledRoi.fromRefRect(
+            left = RefCoords.unscaleX(CLEAR_X_ROI_LEFT_1280, RefCoords.TARGET_WIDTH),
+            top = RefCoords.unscaleY(CLEAR_X_ROI_TOP_1280, RefCoords.TARGET_HEIGHT),
+            right = RefCoords.unscaleX(CLEAR_X_ROI_RIGHT_1280, RefCoords.TARGET_WIDTH),
+            bottom = RefCoords.unscaleY(CLEAR_X_ROI_BOTTOM_1280, RefCoords.TARGET_HEIGHT),
+            frameWidth = frameWidth,
+            frameHeight = frameHeight,
+        )
+    }
+
     private fun roi(): Rect {
         val (w, h) = RefCoords.activeScreenSize()
         return hudRoi(w, h)
+    }
+
+    private fun clearXSearchRoi(): Rect {
+        val (w, h) = RefCoords.activeScreenSize()
+        return clearXRoi(w, h)
     }
 
     suspend fun findRedHpBar(): PcTemplateMatchResult? {
@@ -59,6 +96,14 @@ object ElfBuffFocusHud {
 
     suspend fun findGreenHpBar(): PcTemplateMatchResult? {
         return NavigationVision.findTemplate(HP_BAR_GREEN, HP_BAR_THRESHOLD, roi())
+    }
+
+    suspend fun findClearX(): PcTemplateMatchResult? {
+        return NavigationVision.findTemplate(
+            FOCUS_CLEAR_X,
+            FOCUS_CLEAR_X_THRESHOLD,
+            clearXSearchRoi(),
+        )
     }
 
     suspend fun isRedHpBarVisible(): Boolean {
@@ -84,6 +129,31 @@ object ElfBuffFocusHud {
             )
             return true
         }
+        return false
+    }
+
+    /** True while the player-focus clear (X) button is visible. */
+    suspend fun isClearXVisible(): Boolean {
+        val match = findClearX()
+        if (match != null) {
+            Log.d(
+                TAG,
+                "[FOCUS] clear_x at=(${match.centerX},${match.centerY}) " +
+                    "score=${"%.3f".format(match.score)}",
+            )
+            return true
+        }
+        return false
+    }
+
+    /**
+     * Enemy / PJ focus panel: red HP bar **or** clear-X.
+     * On farm_bosses mid-fight, callers must also require no boss emblem —
+     * the boss HUD can match [FOCUS_CLEAR_X] too.
+     */
+    suspend fun isEnemyFocusVisible(): Boolean {
+        if (isRedHpBarVisible()) return true
+        if (isClearXVisible()) return true
         return false
     }
 

@@ -25,7 +25,8 @@ object ElfBuffWarTapGrid {
 
     /**
      * South-biased HUD offsets from character center (y > 0 = south).
-     * Core triangle first; W/E + SSW/SSE expand coverage for change scoring.
+     * Core triangle + W/E; mid-south row (SW1/S1/SE1) sits below the elf and
+     * above the far south row (SSW/S/SSE); then SSW/SSE expand coverage.
      */
     private val TRIANGLE_HUD_OFFSETS = listOf(
         Triple("SW", -2, 1),
@@ -33,6 +34,10 @@ object ElfBuffWarTapGrid {
         Triple("SE", 2, 1),
         Triple("W", -2, 0),
         Triple("E", 2, 0),
+        // Between elf and far-south row of 3 crosses.
+        Triple("SW1", -1, 1),
+        Triple("S1", 0, 1),
+        Triple("SE1", 1, 1),
         Triple("SSW", -1, 2),
         Triple("SSE", 1, 2),
     )

@@ -165,6 +165,29 @@ object ProfileRepository {
         return updated
     }
 
+    fun setModeRotationConfig(
+        profileFilename: String,
+        config: ModeRotationConfig,
+    ): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(
+            modeRotation = config.copy(
+                restMinutes = config.restMinutes.coerceIn(
+                    ModeRotationConfig.MIN_REST_MINUTES,
+                    ModeRotationConfig.MAX_REST_MINUTES,
+                ),
+            ),
+        )
+        saveProfile(updated)
+        Log.d(
+            TAG,
+            "[PROFILE] mode_rotation enabled=${updated.modeRotation.enabled} " +
+                "strategy=${updated.modeRotation.strategy.toStorage()} " +
+                "restMin=${updated.modeRotation.restMinutes} file=$profileFilename",
+        )
+        return updated
+    }
+
     fun setElfBuffEnabled(profileFilename: String, enabled: Boolean): BotProfile? {
         val profile = getProfile(profileFilename) ?: return null
         val updated = profile.copy(enableElfBuff = enabled)

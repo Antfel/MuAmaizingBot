@@ -60,6 +60,8 @@ import com.example.muamaizingbot.profile.CombatFocusPkMode
 import com.example.muamaizingbot.profile.FarmLocation
 import com.example.muamaizingbot.profile.KillBossesConfig
 import com.example.muamaizingbot.profile.LocationRepository
+import com.example.muamaizingbot.profile.ModeRotationConfig
+import com.example.muamaizingbot.profile.ModeRotationStrategy
 import com.example.muamaizingbot.profile.PetType
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isElfBuffPostMode
@@ -185,25 +187,15 @@ fun ProfileConfigureScreen(
             }
         }
 
+        ModeRotationConfigCard(
+            profile = profile,
+            profileFilename = profileFilename,
+        )
+
         SectionHeader(stringResource(R.string.profile_section_mode_settings))
 
+        val rotationOn = profile?.modeRotation?.enabled == true
         when {
-            profile?.isFarmBossesMode() == true -> {
-                FarmBossesConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                PetConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                ElfBuffSeekConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                    elfBuff = elfBuff,
-                    onOpenElfBuff = onOpenElfBuff,
-                )
-            }
             profile?.isElfBuffPostMode() == true -> {
                 ConfigOptionCard(
                     title = when {
@@ -222,6 +214,45 @@ fun ProfileConfigureScreen(
                 ElfBuffParamsCard(
                     profile = profile,
                     profileFilename = profileFilename,
+                )
+            }
+            rotationOn -> {
+                ConfigOptionCard(
+                    title = stringResource(R.string.profile_farm_spot),
+                    summary = farmSpot?.summaryLabel(
+                        MapDefinitionRepository.getById(farmSpot.map)?.name
+                    ) ?: stringResource(R.string.profiles_unset),
+                    onClick = onOpenFarmSpot,
+                )
+                FarmBossesConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
+                PetConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
+                ElfBuffSeekConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                    elfBuff = elfBuff,
+                    onOpenElfBuff = onOpenElfBuff,
+                )
+            }
+            profile?.isFarmBossesMode() == true -> {
+                FarmBossesConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
+                PetConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                )
+                ElfBuffSeekConfigCard(
+                    profile = profile,
+                    profileFilename = profileFilename,
+                    elfBuff = elfBuff,
+                    onOpenElfBuff = onOpenElfBuff,
                 )
             }
             else -> {
@@ -487,6 +518,206 @@ private fun RandomTeleportConfigCard(
 }
 
 @OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ModeRotationConfigCard(
+    profile: BotProfile?,
+    profileFilename: String,
+) {
+    val config = profile?.modeRotation ?: ModeRotationConfig()
+    val enabled = config.enabled
+    val strategies = ModeRotationStrategy.entries
+    val strategyLabels = listOf(
+        stringResource(R.string.profile_mode_rotation_map_lap),
+        stringResource(R.string.profile_mode_rotation_clock),
+    )
+    var restText by remember(profile?.filename, config.restMinutes) {
+        mutableStateOf(config.restMinutes.toString())
+    }
+    var spotTimeText by remember(profile?.filename, config.farmWindows) {
+        mutableStateOf(ModeRotationConfig.primaryTime(config.farmWindows))
+    }
+    var bossesTimeText by remember(profile?.filename, config.bossesWindows) {
+        mutableStateOf(ModeRotationConfig.primaryTime(config.bossesWindows))
+    }
+    LaunchedEffect(config.restMinutes, config.farmWindows, config.bossesWindows) {
+        restText = config.restMinutes.toString()
+        spotTimeText = ModeRotationConfig.primaryTime(config.farmWindows)
+        bossesTimeText = ModeRotationConfig.primaryTime(config.bossesWindows)
+    }
+
+    fun persist(update: ModeRotationConfig.() -> ModeRotationConfig) {
+        if (profile == null) return
+        ProfileRepository.setModeRotationConfig(profileFilename, config.update())
+    }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CompactInfoTitle(
+                    title = stringResource(R.string.profile_mode_rotation_title),
+                    info = stringResource(R.string.profile_mode_rotation_hint),
+                    modifier = Modifier.weight(1f),
+                )
+                if (enabled) {
+                    CompactDropdown(
+                        selected = strategyLabels[
+                            strategies.indexOf(config.strategy).coerceAtLeast(0),
+                        ],
+                        options = strategyLabels,
+                        enabled = profile != null,
+                        modifier = Modifier.width(130.dp),
+                        onSelect = { index ->
+                            persist { copy(strategy = strategies[index]) }
+                        },
+                    )
+                }
+                Switch(
+                    checked = enabled,
+                    onCheckedChange = { on ->
+                        if (on) {
+                            val segment = if (profile?.isFarmBossesMode() == true) {
+                                ModeRotationConfig.SEGMENT_BOSSES
+                            } else {
+                                ModeRotationConfig.SEGMENT_REST
+                            }
+                            persist {
+                                copy(
+                                    enabled = true,
+                                    segment = segment,
+                                    lapCompletePending = false,
+                                )
+                            }
+                        } else {
+                            persist { copy(enabled = false) }
+                        }
+                    },
+                    enabled = profile != null,
+                )
+            }
+            if (enabled) {
+                when (config.strategy) {
+                    ModeRotationStrategy.MAP_LAP -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = restText,
+                                onValueChange = {
+                                    restText = it.filter { ch -> ch.isDigit() }.take(4)
+                                },
+                                modifier = Modifier.weight(0.36f),
+                                enabled = profile != null,
+                                singleLine = true,
+                                label = {
+                                    Text(stringResource(R.string.profile_mode_rotation_rest_label))
+                                },
+                            )
+                            CompactInfoButton(
+                                title = stringResource(R.string.profile_mode_rotation_rest_label),
+                                info = stringResource(
+                                    R.string.profile_mode_rotation_rest_hint,
+                                    ModeRotationConfig.MIN_REST_MINUTES,
+                                    ModeRotationConfig.MAX_REST_MINUTES,
+                                ),
+                            )
+                            OutlinedButton(
+                                onClick = {
+                                    val minutes = restText.toIntOrNull() ?: return@OutlinedButton
+                                    persist {
+                                        copy(
+                                            restMinutes = minutes.coerceIn(
+                                                ModeRotationConfig.MIN_REST_MINUTES,
+                                                ModeRotationConfig.MAX_REST_MINUTES,
+                                            ),
+                                        )
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(0.64f)
+                                    .height(38.dp),
+                                enabled = profile != null && restText.toIntOrNull() != null,
+                            ) {
+                                Text(stringResource(R.string.profile_mode_rotation_rest_save))
+                            }
+                        }
+                    }
+                    ModeRotationStrategy.CLOCK -> {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            OutlinedTextField(
+                                value = spotTimeText,
+                                onValueChange = { raw ->
+                                    val formatted = ModeRotationConfig.formatHhMmInput(raw)
+                                    spotTimeText = formatted
+                                    if (ModeRotationConfig.isValidHhMm(formatted)) {
+                                        persist {
+                                            copy(farmWindows = listOf(formatted))
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                enabled = profile != null,
+                                singleLine = true,
+                                placeholder = { Text("HH:MM") },
+                                label = {
+                                    Text(stringResource(R.string.profile_mode_rotation_spot_time))
+                                },
+                            )
+                            OutlinedTextField(
+                                value = bossesTimeText,
+                                onValueChange = { raw ->
+                                    val formatted = ModeRotationConfig.formatHhMmInput(raw)
+                                    bossesTimeText = formatted
+                                    if (ModeRotationConfig.isValidHhMm(formatted)) {
+                                        persist {
+                                            copy(bossesWindows = listOf(formatted))
+                                        }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                enabled = profile != null,
+                                singleLine = true,
+                                placeholder = { Text("HH:MM") },
+                                label = {
+                                    Text(stringResource(R.string.profile_mode_rotation_bosses_time))
+                                },
+                            )
+                            CompactInfoButton(
+                                title = stringResource(R.string.profile_mode_rotation_clock),
+                                info = stringResource(R.string.profile_mode_rotation_time_hint),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = stringResource(R.string.profile_mode_rotation_preview_note),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun CombatFocusConfigCard(
     profile: BotProfile?,

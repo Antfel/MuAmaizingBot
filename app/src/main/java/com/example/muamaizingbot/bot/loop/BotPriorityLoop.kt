@@ -114,6 +114,38 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
+        when (
+            val rotation = ModeRotationGate.takePendingNavigation()
+                ?: ModeRotationGate.maybeApply(profile).also { result ->
+                    if (result == ModeRotationGate.ApplyResult.SWITCHED_TO_FARM ||
+                        result == ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES
+                    ) {
+                        // Handled in this iteration — don't leave a duplicate pending nav.
+                        ModeRotationGate.clearPendingNavigation()
+                    }
+                }
+        ) {
+            ModeRotationGate.ApplyResult.SWITCHED_TO_FARM -> {
+                Log.d(TAG, "[LOOP] branch=mode_rotation → farm")
+                BotDiagnosticJournal.record(TAG, "branch=mode_rotation_farm")
+                consecutiveFarmSoftFails = 0
+                lastSpotOk = false
+                forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: profile)
+                return navigateToFarm("mode-rotation", skipAuto = false)
+            }
+            ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES -> {
+                Log.d(TAG, "[LOOP] branch=mode_rotation → farm_bosses")
+                BotDiagnosticJournal.record(TAG, "branch=mode_rotation_bosses")
+                consecutiveFarmSoftFails = 0
+                lastSpotOk = false
+                forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: profile)
+                return navigateToBossCheckpoint("mode-rotation")
+            }
+            ModeRotationGate.ApplyResult.DEFERRED,
+            ModeRotationGate.ApplyResult.NONE,
+            -> Unit
+        }
+
         // Close leftover Gear/Store/map/inventory before elf/potion/inventory/pet probes.
         val hudClear = HudValidationGate.ensureClearForHudProbe()
         if (!hudClear) {
@@ -136,8 +168,9 @@ object BotPriorityLoop {
             if (!PotionPurchaseActions.handleEmptyPotions()) {
                 return recoveryOrError("potion-failed")
             }
-            // Teleport shop leaves Farm Bosses off-map; return to checkpoint.
-            if (profile.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
+            applyModeRotationAfterAction()?.let { return it }
+            val afterPotion = ProfileRepository.currentProfile.value ?: profile
+            if (afterPotion.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
                 return navigateToBossCheckpoint("post-potion")
             }
             return IterationResult.OK
@@ -150,7 +183,9 @@ object BotPriorityLoop {
             if (!InventoryRecycleActions.handleFullInventory()) {
                 return recoveryOrError("recycle-failed")
             }
-            if (profile.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
+            applyModeRotationAfterAction()?.let { return it }
+            val afterRecycle = ProfileRepository.currentProfile.value ?: profile
+            if (afterRecycle.isFarmBossesMode() && !MapCheckActions.isInConfiguredMap()) {
                 return navigateToBossCheckpoint("post-recycle")
             }
             return IterationResult.OK
@@ -516,6 +551,7 @@ object BotPriorityLoop {
         if (!ElfBuffNavigationActions.goToElfBuffAndReturn()) {
             return recoveryOrError("elf-failed-$reason")
         }
+        applyModeRotationAfterAction()?.let { return it }
         if (!ElfBuffCheckActions.hasElfBuff()) {
             ElfBuffSeekGate.noteSeekFailed()
         }
@@ -583,6 +619,7 @@ object BotPriorityLoop {
             if (!PotionPurchaseActions.handleEmptyPotions()) {
                 return recoveryOrError("boss-$reason-potion")
             }
+            applyModeRotationAfterAction()?.let { return it }
         }
 
         if (InventoryCheckActions.isInventoryFull()) {
@@ -590,19 +627,21 @@ object BotPriorityLoop {
             if (!InventoryRecycleActions.handleFullInventory()) {
                 return recoveryOrError("boss-$reason-recycle")
             }
+            applyModeRotationAfterAction()?.let { return it }
         }
 
         // Pet: respect effective interval. Mid-FIGHT is skipped in the main loop;
         // this is the prep window after kill/death/startup — still gated by interval.
-        val bossPet = profile.effectivePetConfig()
-        if (PetCheckGate.shouldCheck(profile)) {
+        val liveForPet = ProfileRepository.currentProfile.value ?: profile
+        val bossPet = liveForPet.effectivePetConfig()
+        if (PetCheckGate.shouldCheck(liveForPet)) {
             Log.d(
                 TAG,
                 "[LOOP] farm_bosses pet_validate reason=$reason " +
                     "intervalMin=${bossPet.petCheckIntervalMinutes} " +
                     "want=${bossPet.petType.toStorage()}",
             )
-            val pet = PetActions.validateIfEnabled(profile)
+            val pet = PetActions.validateIfEnabled(liveForPet)
             PetCheckGate.noteCheckDone()
             Log.d(
                 TAG,
@@ -617,11 +656,13 @@ object BotPriorityLoop {
             )
         }
 
-        if (ElfBuffSeekGate.shouldAttemptSeek(profile) && !ElfBuffCheckActions.hasElfBuff()) {
+        val liveForElf = ProfileRepository.currentProfile.value ?: profile
+        if (ElfBuffSeekGate.shouldAttemptSeek(liveForElf) && !ElfBuffCheckActions.hasElfBuff()) {
             Log.d(TAG, "[LOOP] farm_bosses elf buff missing reason=$reason")
             if (!ElfBuffNavigationActions.goToElfBuffAndReturn()) {
                 return recoveryOrError("boss-$reason-elf")
             }
+            applyModeRotationAfterAction()?.let { return it }
             if (!ElfBuffCheckActions.hasElfBuff()) {
                 ElfBuffSeekGate.noteSeekFailed()
             }
@@ -685,6 +726,53 @@ object BotPriorityLoop {
                 IterationResult.OK
             }
         }
+    }
+
+    /**
+     * After a long maint action ends, apply a deferred/due mode flip before returning
+     * to farm_bosses checkpoint / continuing the previous mode path.
+     */
+    private suspend fun applyModeRotationAfterAction(): IterationResult? {
+        val live = ProfileRepository.currentProfile.value ?: return null
+        val rotation = ModeRotationGate.takePendingNavigation()
+            ?: ModeRotationGate.maybeApply(live).also { result ->
+                if (result == ModeRotationGate.ApplyResult.SWITCHED_TO_FARM ||
+                    result == ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES
+                ) {
+                    ModeRotationGate.clearPendingNavigation()
+                }
+            }
+        return when (rotation) {
+            ModeRotationGate.ApplyResult.SWITCHED_TO_FARM -> {
+                Log.d(TAG, "[LOOP] branch=mode_rotation_post_action → farm")
+                forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: live)
+                navigateToFarm("mode-rotation-post-action")
+            }
+            ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES -> {
+                Log.d(TAG, "[LOOP] branch=mode_rotation_post_action → farm_bosses")
+                forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: live)
+                navigateToBossCheckpoint("mode-rotation-post-action")
+            }
+            else -> null
+        }
+    }
+
+    private suspend fun forcePetAfterModeRotation(profile: BotProfile) {
+        val pet = profile.effectivePetConfig()
+        if (!pet.enablePet) {
+            PetCheckGate.reset()
+            Log.d(TAG, "[LOOP] mode_rotation pet skipped (disabled)")
+            return
+        }
+        Log.d(
+            TAG,
+            "[LOOP] mode_rotation force pet want=${pet.petType.toStorage()} " +
+                "mode=${profile.normalizedBotMode()}",
+        )
+        PetCheckGate.reset()
+        val result = PetActions.validateIfEnabled(profile)
+        PetCheckGate.noteCheckDone()
+        Log.d(TAG, "[LOOP] mode_rotation pet result=$result want=${pet.petType.toStorage()}")
     }
 
     private suspend fun navigateToBossCheckpoint(

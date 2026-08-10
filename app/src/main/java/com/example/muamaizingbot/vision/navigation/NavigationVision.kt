@@ -412,6 +412,7 @@ object NavigationVision {
     private fun wantsCircularMask(assetPath: String): Boolean {
         val name = assetPath.substringAfterLast('/')
         return name == "close_x.png" ||
+            name == "focus_clear_x.png" ||
             name == "greater_defense.png" ||
             name == "greater_damage.png" ||
             name == "boss_focus.png" ||

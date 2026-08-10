@@ -15,22 +15,24 @@ import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.navigation.ScrollSettleWait
 import com.example.muamaizingbot.vision.roi.MuCombatRois
+import com.example.muamaizingbot.vision.roi.ScaledRoi
 import com.example.muamaizingbot.vision.store.StoreMuCoinOcr
 import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
 import kotlinx.coroutines.delay
+import kotlin.math.max
 
 /**
  * Opens Gear (via Inventory HUD), validates the equipped pet slot against the
  * profile, and if missing/wrong tries to equip from the inventory bag:
- * wait for bag icons to finish loading → find inv icon (swipe if needed) →
- * tap → Equip → re-check slot.
+ * tap Manage (sort) → wait until first bag slot leaves the teal “loading”
+ * paint → find inv icon (swipe if needed) → tap → Equip → re-check slot.
  *
  * If the pet is not in inventory, opens the MU Coin Store (HUD expand → Store),
  * buys the configured pet (same Purchase flow as Random Teleport Seal), then
- * re-opens Gear and equips (again waiting for bag load + swipe search).
+ * re-opens Gear and equips (again Manage + first-slot load gate + swipe search).
  *
- * Inventory chrome often appears before item art paints — searches never start
- * until the bag ROI has settled.
+ * Loading slots are dark teal/greenish; empty/ready slots are charcoal. The
+ * top-left bag cell is the last to finish painting — used as the ready signal.
  */
 object PetActions {
 
@@ -76,11 +78,31 @@ object PetActions {
     private const val UI_SETTLE_MS = 700L
     private const val POLL_MS = 200L
     /**
-     * Inventory item art can take several seconds to paint after the grid appears
-     * (empty slots show first). Wait for the bag to finish loading before search.
+     * Bag / first-slot / Manage measured on 5584 @ 1280×720, stored as logical
+     * ref 2560×1440 (×2). Orange bag, red slot0, green Manage.
      */
-    private const val INV_LOAD_MIN_MS = 2_000L
-    private const val INV_LOAD_SETTLE_TIMEOUT_MS = 8_000L
+    private const val INV_BAG_LEFT = 1812
+    private const val INV_BAG_TOP = 218
+    private const val INV_BAG_RIGHT = 2510
+    private const val INV_BAG_BOTTOM = 1280
+    private const val INV_SLOT0_LEFT = 1818
+    private const val INV_SLOT0_TOP = 222
+    private const val INV_SLOT0_RIGHT = 1914
+    private const val INV_SLOT0_BOTTOM = 320
+    /** Manage button center — safe to tap before icons paint (sort / no-op). */
+    private const val INV_MANAGE_TAP_X = 2420
+    private const val INV_MANAGE_TAP_Y = 1336
+
+    /** Brief pause after Manage before polling teal (sort may restart paint). */
+    private const val INV_POST_MANAGE_MS = 250L
+    private const val INV_LOAD_READY_TIMEOUT_MS = 12_000L
+    private const val INV_LOAD_READY_POLL_MS = 200L
+    private const val INV_LOAD_READY_STREAK = 2
+    /**
+     * Fraction of inset first-slot pixels that look dark-teal → still loading.
+     * Teal placeholders sit ~0.9+; empty charcoal / painted icons stay ~0–0.4.
+     */
+    private const val INV_LOADING_TEAL_RATIO = 0.45f
     /** Shorter settle after each bag swipe before probing again. */
     private const val INV_SWIPE_SETTLE_TIMEOUT_MS = 2_500L
     private const val INV_ICON_LOAD_TIMEOUT_MS = 2_500L
@@ -603,18 +625,104 @@ object PetActions {
     }
 
     /**
-     * Bag chrome can appear before item sprites paint. Hold a minimum delay, then
-     * wait until the bag ROI stops changing so search/swipe does not run on empty
-     * placeholders.
+     * Sort bag (Manage) then wait until the top-left slot leaves teal loading paint.
+     * Manage is safe before icons load; if already sorted it is a no-op.
      */
     private suspend fun waitForInventoryIconsLoaded() {
-        Log.d(TAG, "[PET] waiting for inventory icon load (min=${INV_LOAD_MIN_MS}ms)")
-        delay(BotTiming.ms(INV_LOAD_MIN_MS, BotTimingCategory.SCREEN_LOAD))
-        val settled = waitForInventoryBagSettled(
-            timeoutMs = BotTiming.ms(INV_LOAD_SETTLE_TIMEOUT_MS, BotTimingCategory.SCREEN_LOAD),
-            label = "pet_inv_initial_load",
+        tapInventoryManage()
+        delay(BotTiming.ms(INV_POST_MANAGE_MS, BotTimingCategory.POST_TAP))
+        val ready = waitForFirstSlotIconsReady(
+            timeoutMs = BotTiming.ms(INV_LOAD_READY_TIMEOUT_MS, BotTimingCategory.SCREEN_LOAD),
         )
-        Log.d(TAG, "[PET] inventory icons ready settled=$settled — start search")
+        Log.d(TAG, "[PET] inventory icons ready firstSlotReady=$ready — start search")
+    }
+
+    private suspend fun tapInventoryManage() {
+        Log.d(TAG, "[PET] tap Inventory Manage (sort)")
+        NavigationVision.tap(INV_MANAGE_TAP_X, INV_MANAGE_TAP_Y, label = "inv_manage")
+    }
+
+    /**
+     * Top-left bag cell is the last to finish painting. Poll until dark-teal
+     * loading ratio drops below [INV_LOADING_TEAL_RATIO] for [INV_LOAD_READY_STREAK]
+     * consecutive samples.
+     */
+    private suspend fun waitForFirstSlotIconsReady(timeoutMs: Long): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        var readyStreak = 0
+        var attempt = 0
+        while (System.currentTimeMillis() < deadline) {
+            attempt++
+            val frame = NavigationVision.captureFrame() ?: run {
+                delay(INV_LOAD_READY_POLL_MS)
+                continue
+            }
+            val ratio = try {
+                firstSlotLoadingTealRatio(frame)
+            } finally {
+                frame.recycle()
+            }
+            val loading = ratio >= INV_LOADING_TEAL_RATIO
+            if (loading) {
+                readyStreak = 0
+            } else {
+                readyStreak++
+            }
+            Log.d(
+                TAG,
+                "[PET] first-slot load attempt=$attempt teal=${"%.3f".format(ratio)} " +
+                    "thr=$INV_LOADING_TEAL_RATIO loading=$loading streak=$readyStreak/" +
+                    "$INV_LOAD_READY_STREAK",
+            )
+            if (readyStreak >= INV_LOAD_READY_STREAK) {
+                return true
+            }
+            delay(INV_LOAD_READY_POLL_MS)
+        }
+        Log.w(TAG, "[PET] first-slot load timeout — search anyway")
+        return false
+    }
+
+    /**
+     * Ratio of inset first-slot pixels that look like the teal loading placeholder
+     * (cyan cast on a dark cell). Charcoal empty + painted icons stay low.
+     */
+    fun firstSlotLoadingTealRatio(frame: Bitmap): Float {
+        val roi = inventoryFirstSlotRoi(frame.width, frame.height)
+        if (roi.width() < 8 || roi.height() < 8) {
+            return 1f
+        }
+        // Inset ~20% to avoid cell chrome / borders.
+        val insetX = max(2, roi.width() / 5)
+        val insetY = max(2, roi.height() / 5)
+        val left = (roi.left + insetX).coerceIn(0, frame.width - 1)
+        val top = (roi.top + insetY).coerceIn(0, frame.height - 1)
+        val right = (roi.right - insetX).coerceIn(left + 1, frame.width)
+        val bottom = (roi.bottom - insetY).coerceIn(top + 1, frame.height)
+        val w = right - left
+        val h = bottom - top
+        val pixels = IntArray(w * h)
+        frame.getPixels(pixels, 0, w, left, top, w, h)
+        var teal = 0
+        for (c in pixels) {
+            val r = (c shr 16) and 0xff
+            val g = (c shr 8) and 0xff
+            val b = c and 0xff
+            if (isLoadingTealPixel(r, g, b)) {
+                teal++
+            }
+        }
+        return teal.toFloat() / pixels.size.toFloat()
+    }
+
+    /** Dark teal/cyan marble used while bag icons are still painting. */
+    internal fun isLoadingTealPixel(r: Int, g: Int, b: Int): Boolean {
+        val peak = max(r, max(g, b))
+        if (peak > 85) {
+            return false
+        }
+        // Strong cyan cast: G≈B and both well above R (charcoal empty is neutral).
+        return g >= r + 12 && b >= r + 12 && kotlin.math.abs(g - b) <= 12
     }
 
     private suspend fun waitForInventoryBagSettled(
@@ -872,11 +980,25 @@ object PetActions {
 
     /** Right-side Inventory bag grid when Gear+Inventory dual layout is open. */
     fun inventorySearchRoi(frameWidth: Int, frameHeight: Int): Rect {
-        return Rect(
-            (frameWidth * 0.68f).toInt().coerceIn(0, frameWidth),
-            (frameHeight * 0.08f).toInt().coerceIn(0, frameHeight),
-            (frameWidth * 0.98f).toInt().coerceIn(0, frameWidth),
-            (frameHeight * 0.82f).toInt().coerceIn(0, frameHeight),
+        return ScaledRoi.fromRefRect(
+            INV_BAG_LEFT,
+            INV_BAG_TOP,
+            INV_BAG_RIGHT,
+            INV_BAG_BOTTOM,
+            frameWidth,
+            frameHeight,
+        )
+    }
+
+    /** Top-left bag cell — last to leave teal loading paint (ready gate). */
+    fun inventoryFirstSlotRoi(frameWidth: Int, frameHeight: Int): Rect {
+        return ScaledRoi.fromRefRect(
+            INV_SLOT0_LEFT,
+            INV_SLOT0_TOP,
+            INV_SLOT0_RIGHT,
+            INV_SLOT0_BOTTOM,
+            frameWidth,
+            frameHeight,
         )
     }
 

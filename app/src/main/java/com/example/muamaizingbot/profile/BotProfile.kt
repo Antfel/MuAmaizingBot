@@ -50,6 +50,11 @@ data class BotProfile(
     /** When false, only overlay "Cast" / force requests cast. */
     val elfBuffAutoCast: Boolean = true,
     val killBossesConfig: KillBossesConfig = KillBossesConfig(),
+    /**
+     * Optional Farm ↔ Farm Bosses rotation (UI + persistence).
+     * Bot runtime does not apply this yet.
+     */
+    val modeRotation: ModeRotationConfig = ModeRotationConfig(),
 ) {
     val fileStem: String
         get() = filename.removeSuffix(".json")
@@ -115,6 +120,7 @@ data class BotProfile(
                 },
             )
             put("kill_bosses_config", killBossesConfig.toJson())
+            put("mode_rotation", modeRotation.toJson())
             put("map", map)
             put("wire", wire)
             put("spot", spot)
@@ -178,6 +184,7 @@ data class BotProfile(
                     json.optJSONObject("kill_bosses_config"),
                     fallbackPet = generalPet,
                 ),
+                modeRotation = ModeRotationConfig.fromJson(json.optJSONObject("mode_rotation")),
             )
         }
 

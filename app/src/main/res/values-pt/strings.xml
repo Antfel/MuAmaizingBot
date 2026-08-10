@@ -151,6 +151,18 @@
     <string name="profile_mode_farm">Farm</string>
     <string name="profile_mode_elf">Elf Buff</string>
     <string name="profile_mode_bosses">Bosses</string>
+    <string name="profile_mode_rotation_title">Programação</string>
+    <string name="profile_mode_rotation_hint">Alterna Farm e Farm Bosses. Ciclos = terminar mapas de bosses e descansar no farm spot. Horário = horas Spot/Bosses (HH:MM, local).</string>
+    <string name="profile_mode_rotation_strategy">Estratégia</string>
+    <string name="profile_mode_rotation_map_lap">Ciclos</string>
+    <string name="profile_mode_rotation_clock">Horário</string>
+    <string name="profile_mode_rotation_rest_label">Descanso no spot (min)</string>
+    <string name="profile_mode_rotation_rest_hint">Após completar uma volta dos mapas de Farm Bosses, farma no spot por estes minutos (%1$d–%2$d) antes de voltar aos bosses.</string>
+    <string name="profile_mode_rotation_rest_save">Salvar descanso</string>
+    <string name="profile_mode_rotation_spot_time">Spot</string>
+    <string name="profile_mode_rotation_bosses_time">Bosses</string>
+    <string name="profile_mode_rotation_time_hint">Formato HH:MM (hora local do dispositivo).</string>
+    <string name="profile_mode_rotation_preview_note">Ciclos: após uma volta de mapas → spot. Horário: Spot/Bosses em HH:MM (hora local).</string>
     <string name="profile_war_post_title">War event (post no Start)</string>
     <string name="profile_buff_post_title">Buff post (Farm Spot)</string>
     <string name="profile_delete">Apagar perfil</string>

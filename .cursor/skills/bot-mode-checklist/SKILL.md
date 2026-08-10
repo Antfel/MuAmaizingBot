@@ -27,6 +27,7 @@ Modes (`BotMode` / `bot_mode`):
 - [ ] Logs include `mode=` or branch that makes the destination obvious (`boss checkpoint` vs `go_to_active_farm_spot`).
 - [ ] War skips map validation; do not force farm OCR/spot checks there.
 - [ ] `farm_bosses` **FIGHT**: inventory + pet deferred to post-kill / post-revive / startup general checks. Potions + elf buff are owned by CombatFocus spam interrupt (pause spam → action → resume; after elf, return to stored boss target).
+- [ ] **Programación** (`ModeRotationGate`): mode flips deferred during FIGHT / UI action / nav-busy (elf, potions, seal shop). After long maint, re-apply flip before returning to checkpoint. On mode flip: force pet validate for the new mode’s pet.
 
 ## Code hotspots
 

@@ -13,15 +13,19 @@ import kotlinx.coroutines.delay
 /**
  * Acquire elite/boss focus via Focus Boss (skull).
  * Fight validation uses [BOSS_FOCUS] (circular top-bar icon; circularMask).
+ *
+ * [BOSS_FOCUS] is a lower-face crop of the circular emblem (eyes + chin). The top
+ * horns are omitted so a nearby golden mob's nameplate ("letrero") that sits over
+ * the emblem does not cause false negatives on acquire or mid-fight.
  */
 object BossTargetingActions {
 
     private const val TAG = "FarmBosses"
     private const val FOCUS_BOSS = "templates/mu/ui/targeting/focus_elite_skull.png"
-    /** Top boss-bar circular emblem — stays while HP drops. */
+    /** Top boss-bar circular emblem (lower face) — stays while HP drops. */
     const val BOSS_FOCUS = "templates/mu/ui/targeting/boss_focus.png"
     private const val FOCUS_BOSS_THRESHOLD = 0.70f
-    /** Slightly below 0.90 — mid-fight VFX dips the circular emblem score. */
+    /** Slightly below 0.90 — mid-fight VFX / partial golden overlay dips score. */
     private const val BOSS_FOCUS_THRESHOLD = 0.85f
     private const val FALLBACK_BOSS_X_1280 = 1115
     private const val FALLBACK_BOSS_Y_720 = 656
@@ -68,6 +72,7 @@ object BossTargetingActions {
             )
             return true
         }
+        NavigationVision.logBestScore(BOSS_FOCUS, focusRoi())
         return false
     }
 
