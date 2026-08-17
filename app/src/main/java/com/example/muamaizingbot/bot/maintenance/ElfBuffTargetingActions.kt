@@ -406,24 +406,25 @@ object ElfBuffTargetingActions {
     }
 
     /**
-     * Spam Focus (person) until focus HUD appears, or [maxAttempts] exhausted.
+     * Spam Focus (person) until a player HUD appears under All, or [maxAttempts] exhausted.
+     * Acquire = portrait PJ, or red HP bar when portrait is not EMPTY/BOSS.
      */
     suspend fun spamFocusUntilRedHud(maxAttempts: Int = FOCUS_SPAM_MAX): Boolean {
-        if (ElfBuffFocusHud.isRedHpBarVisible()) {
-            Log.d(TAG, "[ELF_GIVER] red focus HUD already visible under All")
+        if (ElfBuffFocusHud.hasAcquiredFocusUnderAll()) {
+            Log.d(TAG, "[ELF_GIVER] player focus HUD already visible under All")
             return true
         }
         val roi = barRoi()
         for (attempt in 1..maxAttempts) {
             if (BotController.state.value != BotRuntimeState.RUNNING) {
                 Log.d(TAG, "[ELF_GIVER] focus spam aborted — bot not running at attempt=$attempt")
-                return ElfBuffFocusHud.isRedHpBarVisible()
+                return ElfBuffFocusHud.hasAcquiredFocusUnderAll()
             }
             val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_TEMPLATE_THRESHOLD, roi)
             if (match == null) {
                 Log.w(TAG, "[ELF_GIVER] focus_player miss attempt=$attempt/$maxAttempts")
                 delay(BotTiming.ms(POST_FOCUS_TAP_MS, BotTimingCategory.POST_TAP))
-                if (ElfBuffFocusHud.isRedHpBarVisible()) return true
+                if (ElfBuffFocusHud.hasAcquiredFocusUnderAll()) return true
                 continue
             }
             Log.d(
@@ -435,13 +436,13 @@ object ElfBuffTargetingActions {
                 Log.w(TAG, "[ELF_GIVER] focus_player tap failed")
             }
             delay(BotTiming.ms(POST_FOCUS_TAP_MS, BotTimingCategory.POST_TAP))
-            if (ElfBuffFocusHud.isRedHpBarVisible()) {
-                Log.d(TAG, "[ELF_GIVER] red focus HUD under All after attempt=$attempt")
+            if (ElfBuffFocusHud.hasAcquiredFocusUnderAll()) {
+                Log.d(TAG, "[ELF_GIVER] player focus HUD under All after attempt=$attempt")
                 return true
             }
         }
-        val visible = ElfBuffFocusHud.isRedHpBarVisible()
-        Log.d(TAG, "[ELF_GIVER] focus spam done redHudVisible=$visible")
+        val visible = ElfBuffFocusHud.hasAcquiredFocusUnderAll()
+        Log.d(TAG, "[ELF_GIVER] focus spam done acquired=$visible")
         return visible
     }
 }

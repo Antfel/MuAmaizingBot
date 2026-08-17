@@ -5,15 +5,17 @@ import android.util.Log
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.isElfBuffGiverMode
+import com.example.muamaizingbot.vision.focus.FocusPortraitClassifier
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
 /**
- * Giver cast (UI): All → spam Focus → Union → classify HP bar → buff or retry.
+ * Giver cast (UI): All → spam Focus → Union → portrait + HP bar → buff or retry.
  *
  * After Union:
- * - green HP bar = ally → Damage+Defense → Focus Boss → ensure All
- * - red HP bar = not ally → Focus Boss → ensure All → seek new focus
+ * - portrait PJ + green HP = ally → Damage+Defense → Focus Boss → ensure All
+ * - red HP = not ally → Focus Boss → ensure All → seek new focus
+ * - portrait EMPTY (+ optional bar FP) → do not buff
  *
  * PK All is also forced once at giver startup ([BotPriorityLoop.runStartup]).
  */
@@ -22,6 +24,9 @@ object ElfBuffCastActions {
     private const val TAG = "ElfBuffCast"
     private const val BETWEEN_SKILLS_MS = 350L
     private const val POST_UNION_MS = 280L
+    /** Re-read if the HUD is empty / bar not ready yet; red and green decide immediately. */
+    private const val UNION_CLASSIFY_ATTEMPTS = 5
+    private const val UNION_CLASSIFY_POLL_MS = 220L
     /** Wait for both buff cast animations before Focus Boss, or focus drops mid-cast. */
     private const val POST_CAST_MS = 1_000L
     private const val POST_UNFOCUS_MS = 220L
@@ -80,7 +85,7 @@ object ElfBuffCastActions {
             ElfBuffDebugDump.saveRaw("02_t${tryIndex}_pk_all")
 
             if (!ElfBuffTargetingActions.spamFocusUntilRedHud()) {
-                Log.d(TAG, "[ELF_GIVER] no red focus HUD under All after spam try=$tryIndex")
+                Log.d(TAG, "[ELF_GIVER] no player focus HUD under All after spam try=$tryIndex")
                 ElfBuffDebugDump.saveRaw("03_t${tryIndex}_no_focus")
                 continue
             }
@@ -94,9 +99,9 @@ object ElfBuffCastActions {
             delay(POST_UNION_MS)
             ElfBuffDebugDump.saveRaw("04_t${tryIndex}_pk_union")
 
-            when (ElfBuffFocusHud.classifyUnionFocus()) {
-                ElfBuffFocusHud.HpBarColor.GREEN -> {
-                    Log.d(TAG, "[ELF_GIVER] ally confirmed (green HP) try=$tryIndex")
+            when (confirmAllyAfterUnion(tryIndex)) {
+                UnionAlly.ALLY -> {
+                    Log.d(TAG, "[ELF_GIVER] ally confirmed try=$tryIndex")
                     val castOk = castMappedSkillsWithDebug(tryIndex)
                     delay(POST_CAST_MS)
                     ElfBuffDebugDump.saveRaw("06_t${tryIndex}_after_cast")
@@ -118,13 +123,13 @@ object ElfBuffCastActions {
                     Log.i(TAG, "[ELF_DEBUG] session=${ElfBuffDebugDump.sessionPath()}")
                     return castOk
                 }
-                ElfBuffFocusHud.HpBarColor.RED -> {
-                    Log.d(TAG, "[ELF_GIVER] still red after Union — Focus Boss then All + new focus")
-                    ElfBuffDebugDump.saveRaw("05_t${tryIndex}_not_ally_red")
+                UnionAlly.NOT_ALLY -> {
+                    Log.d(TAG, "[ELF_GIVER] not ally after Union — Focus Boss then All + new focus")
+                    ElfBuffDebugDump.saveRaw("05_t${tryIndex}_not_ally")
                     clearFocusThenEnsureAll()
                 }
-                null -> {
-                    Log.d(TAG, "[ELF_GIVER] no HP bar after Union — Focus Boss then All + new focus")
+                UnionAlly.GONE -> {
+                    Log.d(TAG, "[ELF_GIVER] no player HUD after Union — Focus Boss then All + new focus")
                     ElfBuffDebugDump.saveRaw("05_t${tryIndex}_no_hud")
                     clearFocusThenEnsureAll()
                 }
@@ -138,6 +143,51 @@ object ElfBuffCastActions {
         }
         Log.i(TAG, "[ELF_DEBUG] session=${ElfBuffDebugDump.sessionPath()}")
         return false
+    }
+
+    private enum class UnionAlly { ALLY, NOT_ALLY, GONE }
+
+    /**
+     * After Union: need a player face AND a green bar to buff.
+     * EMPTY + bar = false positive. PJ without color yet = wait, do not abort once.
+     */
+    private suspend fun confirmAllyAfterUnion(tryIndex: Int): UnionAlly {
+        var last: ElfBuffFocusHud.FocusHudSnapshot? = null
+        repeat(UNION_CLASSIFY_ATTEMPTS) { attempt ->
+            val snap = ElfBuffFocusHud.readFocusHud()
+            last = snap
+            Log.d(
+                TAG,
+                "[ELF_GIVER] union hud try=$tryIndex " +
+                    "poll=${attempt + 1}/$UNION_CLASSIFY_ATTEMPTS " +
+                    "portrait=${snap.portrait} bar=${snap.bar}",
+            )
+            when (val decision = unionDecision(snap)) {
+                UnionAlly.ALLY, UnionAlly.NOT_ALLY -> return decision
+                UnionAlly.GONE -> delay(UNION_CLASSIFY_POLL_MS)
+            }
+        }
+        val snap = last ?: return UnionAlly.GONE
+        val decided = unionDecision(snap)
+        if (decided == UnionAlly.GONE && snap.isPlayerHud() && snap.bar == null) {
+            Log.d(TAG, "[ELF_GIVER] union still PJ without bar — skip buff (no blind cast)")
+        }
+        return decided
+    }
+
+    private fun unionDecision(snap: ElfBuffFocusHud.FocusHudSnapshot): UnionAlly {
+        if (snap.isBoss()) return UnionAlly.NOT_ALLY
+        if (snap.isEmpty()) return UnionAlly.GONE
+        val playerOrUnknown =
+            snap.isPlayerHud() ||
+                snap.portrait == FocusPortraitClassifier.Kind.UNKNOWN
+        return when (snap.bar) {
+            ElfBuffFocusHud.HpBarColor.GREEN ->
+                if (playerOrUnknown) UnionAlly.ALLY else UnionAlly.GONE
+            ElfBuffFocusHud.HpBarColor.RED ->
+                if (playerOrUnknown) UnionAlly.NOT_ALLY else UnionAlly.GONE
+            null -> UnionAlly.GONE
+        }
     }
 
     /**

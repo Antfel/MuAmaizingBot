@@ -22,6 +22,8 @@ data class FarmLocation(
      * Defaults to the map's [com.example.muamaizingbot.maps.MapDefinition.isCross] when omitted in JSON.
      */
     val isCross: Boolean = true,
+    /** Pixel space for [x]/[y]: always [COORD_REF_2560] after load (UI REF). */
+    val coordRefVersion: Int = COORD_REF_2560,
 ) {
     fun toJson(): JSONObject {
         return JSONObject().apply {
@@ -39,6 +41,7 @@ data class FarmLocation(
             put("farm_radius", farmRadius)
             put("lost_radius", lostRadius)
             put("is_cross", isCross)
+            put("coord_ref_version", COORD_REF_2560)
         }
     }
 
@@ -50,7 +53,22 @@ data class FarmLocation(
     }
 
     companion object {
+        const val COORD_REF_2560 = 2560
+        const val COORD_REF_1280 = 1280
+
         fun fromJson(json: JSONObject): FarmLocation {
+            var x = json.getInt("x")
+            var y = json.getInt("y")
+            val storedVersion = json.optInt("coord_ref_version", 0).takeIf {
+                json.has("coord_ref_version")
+            }
+            // Previous APK tagged native-1280 spots (and halved 2560 leftovers) as 1280.
+            // Convert those back to UI REF 2560 once. Untagged spots stay as authored.
+            val from1280 = storedVersion == COORD_REF_1280
+            if (from1280) {
+                x *= 2
+                y *= 2
+            }
             return FarmLocation(
                 id = json.getString("id"),
                 profile = json.getString("profile"),
@@ -58,8 +76,8 @@ data class FarmLocation(
                 name = json.optString("name", "Farm Spot"),
                 map = json.getString("map"),
                 wire = json.getInt("wire"),
-                x = json.getInt("x"),
-                y = json.getInt("y"),
+                x = x,
+                y = y,
                 coordX = json.optInt("coord_x").takeIf { json.has("coord_x") && !json.isNull("coord_x") },
                 coordY = json.optInt("coord_y").takeIf { json.has("coord_y") && !json.isNull("coord_y") },
                 arrivalRadius = json.optInt("arrival_radius", 5),
@@ -79,6 +97,7 @@ data class FarmLocation(
                         }.getOrNull() ?: true
                     }
                 },
+                coordRefVersion = COORD_REF_2560,
             )
         }
     }

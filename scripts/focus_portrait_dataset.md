@@ -4,6 +4,26 @@ Branch: `feature/focus-portrait-detector`
 
 Goal: replace fragile `clear_x` CCORR-alone “enemy still focused” with a **portrait-in-HUD** signal (train offline, light runtime).
 
+## Portrait ROI rule (important)
+
+Event skins usually decorate the **circular rim / frame**, not the whole face.
+
+- **Mark / train on the INNER FACE only** (eyes–nose–mouth band inside the disk).
+- **Do not** include: metallic ring, event chrome, clear-X badge on the rim.
+- Outer circle may still be used later as a search band; the **classifier crop** should stay face-inner so it stays skin-agnostic.
+
+### Locked from user mark (5584 capture `110551_113_gui_roi`)
+
+Orange face circle on HUD crop → screen @1280×720:
+
+| | value |
+|--|--|
+| Circle center | `(548, 42)` |
+| Radius (inner) | `17` |
+| Face rect (train crop) | `(532, 26)–(564, 58)` → **32×32** |
+
+Verify overlay: `logs/2026-08-10/focus_portrait_dataset/crops/face_roi_verify.png`
+
 ## Labels
 
 | Label | Meaning |

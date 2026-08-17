@@ -188,7 +188,8 @@ object FarmBossesLoop {
         val fightInProgress = BossHuntState.fightStartedAtMs != 0L
 
         // Enemy player focus takes priority over boss-focus-lost kill detection.
-        // Boss panel also trips isEnemyFocusVisible (red/clear-X) — if emblem is up,
+        // Boss panel also trips isEnemyFocusVisible historically via clear-X —
+        // portrait classifier separates boss vs PJ; if boss is up, stay on boss path.
         // mark fight started so we never fall back into arrival-probe after Auto soft-fail.
         if (profile.enableCombatFocus &&
             (CombatFocusActions.isEngagingEnemy() || ElfBuffFocusHud.isEnemyFocusVisible())

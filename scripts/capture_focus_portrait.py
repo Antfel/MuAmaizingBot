@@ -29,6 +29,11 @@ LABELS = ("pj", "boss", "empty", "other", "pending")
 # Covers emblem/portrait + clear-X area of the top-center focus HUD.
 HUD_CROP = (470, 0, 620, 90)  # left, top, right, bottom
 
+# Locked inner-face train crop from user orange mark (see focus_portrait_dataset.md).
+FACE_INNER = (532, 26, 564, 58)  # 32×32 @ 1280×720
+FACE_CENTER = (548, 42)
+FACE_RADIUS = 17
+
 
 def run(cmd: list[str]) -> None:
     subprocess.check_call(cmd)
