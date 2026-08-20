@@ -1,6 +1,5 @@
 package com.example.muamaizingbot.bot.maintenance
 
-import android.graphics.Bitmap
 import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.vision.coord.RefCoords
@@ -27,13 +26,7 @@ object ElfBuffFocusHud {
 
     private const val HP_BAR_RED = "templates/mu/ui/focus_hp_bar.png"
     private const val HP_BAR_GREEN = "templates/mu/ui/focus_hp_bar_green.png"
-    /** Red All-bar and War/combat green: bar-only, keep strict. */
     private const val HP_BAR_THRESHOLD = 0.80f
-    /**
-     * Giver Union green: portrait already required. Template is noisy
-     * (often just under 0.80 while the face is clearly PJ).
-     */
-    private const val HP_BAR_GREEN_THRESHOLD_GIVER = 0.70f
 
     /** @deprecated Kept for asset/ROI reference; combat no longer matches this template. */
     const val FOCUS_CLEAR_X = "templates/mu/ui/focus_clear_x.png"
@@ -64,33 +57,6 @@ object ElfBuffFocusHud {
     private const val CLEAR_X_ROI_BOTTOM_1280 = 54
 
     enum class HpBarColor { RED, GREEN }
-
-    /**
-     * One-frame HUD read: portrait class + HP-bar color.
-     * EMPTY + a bar match is treated as chrome FP (do not acquire / do not buff).
-     */
-    data class FocusHudSnapshot(
-        val portrait: FocusPortraitClassifier.Kind,
-        val bar: HpBarColor?,
-    ) {
-        /** Player face in the slot — HUD is taken even if the bar template missed. */
-        fun isPlayerHud(): Boolean = portrait == FocusPortraitClassifier.Kind.PJ
-
-        fun isEmpty(): Boolean = portrait == FocusPortraitClassifier.Kind.EMPTY
-
-        fun isBoss(): Boolean = portrait == FocusPortraitClassifier.Kind.BOSS
-
-        /**
-         * Under PK All: need a player face **and** a red (or green) bar.
-         * Portrait-only PJ without a bar used to open Union too early (All↔Union flicker).
-         */
-        fun acquiredUnderAll(): Boolean {
-            if (isEmpty() || isBoss()) return false
-            if (bar == null) return false
-            if (isPlayerHud()) return true
-            return bar == HpBarColor.RED
-        }
-    }
 
     fun hudRoi(frameWidth: Int, frameHeight: Int): Rect {
         return ScaledRoi.fromRefRect(
@@ -196,36 +162,6 @@ object ElfBuffFocusHud {
     }
 
     /**
-     * Portrait + HP bar on the same capture. Does not recycle the frame
-     * ([NavigationVision.captureFrame] is owned by ScreenCaptureManager).
-     */
-    suspend fun readFocusHud(): FocusHudSnapshot {
-        val frame = NavigationVision.captureFrame()
-        if (frame == null) {
-            Log.w(TAG, "[ELF_GIVER] hud snapshot no frame")
-            return FocusHudSnapshot(FocusPortraitClassifier.Kind.UNKNOWN, null)
-        }
-        val portrait = FocusPortraitClassifier.classify(frame)
-        val bar = barColorOnFrame(
-            frame,
-            greenThreshold = HP_BAR_GREEN_THRESHOLD_GIVER,
-            logGreenMiss = portrait == FocusPortraitClassifier.Kind.PJ,
-        )
-        Log.d(TAG, "[ELF_GIVER] hud snapshot portrait=$portrait bar=$bar")
-        return FocusHudSnapshot(portrait, bar)
-    }
-
-    suspend fun hasAcquiredFocusUnderAll(): Boolean {
-        val snap = readFocusHud()
-        val hit = snap.acquiredUnderAll()
-        Log.d(
-            TAG,
-            "[ELF_GIVER] acquired_under_all=$hit portrait=${snap.portrait} bar=${snap.bar}",
-        )
-        return hit
-    }
-
-    /**
      * After switching to Union:
      * GREEN = ally, RED = still hostile / not ally, null = no HUD.
      * Uses a single capture for both templates (War mid-cross / tick classify).
@@ -233,42 +169,29 @@ object ElfBuffFocusHud {
      */
     suspend fun classifyUnionFocus(): HpBarColor? {
         val frame = NavigationVision.captureFrame() ?: return null
-        return barColorOnFrame(frame)
-    }
-
-    private fun barColorOnFrame(
-        frame: Bitmap,
-        greenThreshold: Float = HP_BAR_THRESHOLD,
-        logGreenMiss: Boolean = false,
-    ): HpBarColor? {
-        val search = hudRoi(frame.width, frame.height)
-        val green = NavigationVision.findOnFrame(frame, HP_BAR_GREEN, greenThreshold, search)
-        if (green != null) {
-            Log.d(
-                TAG,
-                "[ELF_GIVER] focus HP green at=(${green.centerX},${green.centerY}) " +
-                    "score=${"%.3f".format(green.score)} need=$greenThreshold",
-            )
-            return HpBarColor.GREEN
+        return try {
+            val green = NavigationVision.findOnFrame(frame, HP_BAR_GREEN, HP_BAR_THRESHOLD, roi())
+            if (green != null) {
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] focus HP green at=(${green.centerX},${green.centerY}) " +
+                        "score=${"%.3f".format(green.score)}",
+                )
+                return HpBarColor.GREEN
+            }
+            val red = NavigationVision.findOnFrame(frame, HP_BAR_RED, HP_BAR_THRESHOLD, roi())
+            if (red != null) {
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] focus HP red at=(${red.centerX},${red.centerY}) " +
+                        "score=${"%.3f".format(red.score)}",
+                )
+                return HpBarColor.RED
+            }
+            null
+        } finally {
+            frame.recycle()
         }
-        if (logGreenMiss) {
-            val probe = NavigationVision.probeOnFrame(frame, HP_BAR_GREEN, search)
-            Log.d(
-                TAG,
-                "[ELF_GIVER] focus HP green miss best=${"%.3f".format(probe.score)} " +
-                    "need=$greenThreshold at=(${probe.bestX},${probe.bestY})",
-            )
-        }
-        val red = NavigationVision.findOnFrame(frame, HP_BAR_RED, HP_BAR_THRESHOLD, search)
-        if (red != null) {
-            Log.d(
-                TAG,
-                "[ELF_GIVER] focus HP red at=(${red.centerX},${red.centerY}) " +
-                    "score=${"%.3f".format(red.score)}",
-            )
-            return HpBarColor.RED
-        }
-        return null
     }
 
     /**
