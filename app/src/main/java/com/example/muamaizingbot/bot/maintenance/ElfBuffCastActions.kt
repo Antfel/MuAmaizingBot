@@ -12,6 +12,7 @@ import kotlinx.coroutines.delay
  * Giver cast (UI): All → spam Focus → Union → classify HP bar → buff or retry.
  *
  * After Union:
+ * - poll HP bar a few times (late green paint on some chars)
  * - green HP bar = ally → Damage+Defense → Focus Boss → ensure All
  * - red HP bar = not ally → Focus Boss → ensure All → seek new focus
  *
@@ -22,6 +23,12 @@ object ElfBuffCastActions {
     private const val TAG = "ElfBuffCast"
     private const val BETWEEN_SKILLS_MS = 350L
     private const val POST_UNION_MS = 280L
+    /**
+     * Some chars paint the Union green bar late; null once used to clear focus.
+     * Re-read bar-only (no portrait gate). GREEN/RED decide immediately.
+     */
+    private const val UNION_CLASSIFY_ATTEMPTS = 5
+    private const val UNION_CLASSIFY_POLL_MS = 220L
     /** Wait for both buff cast animations before Focus Boss, or focus drops mid-cast. */
     private const val POST_CAST_MS = 1_000L
     private const val POST_UNFOCUS_MS = 220L
@@ -94,7 +101,7 @@ object ElfBuffCastActions {
             delay(POST_UNION_MS)
             ElfBuffDebugDump.saveRaw("04_t${tryIndex}_pk_union")
 
-            when (ElfBuffFocusHud.classifyUnionFocus()) {
+            when (classifyUnionFocusWithRetry(tryIndex)) {
                 ElfBuffFocusHud.HpBarColor.GREEN -> {
                     Log.d(TAG, "[ELF_GIVER] ally confirmed (green HP) try=$tryIndex")
                     val castOk = castMappedSkillsWithDebug(tryIndex)
@@ -138,6 +145,28 @@ object ElfBuffCastActions {
         }
         Log.i(TAG, "[ELF_DEBUG] session=${ElfBuffDebugDump.sessionPath()}")
         return false
+    }
+
+    /**
+     * After Union: poll HP bar until green/red, or budget exhausted.
+     * Null mid-window is "not painted yet" — do not clear focus on the first miss.
+     */
+    private suspend fun classifyUnionFocusWithRetry(
+        tryIndex: Int,
+    ): ElfBuffFocusHud.HpBarColor? {
+        repeat(UNION_CLASSIFY_ATTEMPTS) { attempt ->
+            val color = ElfBuffFocusHud.classifyUnionFocus()
+            Log.d(
+                TAG,
+                "[ELF_GIVER] union hud try=$tryIndex " +
+                    "poll=${attempt + 1}/$UNION_CLASSIFY_ATTEMPTS bar=$color",
+            )
+            if (color != null) return color
+            if (attempt < UNION_CLASSIFY_ATTEMPTS - 1) {
+                delay(UNION_CLASSIFY_POLL_MS)
+            }
+        }
+        return null
     }
 
     /**

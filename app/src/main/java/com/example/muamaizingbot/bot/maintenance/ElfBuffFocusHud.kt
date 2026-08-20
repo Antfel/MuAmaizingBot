@@ -27,6 +27,11 @@ object ElfBuffFocusHud {
     private const val HP_BAR_RED = "templates/mu/ui/focus_hp_bar.png"
     private const val HP_BAR_GREEN = "templates/mu/ui/focus_hp_bar_green.png"
     private const val HP_BAR_THRESHOLD = 0.80f
+    /**
+     * Union green for giver: some chars sit just under 0.80 (logs ~0.786 at
+     * the same HUD slot). Keep red strict so not-ally stays hard.
+     */
+    private const val HP_BAR_GREEN_THRESHOLD_UNION = 0.75f
 
     /** @deprecated Kept for asset/ROI reference; combat no longer matches this template. */
     const val FOCUS_CLEAR_X = "templates/mu/ui/focus_clear_x.png"
@@ -170,24 +175,40 @@ object ElfBuffFocusHud {
     suspend fun classifyUnionFocus(): HpBarColor? {
         val frame = NavigationVision.captureFrame() ?: return null
         return try {
-            val green = NavigationVision.findOnFrame(frame, HP_BAR_GREEN, HP_BAR_THRESHOLD, roi())
+            val search = roi()
+            val green = NavigationVision.findOnFrame(
+                frame,
+                HP_BAR_GREEN,
+                HP_BAR_GREEN_THRESHOLD_UNION,
+                search,
+            )
             if (green != null) {
                 Log.d(
                     TAG,
                     "[ELF_GIVER] focus HP green at=(${green.centerX},${green.centerY}) " +
-                        "score=${"%.3f".format(green.score)}",
+                        "score=${"%.3f".format(green.score)} need=$HP_BAR_GREEN_THRESHOLD_UNION",
                 )
                 return HpBarColor.GREEN
             }
-            val red = NavigationVision.findOnFrame(frame, HP_BAR_RED, HP_BAR_THRESHOLD, roi())
+            val red = NavigationVision.findOnFrame(frame, HP_BAR_RED, HP_BAR_THRESHOLD, search)
             if (red != null) {
                 Log.d(
                     TAG,
                     "[ELF_GIVER] focus HP red at=(${red.centerX},${red.centerY}) " +
-                        "score=${"%.3f".format(red.score)}",
+                        "score=${"%.3f".format(red.score)} need=$HP_BAR_THRESHOLD",
                 )
                 return HpBarColor.RED
             }
+            val greenProbe = NavigationVision.probeOnFrame(frame, HP_BAR_GREEN, search)
+            val redProbe = NavigationVision.probeOnFrame(frame, HP_BAR_RED, search)
+            Log.d(
+                TAG,
+                "[ELF_GIVER] focus HP miss greenBest=${"%.3f".format(greenProbe.score)} " +
+                    "at=(${greenProbe.bestX},${greenProbe.bestY}) " +
+                    "redBest=${"%.3f".format(redProbe.score)} " +
+                    "at=(${redProbe.bestX},${redProbe.bestY}) " +
+                    "needGreen=$HP_BAR_GREEN_THRESHOLD_UNION needRed=$HP_BAR_THRESHOLD",
+            )
             null
         } finally {
             frame.recycle()
