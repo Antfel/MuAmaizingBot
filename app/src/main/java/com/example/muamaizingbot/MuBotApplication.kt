@@ -11,6 +11,7 @@ import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.settings.AppSettingsStore
 import com.example.muamaizingbot.settings.LocaleHelper
 import com.example.muamaizingbot.telegram.TelegramStore
+import com.example.muamaizingbot.vision.focus.FocusPortraitClassifier
 import com.example.muamaizingbot.vision.opencv.OpenCVInitializer
 import com.example.muamaizingbot.vision.template.TemplateRepository
 
@@ -24,6 +25,7 @@ class MuBotApplication : Application() {
         super.onCreate()
         OpenCVInitializer.init()
         TemplateRepository.init(this)
+        FocusPortraitClassifier.init(this)
         MapDefinitionRepository.init(this)
         MapContentSync.init(this)
         ProfileRepository.init(this)

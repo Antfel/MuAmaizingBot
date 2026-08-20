@@ -30,9 +30,9 @@ import kotlinx.coroutines.delay
 
 /**
  * Farm / farm_bosses defense: PK prevalidation at startup, then Focus enemies
- * (enemy focus = red HUD **or** clear-X) → spam Attack until that panel disappears.
- * Boss fights use [BossTargetingActions.hasBossFocus]; mid-boss PJ needs clear-X
- * without the boss emblem. On arrival, [probeEnemyOnBossArrival] runs before skull settle.
+ * (enemy focus = portrait classifier PJ) → spam Attack until that panel disappears.
+ * Boss fights use [BossTargetingActions.hasBossFocus]; mid-boss PJ needs portrait=PJ
+ * without boss. On arrival, [probeEnemyOnBossArrival] runs before skull settle.
  * Caller handles return to farm spot / boss.
  *
  * Mid-spam: periodically checks potions + elf buff; pauses spam, runs the action,
@@ -203,7 +203,7 @@ object CombatFocusActions {
     }
 
     /**
-     * Arrival enemy must be a stable PJ panel: clear-X twice (not a one-frame FP),
+     * Arrival enemy must be a stable PJ panel: portrait=PJ twice (not a one-frame FP),
      * and no boss emblem. Avoids open-map [returnToBoss] after a ghost acquire.
      */
     private suspend fun confirmArrivalEnemyPanel(): Boolean {
@@ -216,7 +216,7 @@ object CombatFocusActions {
         return true
     }
 
-    /** PJ panel via clear-X with no boss emblem (red alone is too flickery on arrival). */
+    /** PJ panel via portrait classifier with no boss emblem. */
     private suspend fun hasEnemyPanelWithoutBoss(): Boolean {
         if (BossTargetingActions.hasBossFocus()) return false
         return ElfBuffFocusHud.isClearXVisible()
@@ -284,16 +284,23 @@ object CombatFocusActions {
 
     /**
      * Continuous [FOCUS_PLAYER] spam for the active boss FIGHT.
+     * Boss DPS is [GameActions.ensureAutoMode] (Auto) — this loop only hunts mid-fight PJs.
      * Runs until:
-     * - a player focus is acquired (red HUD, no boss emblem) → attack spam, or
+     * - a player focus is acquired (portrait=PJ, no boss) → attack spam, or
      * - boss emblem is gone → Idle so [FarmBossesLoop] can finish kill / navigate.
      */
     private suspend fun spamFocusDuringBossFight(profile: BotProfile): TickResult {
         Log.d(TAG, "[COMBAT_FOCUS] boss fight — continuous focus_player spam start")
+        // Arrival-enemy → boss-emblem handoff can skip FarmBossesLoop's ensureAuto.
+        // Without Auto, this loop only taps focus_player and the boss never takes damage.
+        if (!GameActions.ensureAutoMode()) {
+            Log.w(TAG, "[COMBAT_FOCUS] ensureAuto soft-fail at boss-fight focus spam start")
+        }
         val (w, h) = RefCoords.activeScreenSize()
         val roi = MuCombatRois.targetingHudRoi(w, h)
         var taps = 0
         var lastMaintMs = 0L
+        var lastAutoMs = System.currentTimeMillis()
         while (true) {
             if (BotController.state.value != BotRuntimeState.RUNNING) {
                 Log.d(
@@ -319,17 +326,33 @@ object CombatFocusActions {
                     }
                     FightMaintResult.Ran -> {
                         Log.d(TAG, "[COMBAT_FOCUS] spam resume after maintenance")
+                        // Maintenance UI can leave Manual — restore Auto for boss DPS.
+                        if (!GameActions.ensureAutoMode()) {
+                            Log.w(TAG, "[COMBAT_FOCUS] ensureAuto soft-fail after maintenance")
+                        }
+                        lastAutoMs = System.currentTimeMillis()
                         continue
                     }
                 }
             }
 
+            // Re-assert Auto periodically (OCR flicker / accidental Manual tap).
+            if (taps > 0 &&
+                taps % MAINT_EVERY_TAPS == 0 &&
+                System.currentTimeMillis() - lastAutoMs >= MAINT_MIN_INTERVAL_MS
+            ) {
+                if (!GameActions.ensureAutoMode()) {
+                    Log.w(TAG, "[COMBAT_FOCUS] ensureAuto soft-fail mid boss-fight spam")
+                }
+                lastAutoMs = System.currentTimeMillis()
+            }
+
             val bossEmblem = BossTargetingActions.hasBossFocus()
-            // Boss HUD also has a clear-X — only treat as PJ when the boss emblem is gone.
+            // Portrait classifier: PJ vs boss (boss HUD no longer mistaken via clear-X).
             if (!bossEmblem && ElfBuffFocusHud.isClearXVisible()) {
                 Log.d(
                     TAG,
-                    "[COMBAT_FOCUS] enemy focus (clear_x, no boss emblem) " +
+                    "[COMBAT_FOCUS] enemy focus (portrait=PJ, no boss) " +
                         "mid-boss fight after $taps focus taps",
                 )
                 engagingEnemy = true

@@ -31,7 +31,7 @@ CLEAR_X_TPL = ASSETS / "focus_clear_x.png"
 # Match Android ElfBuffFocusHud thresholds / ROIs @ 1280×720
 RED_THRESHOLD = 0.80
 CLEAR_X_THRESHOLD = 0.85
-# hudRoi ref (500,20)-(2100,360) @ 2560×1440 → screen
+# hudRoi @ 1280×720
 RED_ROI = (250, 10, 1050, 180)  # left, top, right, bottom
 # clearXRoi @ 1280×720
 CLEAR_X_ROI = (488, 0, 544, 54)
