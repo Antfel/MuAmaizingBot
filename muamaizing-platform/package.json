@@ -1,0 +1,20 @@
+{
+  "name": "muamaizing-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Emulator rental platform (separate from MuAmaizingBot)",
+  "workspaces": [
+    "packages/*",
+    "apps/cloud",
+    "apps/host"
+  ],
+  "scripts": {
+    "build": "npm run build -w @muamaizing/protocol && npm run build -w @muamaizing/cloud && npm run build -w @muamaizing/host",
+    "dev:cloud": "npm run dev -w @muamaizing/cloud",
+    "dev:host": "npm run dev -w @muamaizing/host",
+    "typecheck": "npm run typecheck -w @muamaizing/protocol && npm run typecheck -w @muamaizing/cloud && npm run typecheck -w @muamaizing/host"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
