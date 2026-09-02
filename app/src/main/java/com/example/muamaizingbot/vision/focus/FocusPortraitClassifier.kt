@@ -3,9 +3,13 @@ package com.example.muamaizingbot.vision.focus
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Debug
+import android.os.SystemClock
 import android.util.Log
-import com.example.muamaizingbot.vision.navigation.NavigationVision
+import com.example.muamaizingbot.capture.ScreenCaptureManager
 import org.json.JSONObject
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -24,6 +28,7 @@ object FocusPortraitClassifier {
     private const val TAG = "FocusPortrait"
     private const val ASSET = "vision/focus_portrait_bank.json"
     private const val FACE_SIZE = 32
+    private const val PROBE_EVERY = 25
 
     enum class Kind {
         PJ,
@@ -44,6 +49,9 @@ object FocusPortraitClassifier {
     private var faceB = 58
     private var scale = floatArrayOf(1f, 1f, 1f, 1f)
     private var bank: List<Sample> = emptyList()
+
+    private val probeCount = AtomicInteger(0)
+    private val probeNanos = AtomicLong(0)
 
     fun init(context: Context) {
         if (ready) return
@@ -93,24 +101,35 @@ object FocusPortraitClassifier {
 
     fun isReady(): Boolean = ready
 
-    /** Classify a full-screen frame. */
+    /** Classify a full-screen frame. Recycles the internal 32×32 crop, not [frame]. */
     fun classify(frame: Bitmap): Kind {
         if (!ready || bank.isEmpty()) return Kind.UNKNOWN
         val face = faceCrop32(frame) ?: return Kind.UNKNOWN
         return try {
-            val feat = features(face)
-            nearest(feat)
+            nearest(features(face))
         } finally {
             if (face !== frame) face.recycle()
         }
     }
 
+    /**
+     * Classify the live HUD face slot.
+     * Copies only the ~32×32 ROI from the capture buffer — not a full 1280×720 frame.
+     */
     suspend fun classifyLatest(): Kind {
-        val frame = NavigationVision.captureFrame() ?: return Kind.UNKNOWN
+        if (!ready || bank.isEmpty()) return Kind.UNKNOWN
+        val size = ScreenCaptureManager.peekLatestBitmapSize() ?: return Kind.UNKNOWN
+        val rect = faceRectPx(size.first, size.second) ?: return Kind.UNKNOWN
+        val startedAt = SystemClock.elapsedRealtimeNanos()
+        val crop = ScreenCaptureManager.copyRegion(rect[0], rect[1], rect[2], rect[3])
+            ?: return Kind.UNKNOWN
+        val face = scaleToFace(crop)
         return try {
-            classify(frame)
+            val kind = nearest(features(face))
+            noteProbe(kind, startedAt, size.first, size.second, rect[2], rect[3])
+            kind
         } finally {
-            // ScreenCaptureManager owns the bitmap; do not recycle.
+            face.recycle()
         }
     }
 
@@ -136,25 +155,68 @@ object FocusPortraitClassifier {
         return best
     }
 
-    private fun faceCrop32(frame: Bitmap): Bitmap? {
-        val w = frame.width
-        val h = frame.height
-        if (w <= 0 || h <= 0) return null
-        val sx = w.toFloat() / refW.toFloat()
-        val sy = h.toFloat() / refH.toFloat()
+    /**
+     * Face slot on a capture of [frameW]×[frameH]: `[left, top, width, height]`.
+     * At 1280×720 this is a 32×32 crop (no scale).
+     */
+    internal fun faceRectPx(frameW: Int, frameH: Int): IntArray? {
+        if (frameW <= 0 || frameH <= 0 || refW <= 0 || refH <= 0) return null
+        val sx = frameW.toFloat() / refW.toFloat()
+        val sy = frameH.toFloat() / refH.toFloat()
         var l = (faceL * sx).toInt()
         var t = (faceT * sy).toInt()
         var r = (faceR * sx).toInt()
         var b = (faceB * sy).toInt()
-        l = l.coerceIn(0, w - 1)
-        t = t.coerceIn(0, h - 1)
-        r = r.coerceIn(l + 1, w)
-        b = b.coerceIn(t + 1, h)
-        val crop = Bitmap.createBitmap(frame, l, t, r - l, b - t)
-        if (crop.width == FACE_SIZE && crop.height == FACE_SIZE) return crop
+        l = l.coerceIn(0, frameW - 1)
+        t = t.coerceIn(0, frameH - 1)
+        r = r.coerceIn(l + 1, frameW)
+        b = b.coerceIn(t + 1, frameH)
+        return intArrayOf(l, t, r - l, b - t)
+    }
+
+    private fun faceCrop32(frame: Bitmap): Bitmap? {
+        val rect = faceRectPx(frame.width, frame.height) ?: return null
+        val crop = Bitmap.createBitmap(frame, rect[0], rect[1], rect[2], rect[3])
+        return scaleToFace(crop)
+    }
+
+    private fun scaleToFace(crop: Bitmap): Bitmap {
+        if (crop.width == FACE_SIZE && crop.height == FACE_SIZE) {
+            return crop
+        }
         val scaled = Bitmap.createScaledBitmap(crop, FACE_SIZE, FACE_SIZE, true)
-        if (scaled !== crop) crop.recycle()
+        if (scaled !== crop) {
+            crop.recycle()
+        }
         return scaled
+    }
+
+    private fun noteProbe(
+        kind: Kind,
+        startedAtNanos: Long,
+        frameW: Int,
+        frameH: Int,
+        cropW: Int,
+        cropH: Int,
+    ) {
+        val elapsedNs = (SystemClock.elapsedRealtimeNanos() - startedAtNanos).coerceAtLeast(0L)
+        val n = probeCount.incrementAndGet()
+        val totalNs = probeNanos.addAndGet(elapsedNs)
+        if (n == 1 || n % PROBE_EVERY == 0) {
+            val lastMs = elapsedNs / 1_000_000.0
+            val avgMs = totalNs / n / 1_000_000.0
+            val nativeMb = Debug.getNativeHeapAllocatedSize() / (1024.0 * 1024.0)
+            val javaUsedMb =
+                (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) /
+                    (1024.0 * 1024.0)
+            Log.i(
+                TAG,
+                "[FOCUS] probe n=$n kind=$kind lastMs=${"%.2f".format(lastMs)} " +
+                    "avgMs=${"%.2f".format(avgMs)} crop=${cropW}x${cropH} " +
+                    "frame=${frameW}x${frameH} nativeHeapMb=${"%.1f".format(nativeMb)} " +
+                    "javaUsedMb=${"%.1f".format(javaUsedMb)}",
+            )
+        }
     }
 
     /**

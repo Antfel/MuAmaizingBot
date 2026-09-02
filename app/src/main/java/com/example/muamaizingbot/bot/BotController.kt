@@ -2,6 +2,7 @@ package com.example.muamaizingbot.bot
 
 import android.util.Log
 import com.example.muamaizingbot.bot.actions.ActionQueue
+import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
 import com.example.muamaizingbot.capture.ScreenCaptureManager
@@ -143,6 +144,7 @@ object BotController {
         Log.d(TAG, "[MAP_MEMORY] invalidate reason=stop")
         BotWorker.destroy()
         ActionQueue.clear()
+        FarmBossesLoop.reset(preserveKills = false)
         _state.value = BotRuntimeState.IDLE
         LicenseGate.releaseAsync("stop")
     }
@@ -196,6 +198,7 @@ object BotController {
         Log.d(TAG, "[MAP_MEMORY] invalidate reason=license_revoke")
         BotWorker.destroy()
         ActionQueue.clear()
+        FarmBossesLoop.reset(preserveKills = false)
         _state.value = BotRuntimeState.IDLE
     }
 
@@ -228,6 +231,7 @@ object BotController {
         Log.d(TAG, "[MAP_MEMORY] invalidate reason=reset")
         BotWorker.destroy()
         ActionQueue.clear()
+        FarmBossesLoop.reset(preserveKills = false)
         _state.value = BotRuntimeState.IDLE
         LicenseGate.releaseAsync("reset")
     }

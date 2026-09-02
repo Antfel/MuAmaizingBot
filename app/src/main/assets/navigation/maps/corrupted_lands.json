@@ -33,24 +33,56 @@
   },
   "coordinate_mapping": {
     "type": "affine",
-    "version": 1,
+    "version": 2,
     "source_image_size": {
       "width": 1280,
       "height": 720
     },
     "transform": {
       "coord_x": [
-        0.186814236,
-        0.150562094,
-        -67.452676834
+        0.202433712,
+        0.204256418,
+        -101.791444662
       ],
       "coord_y": [
-        0.187122574,
-        -0.25702376,
-        85.3201202
+        0.204167879,
+        -0.202203109,
+        50.145593328
       ]
     }
   },
   "order": 23,
-  "wire": 4
+  "wire": 4,
+  "calibration_points": [
+    {
+      "ref_x": 516.0,
+      "ref_y": 392.0,
+      "game_x": 83,
+      "game_y": 76
+    },
+    {
+      "ref_x": 793.0,
+      "ref_y": 193.0,
+      "game_x": 98,
+      "game_y": 173
+    },
+    {
+      "ref_x": 966.0,
+      "ref_y": 362.0,
+      "game_x": 168,
+      "game_y": 174
+    },
+    {
+      "ref_x": 786.0,
+      "ref_y": 601.0,
+      "game_x": 180,
+      "game_y": 89
+    },
+    {
+      "ref_x": 727.0,
+      "ref_y": 411.0,
+      "game_x": 129,
+      "game_y": 116
+    }
+  ]
 }

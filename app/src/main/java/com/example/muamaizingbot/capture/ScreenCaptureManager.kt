@@ -54,6 +54,10 @@ object ScreenCaptureManager {
         refreshReadyState()
     }
 
+    /**
+     * Full-frame ARGB copy. Caller owns the result and **must** [Bitmap.recycle] it.
+     * Prefer [copyRegion] when vision only needs a ROI.
+     */
     fun getLatestBitmap(): Bitmap? {
         synchronized(this) {
             val frame = latestBitmap ?: return null
@@ -61,6 +65,32 @@ object ScreenCaptureManager {
                 return null
             }
             return frame.copy(Bitmap.Config.ARGB_8888, false)
+        }
+    }
+
+    /**
+     * Copy a rectangle from the latest frame. Does not copy the full screen.
+     * Caller owns the result and **must** [Bitmap.recycle] it.
+     */
+    fun copyRegion(left: Int, top: Int, width: Int, height: Int): Bitmap? {
+        if (width <= 0 || height <= 0) {
+            return null
+        }
+        synchronized(this) {
+            val frame = latestBitmap ?: return null
+            if (frame.isRecycled) {
+                return null
+            }
+            val fw = frame.width
+            val fh = frame.height
+            if (fw <= 0 || fh <= 0) {
+                return null
+            }
+            val l = left.coerceIn(0, fw - 1)
+            val t = top.coerceIn(0, fh - 1)
+            val w = width.coerceAtMost(fw - l).coerceAtLeast(1)
+            val h = height.coerceAtMost(fh - t).coerceAtLeast(1)
+            return Bitmap.createBitmap(frame, l, t, w, h)
         }
     }
 

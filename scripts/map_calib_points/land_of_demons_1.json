@@ -1,0 +1,74 @@
+{
+  "map_id": "land_of_demons_1",
+  "pixel_space": "png_1280_native",
+  "method": "adb_tap_user_hud",
+  "need": 5,
+  "pending": null,
+  "plan": {
+    "oeste": {
+      "ref_x": 578,
+      "ref_y": 245
+    },
+    "norte": {
+      "ref_x": 752,
+      "ref_y": 200
+    },
+    "este": {
+      "ref_x": 909,
+      "ref_y": 392
+    },
+    "sur": {
+      "ref_x": 697,
+      "ref_y": 580
+    },
+    "centro": {
+      "ref_x": 707,
+      "ref_y": 382
+    }
+  },
+  "points": [
+    {
+      "label": "oeste",
+      "ref_x": 578.0,
+      "ref_y": 245.0,
+      "game_x": 17,
+      "game_y": 181,
+      "kind": "adb_tap_user_hud"
+    },
+    {
+      "label": "norte",
+      "ref_x": 752.0,
+      "ref_y": 200.0,
+      "game_x": 49,
+      "game_y": 237,
+      "kind": "adb_tap_user_hud"
+    },
+    {
+      "label": "este",
+      "ref_x": 909.0,
+      "ref_y": 392.0,
+      "game_x": 138,
+      "game_y": 228,
+      "kind": "adb_tap_user_hud"
+    },
+    {
+      "label": "sur",
+      "ref_x": 797.0,
+      "ref_y": 521.0,
+      "game_x": 143,
+      "game_y": 166,
+      "kind": "adb_tap_user_hud",
+      "note": "golden south; replaced edge red 697,580"
+    },
+    {
+      "label": "centro",
+      "ref_x": 707.0,
+      "ref_y": 382.0,
+      "game_x": 84,
+      "game_y": 180,
+      "kind": "adb_tap_user_hud"
+    }
+  ],
+  "affine_version": 2,
+  "note": "5 landmarks W/N/E/S+C. sur=golden 797,521. max_abs_residual=0.883. Written to APK assets + license-admin working. Pack stays v7."
+}
