@@ -76,6 +76,7 @@ fun ProfileConfigureScreen(
     onOpenFarmSpot: () -> Unit,
     onOpenElfBuff: () -> Unit,
     onOpenPotionConfig: () -> Unit,
+    onOpenDevilSquareConfig: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -134,6 +135,12 @@ fun ProfileConfigureScreen(
         CombatFocusConfigCard(
             profile = profile,
             profileFilename = profileFilename,
+        )
+
+        DevilSquareConfigCard(
+            profile = profile,
+            profileFilename = profileFilename,
+            onEdit = onOpenDevilSquareConfig,
         )
 
         Card(
@@ -714,6 +721,51 @@ private fun ModeRotationConfigCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun DevilSquareConfigCard(
+    profile: BotProfile?,
+    profileFilename: String,
+    onEdit: () -> Unit,
+) {
+    val cfg = profile?.devilSquare
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+        ),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            CompactInfoTitle(
+                title = stringResource(R.string.profile_devil_square_title),
+                info = stringResource(R.string.profile_devil_square_hint),
+                modifier = Modifier.weight(1f),
+            )
+            OutlinedButton(
+                onClick = onEdit,
+                modifier = Modifier
+                    .width(92.dp)
+                    .height(38.dp),
+                enabled = profile != null,
+            ) {
+                Text(stringResource(R.string.profile_elf_edit_zone))
+            }
+            Switch(
+                checked = cfg?.enabled == true,
+                onCheckedChange = { on ->
+                    ProfileRepository.setDevilSquareEnabled(profileFilename, on)
+                },
+                enabled = profile != null,
+            )
         }
     }
 }

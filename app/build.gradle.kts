@@ -27,8 +27,8 @@ android {
         applicationId = "com.example.muamaizingbot"
         minSdk = 28
         targetSdk = 36
-        versionCode = 32
-        versionName = "1.3.1-rc14"
+        versionCode = 33
+        versionName = "1.3.1-rc15"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

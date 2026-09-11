@@ -224,6 +224,27 @@ object ProfileRepository {
         return updated
     }
 
+    fun setDevilSquareEnabled(profileFilename: String, enabled: Boolean): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(devilSquare = profile.devilSquare.copy(enabled = enabled))
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] devil_square.enabled=$enabled file=$profileFilename")
+        return updated
+    }
+
+    fun setDevilSquareConfig(profileFilename: String, config: DevilSquareConfig): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(devilSquare = config.copy(enabled = profile.devilSquare.enabled))
+        saveProfile(updated)
+        Log.d(
+            TAG,
+            "[PROFILE] devil_square pet=${config.petType.toStorage()} " +
+                "potions=${config.buyPotions} ${config.hpPotionStacks}+${config.mpPotionStacks} " +
+                "elf=${config.prepElfBuff} file=$profileFilename",
+        )
+        return updated
+    }
+
     fun setCombatFocusPkMode(profileFilename: String, mode: CombatFocusPkMode): BotProfile? {
         val profile = getProfile(profileFilename) ?: return null
         val updated = profile.copy(combatFocusPkMode = mode)

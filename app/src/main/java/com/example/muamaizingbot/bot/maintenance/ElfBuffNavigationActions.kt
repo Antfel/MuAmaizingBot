@@ -16,6 +16,24 @@ object ElfBuffNavigationActions {
     private const val TAG = "ElfBuffNav"
     private const val BUFF_PICKUP_WAIT_MS = 5000L
 
+    /** Go to elf, wait pickup, do not return to farm (Devil Square prep). */
+    suspend fun goToElfBuffWithoutReturn(): Boolean {
+        val profile = ProfileRepository.currentProfile.value
+        if (profile == null) {
+            Log.w(TAG, "[ELF] no active profile")
+            return false
+        }
+        val elfLocation = LocationRepository.getElfBuff(profile.filename)
+        if (elfLocation == null) {
+            Log.w(TAG, "[ELF] no elf buff location — skip renew")
+            return true
+        }
+        if (DeathActions.isDead()) {
+            if (!DeathActions.recoverIfDead()) return false
+        }
+        return goToElfBuff(elfLocation)
+    }
+
     suspend fun goToElfBuffAndReturn(): Boolean {
         DisconnectDetector.beginUiAction("elf-buff-nav")
         try {

@@ -32,6 +32,19 @@ object PetCheckGate {
         return elapsed >= intervalMs
     }
 
+    /** DS uses its own pet; interval still comes from the farm/boss pet config. */
+    fun shouldCheckWhileDs(profile: BotProfile): Boolean {
+        if (lastCheckAtMs == 0L) {
+            return true
+        }
+        val minutes = profile.effectivePetConfig().petCheckIntervalMinutes.coerceIn(
+            BotProfile.MIN_PET_CHECK_INTERVAL_MINUTES,
+            BotProfile.MAX_PET_CHECK_INTERVAL_MINUTES,
+        )
+        val elapsed = System.currentTimeMillis() - lastCheckAtMs
+        return elapsed >= minutes * 60_000L
+    }
+
     fun noteCheckDone() {
         lastCheckAtMs = System.currentTimeMillis()
         Log.d(TAG, "[PET] check gate updated lastCheckAt=$lastCheckAtMs")

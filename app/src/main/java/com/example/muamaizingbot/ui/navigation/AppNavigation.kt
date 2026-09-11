@@ -31,6 +31,7 @@ import com.example.muamaizingbot.ui.home.HomeScreen
 import com.example.muamaizingbot.ui.picker.LocationPickerType
 import com.example.muamaizingbot.ui.picker.SpotPickerScreen
 import com.example.muamaizingbot.ui.settings.LicenseSettingsScreen
+import com.example.muamaizingbot.ui.settings.DevilSquareConfigScreen
 import com.example.muamaizingbot.ui.settings.PotionConfigScreen
 import com.example.muamaizingbot.ui.settings.ProfileConfigureScreen
 import com.example.muamaizingbot.ui.settings.ProfileListScreen
@@ -46,6 +47,7 @@ object Routes {
     const val PROFILE_CONFIGURE = "profile_configure/{profileStem}"
     const val SPOT_PICKER = "spot_picker/{profileStem}/{locationType}"
     const val POTION_CONFIG = "potion_config/{profileStem}"
+    const val DEVIL_SQUARE_CONFIG = "devil_square_config/{profileStem}"
 
     fun profileConfigure(profileStem: String) = "profile_configure/$profileStem"
 
@@ -54,6 +56,8 @@ object Routes {
     }
 
     fun potionConfig(profileStem: String) = "potion_config/$profileStem"
+
+    fun devilSquareConfig(profileStem: String) = "devil_square_config/$profileStem"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -174,6 +178,9 @@ fun AppNavigation(
                         onOpenPotionConfig = {
                             navController.navigate(Routes.potionConfig(profileStem))
                         },
+                        onOpenDevilSquareConfig = {
+                            navController.navigate(Routes.devilSquareConfig(profileStem))
+                        },
                         onBack = { navController.popBackStack() },
                     )
                 }
@@ -200,6 +207,16 @@ fun AppNavigation(
                 ) { entry ->
                     val profileStem = entry.arguments?.getString("profileStem").orEmpty()
                     PotionConfigScreen(
+                        profileStem = profileStem,
+                        onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = Routes.DEVIL_SQUARE_CONFIG,
+                    arguments = listOf(navArgument("profileStem") { type = NavType.StringType }),
+                ) { entry ->
+                    val profileStem = entry.arguments?.getString("profileStem").orEmpty()
+                    DevilSquareConfigScreen(
                         profileStem = profileStem,
                         onBack = { navController.popBackStack() },
                     )
