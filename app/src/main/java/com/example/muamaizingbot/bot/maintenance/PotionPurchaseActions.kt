@@ -8,9 +8,14 @@ import com.example.muamaizingbot.bot.combat.GameActions
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isHpPotionEmpty
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isManaPotionEmpty
+import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
+import com.example.muamaizingbot.bot.navigation.NavigationTemplateThresholds
 import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
+import com.example.muamaizingbot.capture.ScreenCaptureManager
+import com.example.muamaizingbot.vision.coord.RefCoords
+import com.example.muamaizingbot.vision.roi.MuCombatRois
 import com.example.muamaizingbot.bot.recovery.BotRecoveryActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
@@ -31,8 +36,14 @@ object PotionPurchaseActions {
     private const val POTION_CLUE = "templates/mu/ui/potion_clue_popup.png"
     private const val POTION_TELEPORT = "templates/mu/ui/potion_teleport_button.png"
     private const val SHOP_OPEN = "templates/mu/ui/common/shop_open.png"
+    private const val INVENTORY_BUTTON = "templates/mu/ui/inventory.png"
+    private const val INVENTORY_OPEN = "templates/mu/ui/inventory_open.png"
+    private const val INVENTORY_SHOP = "templates/mu/ui/inventory_shop.png"
     private const val TELEPORT_THRESHOLD = 0.8f
     private const val SHOP_THRESHOLD = 0.50f
+    private const val INVENTORY_BUTTON_THRESHOLD = 0.80f
+    private const val INVENTORY_OPEN_THRESHOLD = 0.80f
+    private const val INVENTORY_SHOP_THRESHOLD = 0.80f
 
     private const val HP_BUY_X = 2382
     private const val HP_BUY_Y = 473
@@ -44,6 +55,9 @@ object PotionPurchaseActions {
     private const val TAP_SLOT_WAIT_MS = 1000L
     private const val ENTRY_POLL_MS = 500L
     private const val ENTRY_TIMEOUT_MS = 8000L
+    private const val PRECAUTION_ENTRY_TIMEOUT_MS = 25_000L
+    private const val INVENTORY_OPEN_TIMEOUT_MS = 5_000L
+    private const val INVENTORY_SETTLE_MS = 600L
     private const val TELEPORT_ACCEPT_WAIT_MS = 5000L
     private const val SHOP_OPEN_TIMEOUT_MS = 10_000L
     private const val CLOSE_SHOP_WAIT_MS = 1000L
@@ -51,6 +65,41 @@ object PotionPurchaseActions {
     private const val BUY_FIRST_TAP_MS = 400L
     private const val BUY_SECOND_TAP_MS = 600L
     private const val REFILL_TIMEOUT_MS = 10_000L
+
+    /**
+     * Buy a fixed number of HP/MP stacks before Devil Square via Inventory → Shop
+     * (teleport / walk to potion NPC). Do not tap empty HUD slots. Best-effort:
+     * failure does not abort the DS join. Does not return to farm.
+     */
+    suspend fun buyPrecautionPacks(hpStacks: Int, mpStacks: Int): Boolean {
+        DisconnectDetector.beginUiAction("potion-shop")
+        try {
+            if (!openInventoryThenShop()) {
+                Log.w(TAG, "[POTION] precaution: inventory Shop failed")
+                return false
+            }
+            delay(BotTiming.ms(TAP_SLOT_WAIT_MS, BotTimingCategory.POST_TAP))
+            val entry = waitForPotionEntryResult(PRECAUTION_ENTRY_TIMEOUT_MS) ?: run {
+                Log.w(TAG, "[POTION] precaution: no shop/teleport after inventory Shop")
+                closeInventoryIfOpen()
+                return false
+            }
+            if (entry == PotionEntry.TELEPORT_POPUP) {
+                if (!acceptPotionTeleportPopup() || !waitForShopOpen()) {
+                    Log.w(TAG, "[POTION] precaution: teleport/shop open failed")
+                    return false
+                }
+            }
+            buyPotions(hpStacks, mpStacks)
+            closeShop()
+            delay(BotTiming.ms(POST_SHOP_SETTLE_MS, BotTimingCategory.FIXED_SETTLE))
+            NavigationOrchestrator.cleanGameUi()
+            Log.d(TAG, "[POTION] precaution packs via inventory shop hp=$hpStacks mp=$mpStacks")
+            return true
+        } finally {
+            DisconnectDetector.endUiAction("potion-shop")
+        }
+    }
 
     suspend fun handleEmptyPotions(): Boolean {
         DisconnectDetector.beginUiAction("potion-shop")
@@ -81,7 +130,7 @@ object PotionPurchaseActions {
             }
 
             delay(BotTiming.ms(TAP_SLOT_WAIT_MS, BotTimingCategory.POST_TAP))
-            val entry = waitForPotionEntryResult() ?: run {
+            val entry = waitForPotionEntryResult(ENTRY_TIMEOUT_MS) ?: run {
                 Log.w(TAG, "[POTION] entry flow unknown")
                 return BotRecoveryActions.recoverFromLostState("potion-entry-unknown")
             }
@@ -201,9 +250,75 @@ object PotionPurchaseActions {
         }
     }
 
-    private suspend fun waitForPotionEntryResult(): PotionEntry? {
+    private suspend fun openInventoryThenShop(): Boolean {
+        if (!ensureInventoryOpen()) {
+            Log.w(TAG, "[POTION] precaution: inventory did not open")
+            return false
+        }
+        val shop = NavigationVision.waitForTemplate(
+            INVENTORY_SHOP,
+            INVENTORY_SHOP_THRESHOLD,
+            INVENTORY_OPEN_TIMEOUT_MS,
+        )
+        if (shop == null) {
+            Log.w(TAG, "[POTION] precaution: Shop button not found")
+            NavigationVision.logBestScore(INVENTORY_SHOP)
+            closeInventoryIfOpen()
+            return false
+        }
+        Log.d(TAG, "[POTION] precaution: tap inventory Shop")
+        NavigationVision.tapMatch(shop)
+        return true
+    }
+
+    private suspend fun ensureInventoryOpen(): Boolean {
+        if (isInventoryOpen()) {
+            Log.d(TAG, "[POTION] precaution: inventory already open")
+            return true
+        }
+        Log.d(TAG, "[POTION] precaution: tap HUD inventory")
+        if (!NavigationVision.tapTemplate(INVENTORY_BUTTON, INVENTORY_BUTTON_THRESHOLD)) {
+            NavigationVision.logBestScore(INVENTORY_BUTTON)
+            return false
+        }
+        delay(INVENTORY_SETTLE_MS)
+        val deadline = System.currentTimeMillis() + INVENTORY_OPEN_TIMEOUT_MS
+        while (System.currentTimeMillis() < deadline) {
+            if (isInventoryOpen()) return true
+            delay(ENTRY_POLL_MS)
+        }
+        NavigationVision.logBestScore(INVENTORY_OPEN)
+        return isInventoryOpen()
+    }
+
+    private suspend fun isInventoryOpen(): Boolean {
+        val frame = NavigationVision.captureFrame() ?: return false
+        return try {
+            val roi = MuCombatRois.inventoryOpenRoi(frame)
+            NavigationVision.findOnFrame(frame, INVENTORY_OPEN, INVENTORY_OPEN_THRESHOLD, roi) != null
+        } finally {
+            frame.recycle()
+        }
+    }
+
+    private suspend fun closeInventoryIfOpen() {
+        if (!isInventoryOpen()) return
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        val invClose = MuCombatRois.inventoryCloseXRoi(w, h)
+        NavigationVision.tapTemplate(
+            MapWindowActions.CLOSE_X,
+            NavigationTemplateThresholds.closeX(),
+            invClose,
+        )
+        delay(INVENTORY_SETTLE_MS)
+    }
+
+    private suspend fun waitForPotionEntryResult(
+        timeoutMs: Long = ENTRY_TIMEOUT_MS,
+    ): PotionEntry? {
         val deadline = System.currentTimeMillis() + BotTiming.ms(
-            ENTRY_TIMEOUT_MS,
+            timeoutMs,
             BotTimingCategory.SCREEN_LOAD,
         )
         while (System.currentTimeMillis() < deadline) {

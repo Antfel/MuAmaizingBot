@@ -87,6 +87,10 @@ object BotPriorityLoop {
             if (!DeathActions.recoverIfDead()) {
                 return IterationResult.ERROR
             }
+            if (com.example.muamaizingbot.bot.devilsquare.DevilSquareState.isHoldingPriority()) {
+                Log.d(TAG, "[LOOP] post-revive stay in Devil Square")
+                return IterationResult.OK
+            }
             return when {
                 profile.isElfBuffWarMode() -> navigateToWarPost("post-revive")
                 profile.isFarmBossesMode() -> {
@@ -114,36 +118,40 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
-        when (
-            val rotation = ModeRotationGate.takePendingNavigation()
-                ?: ModeRotationGate.maybeApply(profile).also { result ->
-                    if (result == ModeRotationGate.ApplyResult.SWITCHED_TO_FARM ||
-                        result == ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES
-                    ) {
-                        // Handled in this iteration — don't leave a duplicate pending nav.
-                        ModeRotationGate.clearPendingNavigation()
+        val dsHold =
+            com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.shouldHoldPriority(profile)
+        if (!dsHold) {
+            when (
+                val rotation = ModeRotationGate.takePendingNavigation()
+                    ?: ModeRotationGate.maybeApply(profile).also { result ->
+                        if (result == ModeRotationGate.ApplyResult.SWITCHED_TO_FARM ||
+                            result == ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES
+                        ) {
+                            // Handled in this iteration — don't leave a duplicate pending nav.
+                            ModeRotationGate.clearPendingNavigation()
+                        }
                     }
+            ) {
+                ModeRotationGate.ApplyResult.SWITCHED_TO_FARM -> {
+                    Log.d(TAG, "[LOOP] branch=mode_rotation → farm")
+                    BotDiagnosticJournal.record(TAG, "branch=mode_rotation_farm")
+                    consecutiveFarmSoftFails = 0
+                    lastSpotOk = false
+                    forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: profile)
+                    return navigateToFarm("mode-rotation", skipAuto = false)
                 }
-        ) {
-            ModeRotationGate.ApplyResult.SWITCHED_TO_FARM -> {
-                Log.d(TAG, "[LOOP] branch=mode_rotation → farm")
-                BotDiagnosticJournal.record(TAG, "branch=mode_rotation_farm")
-                consecutiveFarmSoftFails = 0
-                lastSpotOk = false
-                forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: profile)
-                return navigateToFarm("mode-rotation", skipAuto = false)
+                ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES -> {
+                    Log.d(TAG, "[LOOP] branch=mode_rotation → farm_bosses")
+                    BotDiagnosticJournal.record(TAG, "branch=mode_rotation_bosses")
+                    consecutiveFarmSoftFails = 0
+                    lastSpotOk = false
+                    forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: profile)
+                    return navigateToBossCheckpoint("mode-rotation")
+                }
+                ModeRotationGate.ApplyResult.DEFERRED,
+                ModeRotationGate.ApplyResult.NONE,
+                -> Unit
             }
-            ModeRotationGate.ApplyResult.SWITCHED_TO_BOSSES -> {
-                Log.d(TAG, "[LOOP] branch=mode_rotation → farm_bosses")
-                BotDiagnosticJournal.record(TAG, "branch=mode_rotation_bosses")
-                consecutiveFarmSoftFails = 0
-                lastSpotOk = false
-                forcePetAfterModeRotation(ProfileRepository.currentProfile.value ?: profile)
-                return navigateToBossCheckpoint("mode-rotation")
-            }
-            ModeRotationGate.ApplyResult.DEFERRED,
-            ModeRotationGate.ApplyResult.NONE,
-            -> Unit
         }
 
         // Close leftover Gear/Store/map/inventory before elf/potion/inventory/pet probes.
@@ -158,6 +166,34 @@ object BotPriorityLoop {
         // interrupt; inventory + pet stay deferred to post-kill / post-revive / startup.
         val skipMaintDuringBossFight =
             profile.isFarmBossesMode() && BossHuntState.phase == BossHuntPhase.FIGHT
+
+        if (dsHold) {
+            if (hudClear &&
+                com.example.muamaizingbot.bot.devilsquare.DevilSquareState.isInEvent() &&
+                InventoryCheckActions.isInventoryFull()
+            ) {
+                Log.d(TAG, "[LOOP] branch=ds_recycle")
+                InventoryRecycleActions.handleFullInventory()
+            }
+            if (hudClear &&
+                com.example.muamaizingbot.bot.devilsquare.DevilSquareState.isInEvent() &&
+                PetCheckGate.shouldCheckWhileDs(profile)
+            ) {
+                Log.d(TAG, "[LOOP] branch=ds_pet")
+                PetActions.validateWanted(profile.devilSquare.petType)
+                PetCheckGate.noteCheckDone()
+            }
+            if (com.example.muamaizingbot.bot.devilsquare.DevilSquareState.isInEvent() &&
+                com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.handleClaimIfVisible()
+            ) {
+                Log.d(TAG, "[LOOP] branch=ds_claim")
+                return IterationResult.OK
+            }
+            Log.d(TAG, "[LOOP] branch=devil_square phase=${com.example.muamaizingbot.bot.devilsquare.DevilSquareState.phase}")
+            BotDiagnosticJournal.record(TAG, "branch=devil_square")
+            com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.tick(profile)
+            return IterationResult.OK
+        }
 
         if (hudClear && !skipMaintDuringBossFight &&
             profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()
@@ -322,10 +358,12 @@ object BotPriorityLoop {
             return IterationResult.ERROR
         }
 
+        com.example.muamaizingbot.bot.devilsquare.DevilSquareState.resetSession()
         Log.d(
             TAG,
             "[STARTUP] profile=${profile.displayName} mode=${profile.normalizedBotMode()} " +
-                "elfBuff=${profile.enableElfBuff} potions=${profile.enablePotionRecovery}",
+                "elfBuff=${profile.enableElfBuff} potions=${profile.enablePotionRecovery} " +
+                "ds=${profile.devilSquare.enabled} dsPet=${profile.devilSquare.petType.toStorage()}",
         )
 
         if (DeathActions.isDead()) {
@@ -388,6 +426,11 @@ object BotPriorityLoop {
             PetCheckGate.noteCheckDone()
         } else {
             PetCheckGate.reset()
+        }
+
+        if (com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.shouldHoldPriority(profile)) {
+            Log.d(TAG, "[STARTUP] devil square priority — skip farm/boss/war nav")
+            return IterationResult.OK
         }
 
         // Combat focus: set PK mode once at start (farm / farm_bosses). On-spot only confirms.

@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
 import com.example.muamaizingbot.bot.maintenance.TopHudRailActions
 import com.example.muamaizingbot.vision.coord.RefCoords
+import com.example.muamaizingbot.vision.focus.FocusPortraitClassifier
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
 import com.example.muamaizingbot.vision.roi.ScaledRoi
@@ -12,21 +13,14 @@ import kotlinx.coroutines.delay
 
 /**
  * Acquire elite/boss focus via Focus Boss (skull).
- * Fight validation uses [BOSS_FOCUS] (circular top-bar icon; circularMask).
- *
- * [BOSS_FOCUS] is a lower-face crop of the circular emblem (eyes + chin). The top
- * horns are omitted so a nearby golden mob's nameplate ("letrero") that sits over
- * the emblem does not cause false negatives on acquire or mid-fight.
+ * Fight validation uses [FocusPortraitClassifier] on the focus-HUD face slot
+ * (boss / golden share the same emblem class).
  */
 object BossTargetingActions {
 
     private const val TAG = "FarmBosses"
     private const val FOCUS_BOSS = "templates/mu/ui/targeting/focus_elite_skull.png"
-    /** Top boss-bar circular emblem (lower face) — stays while HP drops. */
-    const val BOSS_FOCUS = "templates/mu/ui/targeting/boss_focus.png"
     private const val FOCUS_BOSS_THRESHOLD = 0.70f
-    /** Slightly below 0.90 — mid-fight VFX / partial golden overlay dips score. */
-    private const val BOSS_FOCUS_THRESHOLD = 0.85f
     private const val FALLBACK_BOSS_X_1280 = 1115
     private const val FALLBACK_BOSS_Y_720 = 656
     private const val MAX_ATTEMPTS = 4
@@ -36,8 +30,8 @@ object BossTargetingActions {
     const val FAST_SETTLE_MS = 400L
 
     /**
-     * Search box for [BOSS_FOCUS] authored at 1280×720:
-     * (510,5)–(600,80). Converted to ref space for [ScaledRoi].
+     * Legacy search box around the focus emblem @ 1280×720 (kept for callers /
+     * overlays that still want the HUD band).
      */
     fun bossFocusRoi(frameWidth: Int, frameHeight: Int): Rect {
         return ScaledRoi.fromRefRect(
@@ -50,30 +44,14 @@ object BossTargetingActions {
         )
     }
 
-    private fun focusRoi(): Rect {
-        val (w, h) = RefCoords.activeScreenSize()
-        return bossFocusRoi(w, h)
-    }
-
-    /** True while the boss focus emblem is visible (circularMask match). */
+    /** True while the focus HUD portrait classifies as boss (incl. golden). */
     suspend fun hasBossFocus(): Boolean {
         // Expanded Store/VIP rail overlaps the top boss emblem ROI.
         TopHudRailActions.ensureCollapsed()
-        val match = NavigationVision.findTemplate(
-            BOSS_FOCUS,
-            BOSS_FOCUS_THRESHOLD,
-            roi = focusRoi(),
-        )
-        if (match != null) {
-            Log.d(
-                TAG,
-                "[BOSS] boss_focus at=(${match.centerX},${match.centerY}) " +
-                    "score=${"%.3f".format(match.score)}",
-            )
-            return true
-        }
-        NavigationVision.logBestScore(BOSS_FOCUS, focusRoi())
-        return false
+        val kind = FocusPortraitClassifier.classifyLatest()
+        val hit = kind == FocusPortraitClassifier.Kind.BOSS
+        Log.d(TAG, "[BOSS] boss_focus portrait=$kind hit=$hit")
+        return hit
     }
 
     /**
@@ -113,7 +91,6 @@ object BossTargetingActions {
                 return true
             }
             Log.d(TAG, "[BOSS] no boss_focus after acquire attempt=${attempt + 1}")
-            NavigationVision.logBestScore(BOSS_FOCUS, focusRoi())
         }
         return false
     }

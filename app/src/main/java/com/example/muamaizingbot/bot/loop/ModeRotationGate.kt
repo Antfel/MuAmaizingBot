@@ -5,6 +5,7 @@ import com.example.muamaizingbot.bot.BotController
 import com.example.muamaizingbot.bot.BotRuntimeState
 import com.example.muamaizingbot.bot.bosses.BossHuntPhase
 import com.example.muamaizingbot.bot.bosses.BossHuntState
+import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.profile.BotMode
 import com.example.muamaizingbot.profile.BotProfile
@@ -70,6 +71,47 @@ object ModeRotationGate {
 
     fun clearPendingNavigation() {
         pendingNavigation = null
+    }
+
+    /**
+     * Overlay chip: honor the user's slot and start a clean cycle.
+     * Bosses cancels rest and hunts from map 1 / wire 1.
+     * Farm starts rest from now (does not keep an unfinished hunt cursor).
+     */
+    fun onManualMode(mode: String) {
+        val profile = ProfileRepository.currentProfile.value ?: return
+        val rot = profile.modeRotation
+        if (!rot.enabled) return
+        when (mode) {
+            BotMode.FARM_BOSSES -> {
+                memRestAccumulatedMs = 0L
+                restSliceStartedAtMs = 0L
+                lastRestPersistAtMs = 0L
+                ProfileRepository.setModeRotationConfig(
+                    profile.filename,
+                    rot.copy(
+                        segment = ModeRotationConfig.SEGMENT_BOSSES,
+                        restAccumulatedMs = 0L,
+                        lapCompletePending = false,
+                    ),
+                )
+                Log.d(TAG, "[MODE_ROTATION] manual → bosses (fresh hunt cycle)")
+            }
+            BotMode.FARM -> {
+                memRestAccumulatedMs = 0L
+                restSliceStartedAtMs = 0L
+                lastRestPersistAtMs = System.currentTimeMillis()
+                ProfileRepository.setModeRotationConfig(
+                    profile.filename,
+                    rot.copy(
+                        segment = ModeRotationConfig.SEGMENT_REST,
+                        restAccumulatedMs = 0L,
+                        lapCompletePending = false,
+                    ),
+                )
+                Log.d(TAG, "[MODE_ROTATION] manual → farm (rest starts now)")
+            }
+        }
     }
 
     /** Fired when Farm Bosses map cursor wraps last → first. */
@@ -213,7 +255,7 @@ object ModeRotationGate {
             ),
         )
         ProfileRepository.setBotMode(profile.filename, BotMode.FARM)
-        BossHuntState.reset()
+        FarmBossesLoop.reset(preserveKills = true)
         pendingNavigation = ApplyResult.SWITCHED_TO_FARM
         Log.d(
             TAG,
@@ -235,7 +277,7 @@ object ModeRotationGate {
             ),
         )
         ProfileRepository.setBotMode(profile.filename, BotMode.FARM_BOSSES)
-        BossHuntState.reset()
+        FarmBossesLoop.reset(preserveKills = true)
         pendingNavigation = ApplyResult.SWITCHED_TO_BOSSES
         Log.d(
             TAG,

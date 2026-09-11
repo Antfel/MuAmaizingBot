@@ -13,5 +13,17 @@
     "image_height": 1440
   },
   "order": 3,
-  "wire": 1
+  "wire": 1,
+  "navigation": {
+    "behavior": "direct_teleport",
+    "map_option_template": "templates/maps/Noria/mapsui/noria.png",
+    "enter_wait": 10,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  }
 }

@@ -184,6 +184,15 @@
     <string name="profile_random_dots_label">Puntos verdes (Far)</string>
     <string name="profile_random_dots_hint">Usa Random solo si hay al menos esta cantidad de puntitos verdes en el path. Menos = más cerca → caminar. Rango %1$d–%2$d.</string>
     <string name="profile_random_dots_save">Guardar umbral</string>
+    <string name="profile_devil_square_title">Devil Square</string>
+    <string name="profile_devil_square_hint">En hora par (Lima) suspende farm/bosses, prepara pet/pociones/buff según Editar, entra por Daily Goal y Auto hasta Claim. Remaining 0 apaga DS hasta 06:00 o reinicio del bot.</string>
+    <string name="profile_devil_square_edit_title">Devil Square</string>
+    <string name="profile_devil_square_pet">Pet en Devil Square</string>
+    <string name="profile_devil_square_pet_hint">La que se equipa antes de entrar y se mantiene durante el evento.</string>
+    <string name="profile_devil_square_buy_potions">Comprar pociones antes</string>
+    <string name="profile_devil_square_buy_potions_hint">Compra packs por Inventario → Shop, sin pulsar + de ticket.</string>
+    <string name="profile_devil_square_prep_elf">Ir por buff antes</string>
+    <string name="profile_devil_square_prep_elf_hint">Renueva elf buff y no regresa al farm; de ahí va a Daily Goal.</string>
     <string name="profile_combat_focus_title">Modo PK</string>
     <string name="profile_combat_focus_hint">Solo Farm / Farm Bosses. Asegura el modo PK. Con Peace solo mantiene Peace (sin focus enemigo). Con Team/Union/All busca focus (HP rojo), spamea Attack y vuelve al spot o al boss.</string>
     <string name="profile_combat_focus_pk_label">Modo PK</string>

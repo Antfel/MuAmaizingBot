@@ -32,6 +32,11 @@ object MapCheckActions {
             return onMap
         }
 
+        if (com.example.muamaizingbot.bot.devilsquare.DevilSquareState.isHoldingPriority()) {
+            Log.d(TAG, "[MAP_CHECK] devil square process — skip map validation")
+            return true
+        }
+
         // War / APEX: always inside the event — no map validation.
         if (profile?.isElfBuffWarMode() == true) {
             Log.d(TAG, "[MAP_CHECK] war mode — skip map validation")

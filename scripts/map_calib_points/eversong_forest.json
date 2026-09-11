@@ -1,0 +1,60 @@
+{
+  "map_id": "eversong_forest",
+  "pixel_space": "png_1280_native",
+  "method": "host_mouse_tap_watcher",
+  "points": [
+    {
+      "label": "manual_1",
+      "ref_x": 580.0,
+      "ref_y": 367.0,
+      "game_x": 91,
+      "game_y": 94,
+      "kind": "host_mouse",
+      "host_x": 860,
+      "host_y": 582
+    },
+    {
+      "label": "manual_2",
+      "ref_x": 826.0,
+      "ref_y": 196.0,
+      "game_x": 106,
+      "game_y": 179,
+      "kind": "host_mouse",
+      "host_x": 1207,
+      "host_y": 340
+    },
+    {
+      "label": "manual_3",
+      "ref_x": 1003.0,
+      "ref_y": 396.0,
+      "game_x": 183,
+      "game_y": 174,
+      "kind": "host_mouse",
+      "host_x": 1457,
+      "host_y": 622
+    },
+    {
+      "label": "manual_4",
+      "ref_x": 704.0,
+      "ref_y": 592.0,
+      "game_x": 167,
+      "game_y": 71,
+      "kind": "host_mouse",
+      "host_x": 1035,
+      "host_y": 900
+    },
+    {
+      "label": "manual_5",
+      "ref_x": 751.0,
+      "ref_y": 371.0,
+      "game_x": 126,
+      "game_y": 128,
+      "kind": "host_mouse",
+      "host_x": 1101,
+      "host_y": 587
+    }
+  ],
+  "portals": [],
+  "affine_version": 2,
+  "note": "5 landmarks (W/N/E/S + center). Written to APK assets + license-admin working. Not published (pack stays v7 until a map batch)."
+}

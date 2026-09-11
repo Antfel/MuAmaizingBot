@@ -1,38 +1,50 @@
 {
   "map_id": "corrupted_lands",
-  "pixel_space": "png_1280_converted_to_ref",
-  "note": "First 3 points: SpotPicker PX were 1280-native (*2→REF). Point 4: in-game tap ground truth (REF from overlay).",
+  "pixel_space": "png_1280_native",
+  "method": "host_mouse_tap_plus_user_hud",
+  "affine_version": 2,
+  "note": "5 landmarks (W/N/E/S + center). Written to APK assets + license-admin working. Not published (pack stays v7 until a map batch).",
   "points": [
     {
-      "ref_x": 1884.4,
-      "ref_y": 795.0,
-      "game_x": 167,
-      "game_y": 158,
-      "source_png_x": 942.2,
-      "source_png_y": 397.5
+      "label": "oeste",
+      "ref_x": 516.0,
+      "ref_y": 392.0,
+      "game_x": 83,
+      "game_y": 76,
+      "kind": "host_mouse"
     },
     {
-      "ref_x": 1190.8,
-      "ref_y": 912.4,
-      "game_x": 112,
-      "game_y": 79,
-      "source_png_x": 595.4,
-      "source_png_y": 456.2
+      "label": "norte",
+      "ref_x": 793.0,
+      "ref_y": 193.0,
+      "game_x": 98,
+      "game_y": 173,
+      "kind": "adb_tap_user_hud"
     },
     {
-      "ref_x": 1540.0,
-      "ref_y": 765.2,
-      "game_x": 132,
-      "game_y": 129,
-      "source_png_x": 770.0,
-      "source_png_y": 382.6
+      "label": "este",
+      "ref_x": 966.0,
+      "ref_y": 362.0,
+      "game_x": 168,
+      "game_y": 174,
+      "kind": "host_mouse"
     },
     {
-      "ref_x": 1880.0,
-      "ref_y": 702.0,
-      "game_x": 161,
-      "game_y": 171,
-      "source": "in_game_tap_ground_truth"
+      "label": "sur",
+      "ref_x": 786.0,
+      "ref_y": 601.0,
+      "game_x": 180,
+      "game_y": 89,
+      "kind": "host_mouse"
+    },
+    {
+      "label": "centro",
+      "ref_x": 727.0,
+      "ref_y": 411.0,
+      "game_x": 129,
+      "game_y": 116,
+      "kind": "adb_tap_user_hud"
     }
-  ]
+  ],
+  "portals": []
 }

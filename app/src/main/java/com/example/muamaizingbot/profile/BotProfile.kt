@@ -55,6 +55,7 @@ data class BotProfile(
      * Bot runtime does not apply this yet.
      */
     val modeRotation: ModeRotationConfig = ModeRotationConfig(),
+    val devilSquare: DevilSquareConfig = DevilSquareConfig(),
 ) {
     val fileStem: String
         get() = filename.removeSuffix(".json")
@@ -121,6 +122,7 @@ data class BotProfile(
             )
             put("kill_bosses_config", killBossesConfig.toJson())
             put("mode_rotation", modeRotation.toJson())
+            put("devil_square_config", devilSquare.toJson())
             put("map", map)
             put("wire", wire)
             put("spot", spot)
@@ -185,6 +187,7 @@ data class BotProfile(
                     fallbackPet = generalPet,
                 ),
                 modeRotation = ModeRotationConfig.fromJson(json.optJSONObject("mode_rotation")),
+                devilSquare = DevilSquareConfig.fromJson(json.optJSONObject("devil_square_config")),
             )
         }
 

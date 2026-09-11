@@ -235,12 +235,20 @@ object LocationRepository {
         }
         val json = JSONObject(locationsFile.readText())
         val arr = json.optJSONArray("locations") ?: JSONArray()
-        return buildList {
+        var rewrite = false
+        val list = buildList {
             for (i in 0 until arr.length()) {
                 val item = arr.optJSONObject(i) ?: continue
+                if (item.optInt("coord_ref_version", 0) != FarmLocation.COORD_REF_2560) {
+                    rewrite = true
+                }
                 runCatching { add(FarmLocation.fromJson(item)) }
             }
         }
+        if (rewrite && list.isNotEmpty()) {
+            saveAll(list)
+        }
+        return list
     }
 
     private fun saveAll(locations: List<FarmLocation>) {

@@ -1,7 +1,11 @@
 package com.example.muamaizingbot.bot.bosses
 
+import android.graphics.Bitmap
 import android.graphics.Rect
 import android.util.Log
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationWaitActions
 import com.example.muamaizingbot.bot.navigation.RandomSealActions
@@ -17,10 +21,11 @@ import com.example.muamaizingbot.vision.template.PcTemplateMatchResult
 import kotlinx.coroutines.delay
 
 /**
- * Open zone map → find alive boss icons → tap → wait HUD arrival via affine coords.
+ * Open zone map → layout of all boss icons → classify each ROI → tap lives.
  *
- * Dead boss icons look like dimmed copies of alive ones. Candidates must beat a
- * [BOSS_DEAD] score at the same map spot (alive wins only if clearly brighter match).
+ * Wire 1 captures parchment geometry (alive ∪ dead). Later wires reuse those
+ * slots and only re-classify. Close template scores fall through to RGB redness
+ * (alive is vivid red; dead is the same icon with a shadow).
  */
 object BossMapHuntActions {
 
@@ -28,10 +33,28 @@ object BossMapHuntActions {
     const val BOSS_ALIVE = "templates/mu/ui/map/boss_alive.png"
     const val BOSS_DEAD = "templates/mu/ui/map/boss_dead.png"
     const val GOLDEN_ALIVE = "templates/mu/ui/map/golden_alive.png"
-    private const val THRESHOLD = 0.90f
-    /** Prefer alive when it outscores dead at the same spot (no extra margin — device deltas are tiny). */
-    private const val ALIVE_OVER_DEAD_MARGIN = 0.0f
+    /** Hunt / classify floor — below this, alive is a miss. */
+    private const val HUNT_THRESHOLD = 0.90f
+    /** Full-parchment discovery (both templates). */
+    internal const val DISCOVERY_THRESHOLD = 0.80f
+    /** |alive-dead| at or above this trusts scores; below uses redness. */
+    internal const val SCORE_DELTA_LARGE = 0.08f
+    /** Mean R-max(G,B) in the icon disk; starting point from the plan. */
+    internal const val REDNESS_ALIVE_MIN = 25f
+    /** Dedup union hits that sit on the same skull. */
+    internal const val SLOT_NMS_RADIUS_PX = 48
+    /** Padding around a planned icon for follow-up alive/dead checks. */
+    internal const val PLAN_ROI_PAD_PX = 28
     private const val ARRIVAL_RADIUS = 10
+
+    data class AliveDecision(
+        val keep: Boolean,
+        val path: String,
+        val aliveScore: Float?,
+        val deadScore: Float,
+        val delta: Float,
+        val redness: Float,
+    )
 
     /** Parchment map canvas @ 1280×720 (excludes left teleport list + chrome). */
     fun zoneMapContentRoi(frameWidth: Int, frameHeight: Int): Rect {
@@ -42,79 +65,301 @@ object BossMapHuntActions {
         return Rect(left, top, right.coerceAtMost(frameWidth), bottom.coerceAtMost(frameHeight))
     }
 
-    suspend fun findAliveBosses(includeGolden: Boolean): List<PcTemplateMatchResult> {
-        if (!MapWindowActions.isMapWindowOpen()) {
-            if (!MapWindowActions.openMapWindow(retries = 2, timeoutMs = 4_000)) {
-                Log.w(TAG, "[HUNT] open map failed")
-                return emptyList()
-            }
+    suspend fun ensureMapOpen(): Boolean {
+        if (MapWindowActions.isMapWindowOpen()) return true
+        if (!MapWindowActions.openMapWindow(retries = 2, timeoutMs = 4_000)) {
+            Log.w(TAG, "[HUNT] open map failed")
+            return false
         }
         delay(400)
+        return true
+    }
+
+    /** Full parchment scan: union of alive + dead (+ golden). No classification. */
+    suspend fun scanMapLayout(mapId: String, includeGolden: Boolean): MapHuntLayout {
+        if (!ensureMapOpen()) {
+            return MapHuntLayout(mapId, emptyList())
+        }
         val frame = ScreenCaptureManager.getLatestBitmap() ?: run {
-            Log.w(TAG, "[HUNT] no frame for boss scan")
-            return emptyList()
+            Log.w(TAG, "[HUNT] no frame for layout scan")
+            return MapHuntLayout(mapId, emptyList())
         }
         return try {
             val roi = zoneMapContentRoi(frame.width, frame.height)
-            val rawAlive = NavigationVision.findAllOnFrame(frame, BOSS_ALIVE, THRESHOLD, roi)
-            if (rawAlive.isEmpty()) {
+            val rawAlive = NavigationVision.findAllOnFrame(frame, BOSS_ALIVE, DISCOVERY_THRESHOLD, roi)
+            val rawDead = NavigationVision.findAllOnFrame(frame, BOSS_DEAD, DISCOVERY_THRESHOLD, roi)
+            if (rawAlive.isEmpty() && rawDead.isEmpty()) {
                 NavigationVision.logBestScore(BOSS_ALIVE, roi)
+                NavigationVision.logBestScore(BOSS_DEAD, roi)
             }
-            val alive = filterAliveVsDead(frame, rawAlive)
-            Log.d(
-                TAG,
-                "[HUNT] boss_alive raw=${rawAlive.size} kept=${alive.size} " +
-                    "best=${alive.firstOrNull()?.score}",
-            )
             val golden = if (includeGolden) {
-                NavigationVision.findAllOnFrame(frame, GOLDEN_ALIVE, THRESHOLD, roi).also { hits ->
-                    if (hits.isEmpty()) {
-                        NavigationVision.logBestScore(GOLDEN_ALIVE, roi)
+                NavigationVision.findAllOnFrame(frame, GOLDEN_ALIVE, DISCOVERY_THRESHOLD, roi)
+                    .also { hits ->
+                        if (hits.isEmpty()) {
+                            NavigationVision.logBestScore(GOLDEN_ALIVE, roi)
+                        }
                     }
-                    Log.d(TAG, "[HUNT] golden_alive matches=${hits.size} best=${hits.firstOrNull()?.score}")
-                }
             } else {
                 emptyList()
             }
-            (alive + golden).sortedByDescending { it.score }
+            val slots = mergeSlots(rawAlive + rawDead + golden)
+            Log.d(
+                TAG,
+                "[HUNT] layout scan map=$mapId alive=${rawAlive.size} dead=${rawDead.size} " +
+                    "golden=${golden.size} slots=${slots.size} " +
+                    slots.joinToString { "(${it.centerX},${it.centerY})" },
+            )
+            MapHuntLayout(mapId, slots)
         } finally {
             frame.recycle()
         }
     }
 
-    /**
-     * Keep hits where alive score beats dead score at the same patch (+ margin).
-     * Missing [BOSS_DEAD] template → keep raw alive hits (degraded).
-     */
-    private fun filterAliveVsDead(
-        frame: android.graphics.Bitmap,
-        candidates: List<PcTemplateMatchResult>,
-    ): List<PcTemplateMatchResult> {
-        if (candidates.isEmpty()) {
-            return emptyList()
-        }
-        val kept = ArrayList<PcTemplateMatchResult>(candidates.size)
-        for (hit in candidates) {
-            val pad = 6
-            val local = Rect(
-                (hit.bestX - pad).coerceAtLeast(0),
-                (hit.bestY - pad).coerceAtLeast(0),
-                (hit.bestX + hit.templateWidth + pad).coerceAtMost(frame.width),
-                (hit.bestY + hit.templateHeight + pad).coerceAtMost(frame.height),
-            )
-            val dead = NavigationVision.probeOnFrame(frame, BOSS_DEAD, local)
-            val aliveWins = hit.score >= dead.score + ALIVE_OVER_DEAD_MARGIN
-            Log.d(
-                TAG,
-                "[HUNT] alive_vs_dead at=(${hit.centerX},${hit.centerY}) " +
-                    "alive=${"%.3f".format(hit.score)} dead=${"%.3f".format(dead.score)} " +
-                    "keep=$aliveWins",
-            )
-            if (aliveWins) {
-                kept += hit
+    internal fun mergeSlots(hits: List<PcTemplateMatchResult>): List<HuntSlot> {
+        val r2 = SLOT_NMS_RADIUS_PX * SLOT_NMS_RADIUS_PX
+        val kept = ArrayList<HuntSlot>(hits.size)
+        for (hit in hits.sortedByDescending { it.score }) {
+            val tooClose = kept.any { slot ->
+                val dx = slot.centerX - hit.centerX
+                val dy = slot.centerY - hit.centerY
+                dx * dx + dy * dy <= r2
+            }
+            if (!tooClose) {
+                kept += HuntSlot(
+                    centerX = hit.centerX,
+                    centerY = hit.centerY,
+                    bestX = hit.bestX,
+                    bestY = hit.bestY,
+                    templateWidth = hit.templateWidth,
+                    templateHeight = hit.templateHeight,
+                    templateName = hit.templateName,
+                )
             }
         }
         return kept
+    }
+
+    fun huntIconFrom(hit: PcTemplateMatchResult): HuntIcon = HuntIcon(
+        centerX = hit.centerX,
+        centerY = hit.centerY,
+        bestX = hit.bestX,
+        bestY = hit.bestY,
+        templateWidth = hit.templateWidth,
+        templateHeight = hit.templateHeight,
+        score = hit.score,
+        templateName = hit.templateName,
+    )
+
+    /** Classify every layout slot on the current wire. Dead slots stay in the layout. */
+    suspend fun classifyLayoutLives(layout: MapHuntLayout): List<HuntIcon> {
+        if (layout.slots.isEmpty()) return emptyList()
+        if (!ensureMapOpen()) return emptyList()
+        val lives = ArrayList<HuntIcon>(layout.slots.size)
+        for (slot in layout.slots) {
+            when (val keep = probeSlotAlive(slot)) {
+                true -> lives += slot.toHuntIcon()
+                false, null -> Unit
+            }
+        }
+        Log.d(
+            TAG,
+            "[HUNT] classify map=${layout.mapId} lives=${lives.size}/${layout.slots.size}",
+        )
+        return lives
+    }
+
+    /**
+     * Probe only a small ROI around [icon] (map must be open or will be opened).
+     * `null` = could not read; `true`/`false` = still a hunt target.
+     */
+    suspend fun probePlannedIconAlive(icon: HuntIcon): Boolean? {
+        return probeSlotAlive(
+            HuntSlot(
+                centerX = icon.centerX,
+                centerY = icon.centerY,
+                bestX = icon.bestX,
+                bestY = icon.bestY,
+                templateWidth = icon.templateWidth,
+                templateHeight = icon.templateHeight,
+                templateName = icon.templateName,
+            ),
+        )
+    }
+
+    private suspend fun probeSlotAlive(slot: HuntSlot): Boolean? {
+        if (!ensureMapOpen()) {
+            Log.w(TAG, "[HUNT] roi open map failed")
+            return null
+        }
+        val size = ScreenCaptureManager.peekLatestBitmapSize() ?: return null
+        val rect = probeRectPx(
+            centerX = slot.centerX,
+            centerY = slot.centerY,
+            templateWidth = slot.templateWidth,
+            templateHeight = slot.templateHeight,
+            frameW = size.first,
+            frameH = size.second,
+            padPx = PLAN_ROI_PAD_PX,
+        )
+        val crop = ScreenCaptureManager.copyRegion(rect[0], rect[1], rect[2], rect[3])
+            ?: return null
+        return try {
+            val decision = classifyCrop(crop, slot.templateName)
+            Log.d(
+                TAG,
+                "[HUNT] roi (${slot.centerX},${slot.centerY}) " +
+                    "alive=${decision.aliveScore?.let { "%.3f".format(it) } ?: "miss"} " +
+                    "dead=${"%.3f".format(decision.deadScore)} " +
+                    "delta=${"%.3f".format(decision.delta)} path=${decision.path} " +
+                    "redness=${"%.1f".format(decision.redness)} keep=${decision.keep}",
+            )
+            decision.keep
+        } finally {
+            crop.recycle()
+        }
+    }
+
+    private fun classifyCrop(crop: Bitmap, templateName: String): AliveDecision {
+        val redness = meanRedness(crop)
+        if (templateName.contains("golden", ignoreCase = true)) {
+            val golden = NavigationVision.probeOnFrame(crop, GOLDEN_ALIVE, roi = null)
+            val keep = golden.score >= HUNT_THRESHOLD
+            return AliveDecision(
+                keep = keep,
+                path = "score",
+                aliveScore = golden.score.takeIf { it >= HUNT_THRESHOLD },
+                deadScore = 0f,
+                delta = golden.score,
+                redness = redness,
+            )
+        }
+        val aliveProbe = NavigationVision.probeOnFrame(crop, BOSS_ALIVE, roi = null)
+        val deadProbe = NavigationVision.probeOnFrame(crop, BOSS_DEAD, roi = null)
+        val aliveScore = aliveProbe.score.takeIf { it >= HUNT_THRESHOLD }
+        return decideAlive(aliveScore, deadProbe.score, redness)
+    }
+
+    /**
+     * ROI around an icon: `[left, top, width, height]` clipped to the frame.
+     */
+    internal fun probeRectPx(
+        centerX: Int,
+        centerY: Int,
+        templateWidth: Int,
+        templateHeight: Int,
+        frameW: Int,
+        frameH: Int,
+        padPx: Int = PLAN_ROI_PAD_PX,
+    ): IntArray {
+        val halfW = (templateWidth / 2 + padPx).coerceAtLeast(padPx)
+        val halfH = (templateHeight / 2 + padPx).coerceAtLeast(padPx)
+        var l = (centerX - halfW).coerceAtLeast(0)
+        var t = (centerY - halfH).coerceAtLeast(0)
+        var r = (centerX + halfW).coerceAtMost(frameW)
+        var b = (centerY + halfH).coerceAtMost(frameH)
+        if (r <= l) {
+            l = 0
+            r = frameW.coerceAtLeast(1)
+        }
+        if (b <= t) {
+            t = 0
+            b = frameH.coerceAtLeast(1)
+        }
+        return intArrayOf(l, t, r - l, b - t)
+    }
+
+    suspend fun navigateToPlannedIcon(
+        mapDef: MapDefinition,
+        wireId: Int,
+        icon: HuntIcon,
+    ): Boolean {
+        if (!MapWindowActions.isMapWindowOpen()) {
+            if (!MapWindowActions.openMapWindow(retries = 2, timeoutMs = 4_000)) {
+                Log.w(TAG, "[HUNT] planned tap open map failed")
+                return false
+            }
+            delay(400)
+        }
+        val match = PcTemplateMatchResult(
+            score = icon.score,
+            bestX = icon.bestX,
+            bestY = icon.bestY,
+            templateWidth = icon.templateWidth,
+            templateHeight = icon.templateHeight,
+            templateName = icon.templateName,
+            category = "plan",
+        )
+        return navigateToMatch(mapDef, wireId, match, candidateCount = 1)
+    }
+
+    /**
+     * Large |alive-dead| trusts the higher template. Close scores use redness
+     * (alive is vivid red; dead is a shadowed copy).
+     */
+    internal fun decideAlive(
+        aliveScore: Float?,
+        deadScore: Float,
+        redness: Float,
+    ): AliveDecision {
+        val alive = aliveScore ?: 0f
+        val delta = abs(alive - deadScore)
+        if (delta >= SCORE_DELTA_LARGE) {
+            val keep = aliveScore != null && alive > deadScore
+            return AliveDecision(
+                keep = keep,
+                path = "score",
+                aliveScore = aliveScore,
+                deadScore = deadScore,
+                delta = delta,
+                redness = redness,
+            )
+        }
+        val keep = redness >= REDNESS_ALIVE_MIN
+        return AliveDecision(
+            keep = keep,
+            path = "rgb",
+            aliveScore = aliveScore,
+            deadScore = deadScore,
+            delta = delta,
+            redness = redness,
+        )
+    }
+
+    internal fun meanRedness(bitmap: Bitmap): Float {
+        val w = bitmap.width
+        val h = bitmap.height
+        if (w <= 0 || h <= 0) return 0f
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        return meanRednessArgb(pixels, w, h)
+    }
+
+    /** Mean of R - max(G, B) inside the inscribed circle. */
+    internal fun meanRednessArgb(pixels: IntArray, width: Int, height: Int): Float {
+        if (width <= 0 || height <= 0 || pixels.isEmpty()) return 0f
+        val cx = (width - 1) / 2.0
+        val cy = (height - 1) / 2.0
+        val radius = min(width, height) / 2.0
+        val r2 = radius * radius
+        var sum = 0.0
+        var n = 0
+        var i = 0
+        for (y in 0 until height) {
+            for (x in 0 until width) {
+                val dx = x - cx
+                val dy = y - cy
+                if (dx * dx + dy * dy <= r2) {
+                    val c = pixels[i]
+                    val r = (c shr 16) and 0xff
+                    val g = (c shr 8) and 0xff
+                    val b = c and 0xff
+                    sum += r - max(g, b)
+                    n++
+                }
+                i++
+            }
+        }
+        return if (n == 0) 0f else (sum / n).toFloat()
     }
 
     /**
@@ -126,14 +371,34 @@ object BossMapHuntActions {
         wireId: Int,
         includeGolden: Boolean,
     ): Boolean {
-        val matches = findAliveBosses(includeGolden)
-        if (matches.isEmpty()) {
+        val layout = scanMapLayout(mapDef.id, includeGolden)
+        val lives = classifyLayoutLives(layout)
+        if (lives.isEmpty()) {
             Log.d(TAG, "[HUNT] no boss icons on map")
             MapWindowActions.closeMapWindow()
             BossHuntState.clearBossTarget()
             return false
         }
-        val best = matches.first()
+        val first = lives.first()
+        val match = PcTemplateMatchResult(
+            score = first.score,
+            bestX = first.bestX,
+            bestY = first.bestY,
+            templateWidth = first.templateWidth,
+            templateHeight = first.templateHeight,
+            templateName = first.templateName,
+            category = "best",
+        )
+        return navigateToMatch(mapDef, wireId, match, candidateCount = lives.size)
+    }
+
+    private suspend fun navigateToMatch(
+        mapDef: MapDefinition,
+        wireId: Int,
+        best: PcTemplateMatchResult,
+        candidateCount: Int,
+    ): Boolean {
+        BossHuntState.noteHuntTap(best.centerX, best.centerY)
         val (fw, fh) = ScreenCaptureManager.peekLatestBitmapSize()
             ?: RefCoords.activeScreenSize()
         val refX = best.centerX * RefCoords.REF_WIDTH / fw
@@ -149,7 +414,7 @@ object BossMapHuntActions {
             "[HUNT] tap boss score=${"%.3f".format(best.score)} " +
                 "screen=(${best.centerX},${best.centerY}) ref=($refX,$refY) " +
                 "game=${gameCoords?.let { "(${it.first},${it.second})" } ?: "null"} " +
-                "tpl=${best.templateName} candidates=${matches.size}",
+                "tpl=${best.templateName} candidates=$candidateCount",
         )
 
         if (!NavigationVision.tapScreen(best.centerX, best.centerY, label = "boss_map_icon")) {

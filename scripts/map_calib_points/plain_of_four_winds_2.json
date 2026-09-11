@@ -1,0 +1,49 @@
+{
+  "map_id": "plain_of_four_winds_2",
+  "pixel_space": "png_1280_native",
+  "method": "host_mouse_tap_plus_user_hud",
+  "points": [
+    {
+      "label": "oeste",
+      "ref_x": 571.2725262576009,
+      "ref_y": 372.9194499017682,
+      "game_x": 86,
+      "game_y": 75,
+      "kind": "user_hud",
+      "note": "HUD 86,75 matches west tap (571,373), not TAP1 (969,564) which predicts ~237,127"
+    },
+    {
+      "label": "norte",
+      "ref_x": 750.1487,
+      "ref_y": 164.5648,
+      "game_x": 79,
+      "game_y": 174,
+      "kind": "user_hud"
+    },
+    {
+      "label": "este",
+      "ref_x": 930.4389,
+      "ref_y": 375.0383,
+      "game_x": 179,
+      "game_y": 167,
+      "kind": "user_hud"
+    },
+    {
+      "label": "sur",
+      "ref_x": 750.8557,
+      "ref_y": 568.5609,
+      "game_x": 181,
+      "game_y": 72,
+      "kind": "user_hud"
+    },
+    {
+      "label": "centro",
+      "ref_x": 764.9961,
+      "ref_y": 375.7446,
+      "game_x": 137,
+      "game_y": 123,
+      "kind": "user_hud"
+    }
+  ],
+  "portals": []
+}

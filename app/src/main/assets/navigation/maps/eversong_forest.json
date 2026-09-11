@@ -1,0 +1,83 @@
+{
+  "id": "eversong_forest",
+  "name": "Eversong Forest",
+  "group": "Eversong Forest",
+  "order": 30,
+  "is_cross": false,
+  "wire": 4,
+  "maintenance": {
+    "image_width": 1280,
+    "image_height": 720,
+    "map_ui_image": "templates/maps/Eversong_Forest/maintenance/eversong_forest_reference.png"
+  },
+  "calibration_points": [
+    {
+      "ref_x": 580.0,
+      "ref_y": 367.0,
+      "game_x": 91,
+      "game_y": 94
+    },
+    {
+      "ref_x": 826.0,
+      "ref_y": 196.0,
+      "game_x": 106,
+      "game_y": 179
+    },
+    {
+      "ref_x": 1003.0,
+      "ref_y": 396.0,
+      "game_x": 183,
+      "game_y": 174
+    },
+    {
+      "ref_x": 704.0,
+      "ref_y": 592.0,
+      "game_x": 167,
+      "game_y": 71
+    },
+    {
+      "ref_x": 751.0,
+      "ref_y": 371.0,
+      "game_x": 126,
+      "game_y": 128
+    }
+  ],
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 2,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.20253176,
+        0.217058913,
+        -105.353990431
+      ],
+      "coord_y": [
+        0.203631496,
+        -0.210245205,
+        52.651836275
+      ]
+    }
+  },
+  "navigation": {
+    "map_option_template": "templates/maps/Eversong_Forest/mapsui/eversong_forest.png",
+    "behavior": "direct_teleport",
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    },
+    "enter_wait": 10
+  },
+  "coordinate_bounds": {
+    "x_min": 0,
+    "x_max": 300,
+    "y_min": 0,
+    "y_max": 300
+  }
+}

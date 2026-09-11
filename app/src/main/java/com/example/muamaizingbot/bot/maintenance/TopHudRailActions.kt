@@ -27,11 +27,17 @@ object TopHudRailActions {
     private const val ARROW_THRESHOLD = 0.72f
     private const val STORE_THRESHOLD = 0.75f
     private const val COLLAPSE_ATTEMPTS = 3
+    private const val EXPAND_ATTEMPTS = 3
     private const val POST_COLLAPSE_MS = 500L
+    private const val POST_EXPAND_MS = 500L
 
     /** Fallback tap when collapse-arrow template misses @ 1280×720. */
     private const val COLLAPSE_FALLBACK_X_1280 = 1052
     private const val COLLAPSE_FALLBACK_Y_720 = 47
+
+    /** Fallback tap when expand-arrow template misses @ 1280×720. */
+    private const val EXPAND_FALLBACK_X_1280 = 1064
+    private const val EXPAND_FALLBACK_Y_720 = 58
 
     /** Top-right band covering the rail + chevron. */
     fun railRoi(frameWidth: Int, frameHeight: Int): Rect {
@@ -57,6 +63,51 @@ object TopHudRailActions {
         val collapse = NavigationVision.findTemplate(COLLAPSE_ARROW, 0.88f, roi)
         val expand = NavigationVision.findTemplate(EXPAND_ARROW, ARROW_THRESHOLD, roi)
         return collapse != null && expand == null
+    }
+
+    /**
+     * Expand the top HUD rail if collapsed (Daily Goal / Store / VIP).
+     * No-op when already expanded.
+     */
+    suspend fun ensureExpanded(): Boolean {
+        if (isExpanded()) {
+            return true
+        }
+        Log.d(TAG, "[HUD_RAIL] collapsed — expanding")
+        repeat(EXPAND_ATTEMPTS) { attempt ->
+            if (!tapExpand()) {
+                Log.w(TAG, "[HUD_RAIL] expand tap failed attempt=${attempt + 1}")
+            }
+            delay(BotTiming.ms(POST_EXPAND_MS, BotTimingCategory.POST_TAP))
+            if (isExpanded()) {
+                Log.d(TAG, "[HUD_RAIL] expanded attempt=${attempt + 1}")
+                return true
+            }
+        }
+        Log.w(TAG, "[HUD_RAIL] still collapsed after $EXPAND_ATTEMPTS attempts")
+        val roi = railRoi()
+        NavigationVision.logBestScore(STORE_ICON, roi)
+        NavigationVision.logBestScore(COLLAPSE_ARROW, roi)
+        NavigationVision.logBestScore(EXPAND_ARROW, roi)
+        return false
+    }
+
+    private suspend fun tapExpand(): Boolean {
+        val roi = railRoi()
+        val arrow = NavigationVision.findTemplate(EXPAND_ARROW, ARROW_THRESHOLD, roi)
+        if (arrow != null) {
+            Log.d(
+                TAG,
+                "[HUD_RAIL] expand arrow score=${"%.3f".format(arrow.score)} " +
+                    "at=(${arrow.centerX},${arrow.centerY})",
+            )
+            return NavigationVision.tapMatch(arrow)
+        }
+        val (w, h) = RefCoords.activeScreenSize()
+        val x = EXPAND_FALLBACK_X_1280 * w / 1280
+        val y = EXPAND_FALLBACK_Y_720 * h / 720
+        Log.d(TAG, "[HUD_RAIL] expand arrow miss — fallback tap=($x,$y)")
+        return NavigationVision.tapScreen(x, y, label = "hud_rail_expand")
     }
 
     /**

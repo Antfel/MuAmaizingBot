@@ -3,6 +3,7 @@ package com.example.muamaizingbot.bot.maintenance
 import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.vision.coord.RefCoords
+import com.example.muamaizingbot.vision.focus.FocusPortraitClassifier
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
 import com.example.muamaizingbot.vision.roi.ScaledRoi
@@ -16,8 +17,8 @@ import kotlinx.coroutines.delay
  *
  * Combat-focus (farm / farm_bosses):
  * - Boss → [com.example.muamaizingbot.bot.bosses.BossTargetingActions.hasBossFocus]
- * - Enemy PJ → [isEnemyFocusVisible] = red HP bar OR [FOCUS_CLEAR_X]
- * Mid-boss PJ acquire requires clear-X **and** no boss emblem (boss HUD also has an X).
+ *   ([FocusPortraitClassifier] boss class; golden uses the same emblem)
+ * - Enemy PJ → [isEnemyFocusVisible] / [isClearXVisible] → portrait class PJ
  */
 object ElfBuffFocusHud {
 
@@ -26,8 +27,13 @@ object ElfBuffFocusHud {
     private const val HP_BAR_RED = "templates/mu/ui/focus_hp_bar.png"
     private const val HP_BAR_GREEN = "templates/mu/ui/focus_hp_bar_green.png"
     private const val HP_BAR_THRESHOLD = 0.80f
+    /**
+     * Union green for giver: some chars sit just under 0.80 (logs ~0.786 at
+     * the same HUD slot). Keep red strict so not-ally stays hard.
+     */
+    private const val HP_BAR_GREEN_THRESHOLD_UNION = 0.75f
 
-    /** Player-focus clear button (absent on boss focus HUD). */
+    /** @deprecated Kept for asset/ROI reference; combat no longer matches this template. */
     const val FOCUS_CLEAR_X = "templates/mu/ui/focus_clear_x.png"
     /** Bench: true focus ~0.87; terrain FP ~0.78 — keep above FP band. */
     private const val FOCUS_CLEAR_X_THRESHOLD = 0.85f
@@ -132,29 +138,24 @@ object ElfBuffFocusHud {
         return false
     }
 
-    /** True while the player-focus clear (X) button is visible. */
+    /**
+     * True while the focus HUD portrait is a player (PJ).
+     * Name kept for call sites that previously keyed off the clear-X template.
+     */
     suspend fun isClearXVisible(): Boolean {
-        val match = findClearX()
-        if (match != null) {
-            Log.d(
-                TAG,
-                "[FOCUS] clear_x at=(${match.centerX},${match.centerY}) " +
-                    "score=${"%.3f".format(match.score)}",
-            )
-            return true
-        }
-        return false
+        val kind = FocusPortraitClassifier.classifyLatest()
+        val hit = kind == FocusPortraitClassifier.Kind.PJ
+        Log.d(TAG, "[FOCUS] pj_portrait=$kind hit=$hit")
+        return hit
     }
 
     /**
-     * Enemy / PJ focus panel: red HP bar **or** clear-X.
-     * On farm_bosses mid-fight, callers must also require no boss emblem —
-     * the boss HUD can match [FOCUS_CLEAR_X] too.
+     * Enemy / PJ focus panel via portrait classifier (not red-bar / clear-X templates).
+     * Boss HUD classifies as [FocusPortraitClassifier.Kind.BOSS], so it does not
+     * trip this path.
      */
     suspend fun isEnemyFocusVisible(): Boolean {
-        if (isRedHpBarVisible()) return true
-        if (isClearXVisible()) return true
-        return false
+        return isClearXVisible()
     }
 
     /** Any focus HUD (red under All, or green ally under Union). */
@@ -169,28 +170,45 @@ object ElfBuffFocusHud {
      * After switching to Union:
      * GREEN = ally, RED = still hostile / not ally, null = no HUD.
      * Uses a single capture for both templates (War mid-cross / tick classify).
+     * Bar-only — war does not use the portrait gate.
      */
     suspend fun classifyUnionFocus(): HpBarColor? {
         val frame = NavigationVision.captureFrame() ?: return null
         return try {
-            val green = NavigationVision.findOnFrame(frame, HP_BAR_GREEN, HP_BAR_THRESHOLD, roi())
+            val search = roi()
+            val green = NavigationVision.findOnFrame(
+                frame,
+                HP_BAR_GREEN,
+                HP_BAR_GREEN_THRESHOLD_UNION,
+                search,
+            )
             if (green != null) {
                 Log.d(
                     TAG,
                     "[ELF_GIVER] focus HP green at=(${green.centerX},${green.centerY}) " +
-                        "score=${"%.3f".format(green.score)}",
+                        "score=${"%.3f".format(green.score)} need=$HP_BAR_GREEN_THRESHOLD_UNION",
                 )
                 return HpBarColor.GREEN
             }
-            val red = NavigationVision.findOnFrame(frame, HP_BAR_RED, HP_BAR_THRESHOLD, roi())
+            val red = NavigationVision.findOnFrame(frame, HP_BAR_RED, HP_BAR_THRESHOLD, search)
             if (red != null) {
                 Log.d(
                     TAG,
                     "[ELF_GIVER] focus HP red at=(${red.centerX},${red.centerY}) " +
-                        "score=${"%.3f".format(red.score)}",
+                        "score=${"%.3f".format(red.score)} need=$HP_BAR_THRESHOLD",
                 )
                 return HpBarColor.RED
             }
+            val greenProbe = NavigationVision.probeOnFrame(frame, HP_BAR_GREEN, search)
+            val redProbe = NavigationVision.probeOnFrame(frame, HP_BAR_RED, search)
+            Log.d(
+                TAG,
+                "[ELF_GIVER] focus HP miss greenBest=${"%.3f".format(greenProbe.score)} " +
+                    "at=(${greenProbe.bestX},${greenProbe.bestY}) " +
+                    "redBest=${"%.3f".format(redProbe.score)} " +
+                    "at=(${redProbe.bestX},${redProbe.bestY}) " +
+                    "needGreen=$HP_BAR_GREEN_THRESHOLD_UNION needRed=$HP_BAR_THRESHOLD",
+            )
             null
         } finally {
             frame.recycle()

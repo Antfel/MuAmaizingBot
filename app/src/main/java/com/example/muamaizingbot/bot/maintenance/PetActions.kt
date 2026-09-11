@@ -167,8 +167,11 @@ object PetActions {
         if (!pet.enablePet) {
             return CheckResult.SKIPPED
         }
+        return validateWanted(pet.petType)
+    }
+
+    suspend fun validateWanted(want: PetType): CheckResult {
         return DisconnectDetector.withUiAction("pet-validate") {
-            val want = pet.petType
             Log.d(TAG, "[PET] validate start want=${want.toStorage()}")
 
             if (!openGearPanel()) {

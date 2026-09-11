@@ -20,14 +20,20 @@ object MapEntryActions {
     private const val MAP_HEAD_CANDIDATE_THRESHOLD = 0.38f
     /** Verified heads in incident logs score >=0.83; unrelated-zone hits peak around 0.65. */
     private const val MAP_HEAD_DEEP_CANDIDATE_THRESHOLD = 0.80f
-    private const val MAP_OPTION_THRESHOLD = 0.68f
+    /**
+     * Singleton list row (Ferea, LoD, …). Real chips score ~0.90–0.99;
+     * the short "Ferea" chip false-hits Lorencia around 0.82.
+     */
+    private const val MAP_OPTION_THRESHOLD = 0.88f
+    /** Kalima / enter / checkbox chrome — not list-row chips. */
+    private const val MAP_DIALOG_THRESHOLD = 0.68f
     private const val MAP_SUB_OPTION_THRESHOLD = 0.55f
     private const val SUB_LIST_WAIT_MS = 2000L
     private const val SUB_HEAD_VERIFY_MS = 3000L
     private const val SUB_HEAD_COLLAPSE_MS = 600L
     private const val SUB_OPTION_SEARCH_MS = 8000L
     private const val MODAL_DIALOG_WAIT_MS = 20_000L
-    private const val CHECKBOX_THRESHOLD = 0.68f
+    private const val CHECKBOX_THRESHOLD = MAP_DIALOG_THRESHOLD
     private const val HEAD_SCROLL_ATTEMPTS = 18
     private const val MAP_LIST_SCROLL_WAIT_MS = 1000L
 
@@ -420,7 +426,7 @@ object MapEntryActions {
 
         val modalRow = NavigationVision.waitForTemplate(
             assetPath = navigation.modalOptionTemplate,
-            threshold = MAP_OPTION_THRESHOLD,
+            threshold = MAP_DIALOG_THRESHOLD,
             timeoutMs = BotTiming.ms(MODAL_DIALOG_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
             pollMs = 400L,
         ) ?: run {
@@ -443,7 +449,7 @@ object MapEntryActions {
 
         val enter = NavigationVision.findTemplate(
             navigation.enterTemplate,
-            MAP_OPTION_THRESHOLD,
+            MAP_DIALOG_THRESHOLD,
         ) ?: run {
             NavigationVision.logBestScore(navigation.enterTemplate)
             Log.w(TAG, "[MAP_ENTRY] enter button not found")

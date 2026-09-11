@@ -3,8 +3,9 @@ package com.example.muamaizingbot.overlay
 import android.util.Log
 import com.example.muamaizingbot.bot.BotController
 import com.example.muamaizingbot.bot.BotRuntimeState
-import com.example.muamaizingbot.bot.bosses.BossHuntState
+import com.example.muamaizingbot.bot.bosses.FarmBossesLoop
 import com.example.muamaizingbot.bot.combat.CombatFocusActions
+import com.example.muamaizingbot.bot.loop.ModeRotationGate
 import com.example.muamaizingbot.profile.BotMode
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.LocationRepository
@@ -111,7 +112,8 @@ object OverlayModeSwitch {
                     BotController.stopAndAwait()
                 }
                 ProfileRepository.setBotMode(profile.filename, targetMode)
-                BossHuntState.reset()
+                ModeRotationGate.onManualMode(targetMode)
+                FarmBossesLoop.reset(preserveKills = true)
                 CombatFocusActions.reset()
                 if (wasRunning) {
                     BotController.start()

@@ -1,0 +1,79 @@
+{
+  "map_id": "kanturu_relics_2",
+  "pixel_space": "png_1280_native",
+  "method": "adb_tap_user_hud",
+  "need": 5,
+  "pending": null,
+  "plan": {
+    "oeste": {
+      "ref_x": 558,
+      "ref_y": 390,
+      "kind": "red"
+    },
+    "norte": {
+      "ref_x": 710,
+      "ref_y": 196,
+      "kind": "red"
+    },
+    "este": {
+      "ref_x": 940,
+      "ref_y": 335,
+      "kind": "red"
+    },
+    "sur": {
+      "ref_x": 675,
+      "ref_y": 570,
+      "kind": "red"
+    },
+    "centro": {
+      "ref_x": 725,
+      "ref_y": 399,
+      "kind": "red"
+    }
+  },
+  "points": [
+    {
+      "label": "oeste",
+      "ref_x": 558.0,
+      "ref_y": 390.0,
+      "game_x": 85,
+      "game_y": 74,
+      "kind": "adb_tap_user_hud"
+    },
+    {
+      "label": "norte",
+      "ref_x": 710.0,
+      "ref_y": 196.0,
+      "game_x": 78,
+      "game_y": 133,
+      "kind": "adb_tap_user_hud"
+    },
+    {
+      "label": "este",
+      "ref_x": 940.0,
+      "ref_y": 335.0,
+      "game_x": 141,
+      "game_y": 148,
+      "kind": "adb_tap_user_hud",
+      "note": "replaced edge 991,378"
+    },
+    {
+      "label": "sur",
+      "ref_x": 675.0,
+      "ref_y": 570.0,
+      "game_x": 136,
+      "game_y": 63,
+      "kind": "adb_tap_user_hud"
+    },
+    {
+      "label": "centro",
+      "ref_x": 725.0,
+      "ref_y": 399.0,
+      "game_x": 115,
+      "game_y": 101,
+      "kind": "adb_tap_user_hud"
+    }
+  ],
+  "affine_version": 2,
+  "note": "5 landmarks W/N/E/S+C. este=940,335. max_abs_residual=0.222. Written to APK assets + license-admin working. Pack stays v7."
+}
