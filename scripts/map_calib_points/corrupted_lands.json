@@ -3,7 +3,7 @@
   "pixel_space": "png_1280_native",
   "method": "host_mouse_tap_plus_user_hud",
   "affine_version": 2,
-  "note": "5 landmarks (W/N/E/S + center). Written to APK assets + license-admin working. Not published (pack stays v7 until a map batch).",
+  "note": "5 landmarks (W/N/E/S + center). Norte and centro confirmed by live tap + user HUD. Not written to navigation JSON yet.",
   "points": [
     {
       "label": "oeste",

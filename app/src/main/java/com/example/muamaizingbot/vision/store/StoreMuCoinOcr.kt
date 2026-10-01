@@ -17,7 +17,7 @@ import org.opencv.imgproc.Imgproc
  * OCR for the two MU Coin balances on the Store currency bar
  * (unbound + bound / padlock). Used to gate Random Teleport Seal purchases.
  *
- * Amounts appear as `207k`, `12K`, or plain integers like `6735`.
+ * Amounts appear as `207k`, `2m` / `187M` (millions), or plain ints like `6735`.
  */
 object StoreMuCoinOcr {
 
@@ -81,7 +81,8 @@ object StoreMuCoinOcr {
     }
 
     /**
-     * Parse a compact store amount: `207k` → 207000, `12K` → 12000, `6735` → 6735.
+     * Parse a compact store amount:
+     * `207k` → 207000, `2m` → 2000000, `1.5M` → 1500000, `6735` → 6735.
      */
     fun parseCompactAmount(token: String): Long? {
         val cleaned = token.trim()
@@ -103,12 +104,28 @@ object StoreMuCoinOcr {
         return scaled.toLong()
     }
 
-    /** Extract all compact amounts from an OCR blob (order left→right / top→bottom). */
-    fun parseAllAmounts(raw: String): List<Long> {
-        val normalized = raw
+    /**
+     * ML Kit often reads a leading `1` before `m`/`k` as `I`/`l`/`|`
+     * (RiddC live: `1m 3287` → `Im 3287`). Map those glyphs back to digits
+     * before token find so millions are not dropped.
+     */
+    internal fun normalizeOcrAmountBlob(raw: String): String {
+        return raw
             .replace('\n', ' ')
             .replace('О', '0')
             .replace('о', '0')
+            // `Im` / `lm` / `|m` → `1m` (and same for k)
+            .replace(Regex("""(?i)(?<![0-9a-z])[il|](?=[mk]\b)"""), "1")
+            // less common: `Zm`→`2m`, `Sm`→`5m`, `Bm`→`8m`, `Om`→`0m`
+            .replace(Regex("""(?i)(?<![0-9a-z])z(?=[mk]\b)"""), "2")
+            .replace(Regex("""(?i)(?<![0-9a-z])s(?=[mk]\b)"""), "5")
+            .replace(Regex("""(?i)(?<![0-9a-z])b(?=[mk]\b)"""), "8")
+            .replace(Regex("""(?i)(?<![0-9a-z])o(?=[mk]\b)"""), "0")
+    }
+
+    /** Extract all compact amounts from an OCR blob (order left→right / top→bottom). */
+    fun parseAllAmounts(raw: String): List<Long> {
+        val normalized = normalizeOcrAmountBlob(raw)
         return AMOUNT_FIND.findAll(normalized)
             .mapNotNull { parseCompactAmount(it.value) }
             .filter { it >= 0 }

@@ -76,6 +76,11 @@ object BotPriorityLoop {
             return IterationResult.ERROR
         }
 
+        // Debug builds only: a queued read-only bag sweep owns this whole turn.
+        if (com.example.muamaizingbot.bot.maintenance.PetBagScanDebugTrigger.runPendingSweep()) {
+            return IterationResult.OK
+        }
+
         if (DeathActions.isDead()) {
             Log.d(TAG, "[LOOP] branch=death_recovery")
             BotDiagnosticJournal.record(TAG, "branch=death_recovery")
@@ -118,6 +123,10 @@ object BotPriorityLoop {
             return IterationResult.OK
         }
 
+        // Physically inside DS but process idle (false Enter miss) → latch and hold.
+        if (profile.devilSquare.enabled) {
+            com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.rescueIfAlreadyInside(profile)
+        }
         val dsHold =
             com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.shouldHoldPriority(profile)
         if (!dsHold) {
@@ -417,6 +426,18 @@ object BotPriorityLoop {
                         TAG,
                         "[STARTUP] pet equip_failed want=${startupPet.petType.toStorage()}",
                     )
+                PetActions.CheckResult.SEARCH_INCONCLUSIVE ->
+                    Log.w(
+                        TAG,
+                        "[STARTUP] pet bag unreadable — no MU Coin spent " +
+                            "want=${startupPet.petType.toStorage()}",
+                    )
+                PetActions.CheckResult.INVENTORY_FULL ->
+                    Log.w(
+                        TAG,
+                        "[STARTUP] pet missing but inventory full — recycle before buying " +
+                            "want=${startupPet.petType.toStorage()}",
+                    )
                 PetActions.CheckResult.OPEN_FAILED,
                 PetActions.CheckResult.READ_FAILED,
                 ->
@@ -428,6 +449,9 @@ object BotPriorityLoop {
             PetCheckGate.reset()
         }
 
+        if (profile.devilSquare.enabled) {
+            com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.rescueIfAlreadyInside(profile)
+        }
         if (com.example.muamaizingbot.bot.devilsquare.DevilSquareActions.shouldHoldPriority(profile)) {
             Log.d(TAG, "[STARTUP] devil square priority — skip farm/boss/war nav")
             return IterationResult.OK

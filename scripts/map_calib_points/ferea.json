@@ -1,0 +1,54 @@
+{
+  "map_id": "ferea",
+  "pixel_space": "png_1280_native",
+  "affine_version": 2,
+  "live_hull": [
+    {"label": "V1", "ref_x": 670, "ref_y": 290, "pred": [41.6, 128.7], "hud": [42, 129]},
+    {"label": "V2", "ref_x": 657, "ref_y": 447, "pred": [115.0, 42.1], "hud": [115, 42]},
+    {"label": "V3", "ref_x": 740, "ref_y": 296, "pred": [80.4, 161.4], "hud": [80, 161]}
+  ],
+  "note": "5-pt W/N/E/S+C. RiddB 127.0.0.1:5575. Parchment Ferea [Line 1]. E=943,396. max_abs_residual=0.351. Live hull 3/3 radius 5. Written to APK assets.",
+  "points": [
+    {
+      "label": "N",
+      "ref_x": 748,
+      "ref_y": 197,
+      "game_x": 34,
+      "game_y": 216,
+      "kind": "adb_tap"
+    },
+    {
+      "label": "W",
+      "ref_x": 546,
+      "ref_y": 399,
+      "game_x": 34,
+      "game_y": 10,
+      "kind": "adb_tap"
+    },
+    {
+      "label": "E",
+      "ref_x": 943,
+      "ref_y": 396,
+      "game_x": 235,
+      "game_y": 214,
+      "kind": "adb_tap",
+      "note": "rightmost red; replaced 873,444 -> 237,159"
+    },
+    {
+      "label": "S",
+      "ref_x": 788,
+      "ref_y": 561,
+      "game_x": 240,
+      "game_y": 51,
+      "kind": "adb_tap"
+    },
+    {
+      "label": "C",
+      "ref_x": 775,
+      "ref_y": 388,
+      "game_x": 145,
+      "game_y": 132,
+      "kind": "adb_tap"
+    }
+  ]
+}

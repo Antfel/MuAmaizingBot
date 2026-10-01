@@ -3,6 +3,7 @@ package com.example.muamaizingbot.bot.maintenance
 import android.graphics.Rect
 import android.util.Log
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
+import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.navigation.NavigationVision
@@ -155,18 +156,12 @@ object ElfBuffCheckActions {
     private suspend fun buffSearchRoi(): Rect? = scaleRoi1280(BUFF_ROI_1280)
 
     private suspend fun scaleRoi1280(ref: Rect): Rect? {
-        val frame = NavigationVision.captureFrame() ?: return null
-        return try {
-            val w = frame.width
-            val h = frame.height
-            Rect(
-                ref.left * w / RefCoords.TARGET_WIDTH,
-                ref.top * h / RefCoords.TARGET_HEIGHT,
-                ref.right * w / RefCoords.TARGET_WIDTH,
-                ref.bottom * h / RefCoords.TARGET_HEIGHT,
-            )
-        } finally {
-            frame.recycle()
-        }
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize() ?: return null
+        return Rect(
+            ref.left * w / RefCoords.TARGET_WIDTH,
+            ref.top * h / RefCoords.TARGET_HEIGHT,
+            ref.right * w / RefCoords.TARGET_WIDTH,
+            ref.bottom * h / RefCoords.TARGET_HEIGHT,
+        )
     }
 }

@@ -182,7 +182,7 @@
     <string name="profile_devil_square_buy_potions">Buy potions first</string>
     <string name="profile_devil_square_buy_potions_hint">Buys packs via Inventory → Shop. Does not tap ticket +.</string>
     <string name="profile_devil_square_prep_elf">Get buff first</string>
-    <string name="profile_devil_square_prep_elf_hint">Renews elf buff and does not return to farm; then Daily Goal.</string>
+    <string name="profile_devil_square_prep_elf_hint">Always renews elf buff (even if already active) and does not return to farm; then Daily Goal.</string>
     <string name="profile_combat_focus_title">PK mode</string>
     <string name="profile_combat_focus_hint">Farm / Farm Bosses only. Ensures PK mode. Peace only keeps Peace (no enemy focus). Team/Union/All find enemy focus (red HP), spam Attack, then return to spot or boss.</string>
     <string name="profile_combat_focus_pk_label">PK mode</string>
@@ -210,11 +210,8 @@
     <string name="profile_bosses_search">Search map</string>
     <string name="profile_bosses_search_hint">E.g. Kalima, Atlans…</string>
     <string name="profile_bosses_no_match">No matches</string>
-    <string name="profile_bosses_hold">Fight timeout (sec)</string>
-    <string name="profile_bosses_hold_hint">If focus is not lost, rotate after this time. Default %1$ds.</string>
     <string name="profile_bosses_golden">Include golden mobs</string>
     <string name="profile_bosses_golden_hint">Also look for golden icons on the map.</string>
-    <string name="profile_bosses_save_hold">Save timeout</string>
     <string name="profile_elf_params">Elf Buff settings</string>
     <string name="profile_elf_params_hint">Choose the variant: open world (PK All/Union) or War/APEX in Divine.</string>
     <string name="profile_elf_open_world">Open world</string>

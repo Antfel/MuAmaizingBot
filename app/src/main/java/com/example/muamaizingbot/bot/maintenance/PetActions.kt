@@ -22,10 +22,14 @@ import kotlinx.coroutines.delay
 import kotlin.math.max
 
 /**
- * Opens Gear (via Inventory HUD), validates the equipped pet slot against the
- * profile, and if missing/wrong tries to equip from the inventory bag:
- * tap Manage (sort) → wait until first bag slot leaves the teal “loading”
- * paint → find inv icon (swipe if needed) → tap → Equip → re-check slot.
+ * Opens Gear (via Inventory HUD), lets the bag finish painting, then validates the
+ * equipped pet slot against the profile. Only if the slot is still missing/wrong
+ * after that settle does it search the bag:
+ * Manage (sort) → wait teal load on first bag cell → read Gear slot → if needed,
+ * find inv icon (swipe) → Equip → re-check slot.
+ *
+ * The settle-before-slot-read order matters: a premature EMPTY (Corrupta empty=0.957
+ * while Imp was still painting) used to start the bag search and authorize a buy.
  *
  * If the pet is not in inventory, opens the MU Coin Store (HUD expand → Store),
  * buys the configured pet (same Purchase flow as Random Teleport Seal), then
@@ -114,6 +118,8 @@ object PetActions {
     private const val INV_SWIPE_SETTLE_MS = 400L
     private const val INV_SWIPE_DURATION_MS = 350L
     private const val EQUIP_POPUP_TIMEOUT_MS = 3_000L
+    /** Gear slot icon fades in after Equip; poll instead of reading once. */
+    private const val EQUIP_CONFIRM_MS = 4_000L
     /** Extra settle after Store buy before reopening Gear / searching bag. */
     private const val POST_BUY_EQUIP_SETTLE_MS = 1_200L
     private const val STORE_OPEN_TIMEOUT_MS = 8_000L
@@ -150,6 +156,13 @@ object PetActions {
         NEED_PURCHASE,
         /** Store open/buy/equip after buy failed. */
         BUY_FAILED,
+        /**
+         * The bag could not be read well enough to prove the pet is missing, so
+         * no MU Coin was spent. Retried on the next check.
+         */
+        SEARCH_INCONCLUSIVE,
+        /** Pet is genuinely missing but a purchase would have nowhere to land. */
+        INVENTORY_FULL,
         /** Could not open Gear / Inventory. */
         OPEN_FAILED,
         /** Gear open but slot read failed. */
@@ -181,10 +194,18 @@ object PetActions {
             }
 
             val result = try {
+                // Bag + Gear paint together. Wait for icons (and accept an early
+                // MATCH if the equipped pet appears mid-wait) before deciding.
+                val early = settlePanelsBeforeSlotDecision(want)
+                if (early != null) {
+                    Log.d(TAG, "[PET] already equipped during settle want=${want.toStorage()}")
+                    return@withUiAction CheckResult.MATCH
+                }
+
                 val slot = readPetSlot()
                 when {
                     slot == PetSlotState.UNKNOWN -> {
-                        Log.w(TAG, "[PET] slot read failed")
+                        Log.w(TAG, "[PET] slot read failed after settle")
                         CheckResult.READ_FAILED
                     }
                     slotMatches(slot, want) -> {
@@ -196,8 +217,8 @@ object PetActions {
                             TAG,
                             "[PET] slot=$slot want=${want.toStorage()} → try inventory equip",
                         )
-                        when (val equip = equipFromInventory(want)) {
-                            CheckResult.NEED_PURCHASE -> buyAndEquip(want)
+                        when (val equip = equipFromInventory(want, iconsAlreadySettled = true)) {
+                            CheckResult.NEED_PURCHASE -> confirmMissingThenBuy(want)
                             else -> equip
                         }
                     }
@@ -216,6 +237,146 @@ object PetActions {
             PetType.ANGEL -> slot == PetSlotState.ANGEL
             PetType.IMP -> slot == PetSlotState.IMP
         }
+
+    /**
+     * Polls the Gear slot until it shows [want].
+     *
+     * The slot icon fades in after Equip, so the single read that used to follow the
+     * tap caught it mid-animation and scored under threshold — Ridax reported
+     * `equip_failed` at 0.621 for a pet that was in fact equipped.
+     */
+    private suspend fun awaitSlotBecomes(want: PetType): PetSlotState {
+        val deadline = System.currentTimeMillis() + EQUIP_CONFIRM_MS
+        var last = PetSlotState.UNKNOWN
+        while (System.currentTimeMillis() < deadline) {
+            last = readPetSlot()
+            if (slotMatches(last, want)) {
+                return last
+            }
+            delay(POLL_MS)
+        }
+        return last
+    }
+
+    /**
+     * Opens the panels, reads the first bag rows and logs what the name OCR saw,
+     * then closes up. Nothing is equipped and nothing is bought — this exists to
+     * validate [PetBagScan] against a real bag before trusting it to gate spending.
+     */
+    suspend fun dryRunBagSweep(want: PetType): PetBagScan.Result {
+        return DisconnectDetector.withUiAction("pet-bag-dryrun") {
+            if (!openGearPanel()) {
+                Log.w(TAG, "[PET] dry run — could not open Gear")
+                closePanels()
+                return@withUiAction PetBagScan.Result.Inconclusive("gear_not_open")
+            }
+            try {
+                if (!isInventoryBagOpen()) {
+                    Log.w(TAG, "[PET] dry run — bag not open")
+                    return@withUiAction PetBagScan.Result.Inconclusive("bag_not_open")
+                }
+                resetBagToTop()
+                PetBagScan.dryRunSweep(want)
+            } finally {
+                dismissItemPopupIfAny()
+                closePanels()
+            }
+        }
+    }
+
+    /**
+     * Gate in front of every MU Coin purchase.
+     *
+     * The icon search reports "not in inventory" both when the pet is genuinely
+     * missing and when the bag could not be read at all, and the second case used
+     * to cost 8000 MU Coin per check. Re-read the first rows slot by slot and only
+     * spend on an unambiguous answer.
+     */
+    private suspend fun confirmMissingThenBuy(want: PetType): CheckResult {
+        if (!isInventoryBagOpen()) {
+            Log.w(TAG, "[PET_BUY] bag not open — cannot confirm absence; no purchase")
+            return CheckResult.SEARCH_INCONCLUSIVE
+        }
+        // The icon search may have swiped away from the first page.
+        resetBagToTop()
+
+        return when (val sweep = PetBagScan.sweepForPet(want)) {
+            is PetBagScan.Result.Found -> equipFromSweep(sweep, want)
+
+            is PetBagScan.Result.Inconclusive -> {
+                Log.w(
+                    TAG,
+                    "[PET_BUY] absence NOT confirmed (${sweep.reason}) — skipping purchase, " +
+                        "will retry next check",
+                )
+                dismissItemPopupIfAny()
+                CheckResult.SEARCH_INCONCLUSIVE
+            }
+
+            PetBagScan.Result.ConfirmedAbsent -> {
+                dismissItemPopupIfAny()
+                // A full bag has nowhere to receive the pet, so the purchase would
+                // be consumed and the pet never found — then bought again next check.
+                if (InventoryCheckActions.isInventoryFull()) {
+                    Log.w(TAG, "[PET_BUY] inventory full — purchase would be lost; recycle first")
+                    return CheckResult.INVENTORY_FULL
+                }
+                Log.d(TAG, "[PET_BUY] absence confirmed by slot sweep — purchase authorised")
+                buyAndEquip(want)
+            }
+        }
+    }
+
+    /** Equip straight from the popup the sweep left open. */
+    private suspend fun equipFromSweep(
+        found: PetBagScan.Result.Found,
+        want: PetType,
+    ): CheckResult {
+        Log.d(
+            TAG,
+            "[PET] sweep found ${want.toStorage()} slot=${found.slot} — " +
+                "tap Equip at=(${found.equipAt.x},${found.equipAt.y})",
+        )
+        if (!NavigationVision.tapScreen(found.equipAt.x, found.equipAt.y)) {
+            Log.w(TAG, "[PET] sweep Equip tap failed")
+            return CheckResult.EQUIP_FAILED
+        }
+        delay(UI_SETTLE_MS)
+        val after = awaitSlotBecomes(want)
+        return if (slotMatches(after, want)) {
+            Log.d(TAG, "[PET] sweep equip confirmed slot=$after")
+            CheckResult.EQUIPPED
+        } else {
+            Log.w(TAG, "[PET] sweep equip not confirmed slot=$after want=${want.toStorage()}")
+            CheckResult.EQUIP_FAILED
+        }
+    }
+
+    private suspend fun isInventoryBagOpen(): Boolean {
+        val (w, h) = ScreenCaptureManager.peekLatestBitmapSize()
+            ?: RefCoords.activeScreenSize()
+        return NavigationVision.findTemplate(
+            INVENTORY_OPEN,
+            PANEL_THRESHOLD,
+            MuCombatRois.inventoryOpenRoi(w, h),
+        ) != null
+    }
+
+    /** Scroll the bag back to row 0 and re-sort, so slot indices mean what they say. */
+    private suspend fun resetBagToTop() {
+        repeat(INV_SWIPE_MAX + 1) {
+            if (!swipeInventoryBag(revealLower = false)) {
+                return@repeat
+            }
+            delay(BotTiming.ms(INV_SWIPE_SETTLE_MS, BotTimingCategory.POST_TAP))
+        }
+        tapInventoryManage()
+        delay(BotTiming.ms(INV_POST_MANAGE_MS, BotTimingCategory.POST_TAP))
+        val settle = waitForFirstSlotIconsReady(
+            timeoutMs = BotTiming.ms(INV_LOAD_READY_TIMEOUT_MS, BotTimingCategory.SCREEN_LOAD),
+        )
+        Log.d(TAG, "[PET] bag reset to top firstSlotReady=${settle.bagReady}")
+    }
 
     /**
      * Inventory empty of wanted pet → close Gear → Store buy → Gear equip
@@ -552,8 +713,13 @@ object PetActions {
      * Searches the current page then swipes the bag; a weak false-positive tap
      * that never shows Equip continues searching instead of aborting.
      */
-    private suspend fun equipFromInventory(want: PetType): CheckResult {
-        waitForInventoryIconsLoaded()
+    private suspend fun equipFromInventory(
+        want: PetType,
+        iconsAlreadySettled: Boolean = false,
+    ): CheckResult {
+        if (!iconsAlreadySettled) {
+            waitForInventoryIconsLoaded()
+        }
 
         val paths = invTemplates(want)
         var sawCandidate = false
@@ -583,7 +749,7 @@ object PetActions {
             }
             delay(UI_SETTLE_MS)
 
-            val after = readPetSlot()
+            val after = awaitSlotBecomes(want)
             return if (slotMatches(after, want)) {
                 Log.d(TAG, "[PET] equip confirmed slot=$after")
                 CheckResult.EQUIPPED
@@ -628,16 +794,40 @@ object PetActions {
     }
 
     /**
+     * Manage + bag teal wait before trusting the Gear pet slot.
+     *
+     * @return the matched slot state if [want] appears while settling (caller
+     * treats that as MATCH); null when settle finished without a match.
+     */
+    private suspend fun settlePanelsBeforeSlotDecision(want: PetType): PetSlotState? {
+        tapInventoryManage()
+        delay(BotTiming.ms(INV_POST_MANAGE_MS, BotTimingCategory.POST_TAP))
+        val settle = waitForFirstSlotIconsReady(
+            timeoutMs = BotTiming.ms(INV_LOAD_READY_TIMEOUT_MS, BotTimingCategory.SCREEN_LOAD),
+            want = want,
+        )
+        settle.earlySlot?.let {
+            Log.d(TAG, "[PET] settle early match slot=$it")
+            return it
+        }
+        Log.d(
+            TAG,
+            "[PET] panels settled bagReady=${settle.bagReady} — reading equipped slot",
+        )
+        return null
+    }
+
+    /**
      * Sort bag (Manage) then wait until the top-left slot leaves teal loading paint.
      * Manage is safe before icons load; if already sorted it is a no-op.
      */
     private suspend fun waitForInventoryIconsLoaded() {
         tapInventoryManage()
         delay(BotTiming.ms(INV_POST_MANAGE_MS, BotTimingCategory.POST_TAP))
-        val ready = waitForFirstSlotIconsReady(
+        val settle = waitForFirstSlotIconsReady(
             timeoutMs = BotTiming.ms(INV_LOAD_READY_TIMEOUT_MS, BotTimingCategory.SCREEN_LOAD),
         )
-        Log.d(TAG, "[PET] inventory icons ready firstSlotReady=$ready — start search")
+        Log.d(TAG, "[PET] inventory icons ready firstSlotReady=${settle.bagReady} — start search")
     }
 
     private suspend fun tapInventoryManage() {
@@ -645,12 +835,24 @@ object PetActions {
         NavigationVision.tap(INV_MANAGE_TAP_X, INV_MANAGE_TAP_Y, label = "inv_manage")
     }
 
+    private data class IconSettleResult(
+        val bagReady: Boolean,
+        val earlySlot: PetSlotState? = null,
+    )
+
     /**
      * Top-left bag cell is the last to finish painting. Poll until dark-teal
      * loading ratio drops below [INV_LOADING_TEAL_RATIO] for [INV_LOAD_READY_STREAK]
      * consecutive samples.
+     *
+     * When [want] is set, also probes the Gear pet slot each tick: if it already
+     * shows the wanted pet, return that state immediately (MATCH without waiting
+     * out a false teal timeout on a full bag).
      */
-    private suspend fun waitForFirstSlotIconsReady(timeoutMs: Long): Boolean {
+    private suspend fun waitForFirstSlotIconsReady(
+        timeoutMs: Long,
+        want: PetType? = null,
+    ): IconSettleResult {
         val deadline = System.currentTimeMillis() + timeoutMs
         var readyStreak = 0
         var attempt = 0
@@ -660,10 +862,19 @@ object PetActions {
                 delay(INV_LOAD_READY_POLL_MS)
                 continue
             }
-            val ratio = try {
-                firstSlotLoadingTealRatio(frame)
+            val (ratio, slot) = try {
+                firstSlotLoadingTealRatio(frame) to
+                    if (want != null) readPetSlotOnFrame(frame) else PetSlotState.UNKNOWN
             } finally {
                 frame.recycle()
+            }
+            if (want != null && slotMatches(slot, want)) {
+                Log.d(
+                    TAG,
+                    "[PET] first-slot load attempt=$attempt — equipped ${want.toStorage()} " +
+                        "already visible, skip remaining settle",
+                )
+                return IconSettleResult(bagReady = true, earlySlot = slot)
             }
             val loading = ratio >= INV_LOADING_TEAL_RATIO
             if (loading) {
@@ -675,15 +886,16 @@ object PetActions {
                 TAG,
                 "[PET] first-slot load attempt=$attempt teal=${"%.3f".format(ratio)} " +
                     "thr=$INV_LOADING_TEAL_RATIO loading=$loading streak=$readyStreak/" +
-                    "$INV_LOAD_READY_STREAK",
+                    "$INV_LOAD_READY_STREAK" +
+                    if (want != null) " slot=$slot" else "",
             )
             if (readyStreak >= INV_LOAD_READY_STREAK) {
-                return true
+                return IconSettleResult(bagReady = true)
             }
             delay(INV_LOAD_READY_POLL_MS)
         }
-        Log.w(TAG, "[PET] first-slot load timeout — search anyway")
-        return false
+        Log.w(TAG, "[PET] first-slot load timeout — decide slot anyway")
+        return IconSettleResult(bagReady = false)
     }
 
     /**

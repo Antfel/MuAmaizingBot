@@ -28,12 +28,14 @@ class StoreMuCoinOcrTest {
     }
 
     @Test
-    fun parseCompactAmount_handlesKSuffixAndPlainInts() {
+    fun parseCompactAmount_handlesKSuffixMSuffixAndPlainInts() {
         assertEquals(207_000L, StoreMuCoinOcr.parseCompactAmount("207k"))
         assertEquals(12_000L, StoreMuCoinOcr.parseCompactAmount("12K"))
         assertEquals(6_735L, StoreMuCoinOcr.parseCompactAmount("6735"))
         assertEquals(1_500L, StoreMuCoinOcr.parseCompactAmount("1.5k"))
+        assertEquals(2_000_000L, StoreMuCoinOcr.parseCompactAmount("2m"))
         assertEquals(187_000_000L, StoreMuCoinOcr.parseCompactAmount("187m"))
+        assertEquals(1_500_000L, StoreMuCoinOcr.parseCompactAmount("1.5M"))
         assertNull(StoreMuCoinOcr.parseCompactAmount(""))
         assertNull(StoreMuCoinOcr.parseCompactAmount("abc"))
     }
@@ -47,6 +49,20 @@ class StoreMuCoinOcrTest {
         assertEquals(
             listOf(207_000L, 6_735L),
             StoreMuCoinOcr.parseAllAmounts("207k6735"),
+        )
+        // Ridax live: millions on primary MU Coin strip
+        assertEquals(
+            listOf(2_000_000L, 4_963L),
+            StoreMuCoinOcr.parseAllAmounts("2m 4963"),
+        )
+        // RiddC live: ML Kit reads `1m` as `Im` — must not drop millions
+        assertEquals(
+            listOf(1_000_000L, 3_287L),
+            StoreMuCoinOcr.parseAllAmounts("Im 3287"),
+        )
+        assertEquals(
+            listOf(1_000_000L, 3_287L),
+            StoreMuCoinOcr.parseAllAmounts("lm 3287"),
         )
     }
 

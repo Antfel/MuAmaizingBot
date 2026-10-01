@@ -1,0 +1,61 @@
+{
+  "map_id": "raklion_2",
+  "pixel_space": "png_1280_native",
+  "method": "boss_golden_arrival",
+  "points": [
+    {
+      "label": "golden_1",
+      "ref_x": 593.0,
+      "ref_y": 378.0,
+      "game_x": 115,
+      "game_y": 142,
+      "seals_used": 0,
+      "kind": "golden"
+    },
+    {
+      "label": "golden_2",
+      "ref_x": 933.0,
+      "ref_y": 331.0,
+      "game_x": 175,
+      "game_y": 220,
+      "seals_used": 0,
+      "kind": "golden"
+    },
+    {
+      "label": "boss_3",
+      "ref_x": 783.0,
+      "ref_y": 397.0,
+      "game_x": 158,
+      "game_y": 178,
+      "seals_used": 0,
+      "kind": "boss"
+    },
+    {
+      "label": "red_top_4",
+      "ref_x": 720.0,
+      "ref_y": 235.0,
+      "game_x": 112,
+      "game_y": 196,
+      "seals_used": 0,
+      "kind": "red"
+    },
+    {
+      "label": "red_5",
+      "ref_x": 664.0,
+      "ref_y": 477.0,
+      "game_x": 150,
+      "game_y": 136,
+      "seals_used": 0,
+      "kind": "red"
+    },
+    {
+      "label": "portal_6",
+      "ref_x": 778.0,
+      "ref_y": 168.0,
+      "game_x": 108,
+      "game_y": 221,
+      "seals_used": 0,
+      "kind": "portal"
+    }
+  ]
+}

@@ -9,14 +9,21 @@ import org.json.JSONObject
  * Pet settings are mode-local (not shared with Farm general_config).
  */
 data class KillBossesConfig(
-    val includeGoldenMobs: Boolean = false,
-    /** Soft fight timeout after Focus+Auto before treating kill as done. */
+    /** After live bosses, also hunt yellow golden skulls on the parchment. */
+    val includeGoldenMobs: Boolean = true,
+    /**
+     * Legacy profile field — no longer used for fight timing.
+     * Fights end on focus lost / kill / combat-focus paths only.
+     * Still read/written so old JSON profiles round-trip cleanly.
+     */
+    @Deprecated("Unused: fights no longer use a hold timeout")
     val holdSec: Int = DEFAULT_HOLD_SEC,
     /** Ordered map definition ids (e.g. plain_of_four_winds_2). */
     val maps: List<String> = emptyList(),
     /** Companion pet for farm_bosses mode only. */
     val pet: PetConfig = PetConfig(),
 ) {
+    @Suppress("DEPRECATION")
     fun toJson(): JSONObject {
         return JSONObject().apply {
             put("enabled", true)
@@ -71,8 +78,10 @@ data class KillBossesConfig(
             } else {
                 maps
             }
+            @Suppress("DEPRECATION")
             return KillBossesConfig(
-                includeGoldenMobs = json.optBoolean("include_golden_mobs", false),
+                // Missing key → true (old default false left many profiles never hunting goldens).
+                includeGoldenMobs = json.optBoolean("include_golden_mobs", true),
                 holdSec = json.optInt("hold_sec", DEFAULT_HOLD_SEC)
                     .coerceIn(MIN_HOLD_SEC, MAX_HOLD_SEC),
                 maps = migrated,

@@ -100,6 +100,20 @@ object DevilSquareState {
         }
     }
 
+    /**
+     * Already physically inside Devil Square (HUD) but process was aborted or never
+     * latched — resume at [Phase.INSIDE_SETUP] so diamond/auto/claim can run and
+     * farm/bosses recovery cannot open the world map.
+     */
+    fun adoptInsideFromHud() {
+        processActive = true
+        if (phase != Phase.IN_EVENT && phase != Phase.INSIDE_SETUP) {
+            phase = Phase.INSIDE_SETUP
+            diamondDone = false
+            autoDone = false
+        }
+    }
+
     fun isHoldingPriority(): Boolean = processActive
 
     fun isInEvent(): Boolean = phase == Phase.IN_EVENT || phase == Phase.INSIDE_SETUP

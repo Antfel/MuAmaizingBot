@@ -1,0 +1,19 @@
+---
+description: Ridax is the only emulator where builds may be installed or tested.
+alwaysApply: true
+---
+
+# Ridax is the sandbox
+
+**Ridax** (`127.0.0.1:5585`, console `emulator-5584`, map Eversong Forest) is the only
+emulator that may receive an install or be driven by taps for testing.
+
+- Install only there: `ADB_DEVICE=127.0.0.1:5585 scripts/install_bluestacks.sh`.
+- Never install on, or send input to, any other instance — RiddB, RiddC, Ridax
+  Corrupta, or the Windows hosts — unless the user names that instance explicitly
+  for that specific action.
+- Other instances are read-only: `adb logcat` and `screencap` are fine, taps and
+  installs are not.
+
+Bringing a backgrounded game to the foreground can end its session (RiddC logged
+out this way). Prefer instances whose bot is already running and capturing.

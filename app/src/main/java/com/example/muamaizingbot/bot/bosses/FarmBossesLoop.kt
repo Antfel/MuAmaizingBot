@@ -30,6 +30,11 @@ object FarmBossesLoop {
     private const val FOCUS_FAIL_BEFORE_REHUNT = 4
     /** Mid-fight focus can flicker under VFX; require several failed re-acquires before kill. */
     private const val FOCUS_MISS_BEFORE_KILL = 3
+    /**
+     * When classify finds 0 lives (or empty layout), wait before next open-map scan.
+     * Without this, single-wire maps open/close the map every ~2s in a tight loop.
+     */
+    private const val NO_LIVE_BACKOFF_MS = 20_000L
 
     @Volatile
     private var consecutiveFocusFails = 0
@@ -172,14 +177,29 @@ object FarmBossesLoop {
         val wire = BossHuntState.wireId
 
         var layout = BossHuntState.mapLayout?.takeIf { it.mapId == mapId }
+        // Drop a layout that still carries golden slots after the profile turned them off.
+        if (layout != null &&
+            !includeGolden &&
+            layout.slots.any { it.kind == HuntTargetKind.GOLDEN }
+        ) {
+            Log.d(TAG, "[HUNT] clearing layout — include_golden_mobs=false")
+            BossHuntState.mapLayout = null
+            BossHuntState.clearHuntPlan()
+            layout = null
+        }
         if (layout == null) {
             layout = BossMapHuntActions.scanMapLayout(mapId, includeGolden)
             if (layout.slots.isEmpty()) {
                 layout = BossMapHuntActions.scanMapLayout(mapId, includeGolden)
             }
             if (layout.slots.isEmpty()) {
-                Log.d(TAG, "[HUNT] layout empty map=$mapId wire=$wire — advance (no freeze)")
+                Log.d(
+                    TAG,
+                    "[HUNT] layout empty map=$mapId wire=$wire — " +
+                        "backoff ${NO_LIVE_BACKOFF_MS}ms then advance",
+                )
                 MapWindowActions.closeMapWindow()
+                delay(NO_LIVE_BACKOFF_MS)
                 advanceWireOrMap(profile, mapDef)
                 BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
                 return CycleResult.OK
@@ -196,15 +216,24 @@ object FarmBossesLoop {
         val planFresh = existing == null || existing.mapId != mapId || existing.wireId != wire
         if (planFresh) {
             val icons = BossMapHuntActions.classifyLayoutLives(layout)
+                .let { lives ->
+                    if (includeGolden) lives else lives.filter { it.isBoss }
+                }
             BossHuntState.huntPlan = WireHuntPlan(mapId = mapId, wireId = wire, icons = icons)
             Log.d(
                 TAG,
-                "[HUNT] plan wire=$wire lives=${icons.size}/${layout.slots.size} " +
+                "[HUNT] plan wire=$wire includeGolden=$includeGolden " +
+                    "lives=${icons.size}/${layout.slots.size} " +
                     icons.joinToString { "(${it.centerX},${it.centerY})" },
             )
             if (icons.isEmpty()) {
-                Log.d(TAG, "[BOSS] no live bosses on wire=$wire → next wire/map")
+                Log.d(
+                    TAG,
+                    "[BOSS] no live bosses/goldens on wire=$wire → " +
+                        "backoff ${NO_LIVE_BACKOFF_MS}ms then next wire/map",
+                )
                 MapWindowActions.closeMapWindow()
+                delay(NO_LIVE_BACKOFF_MS)
                 advanceWireOrMap(profile, mapDef)
                 BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
                 return CycleResult.OK
@@ -239,6 +268,16 @@ object FarmBossesLoop {
             return CycleResult.OK
         }
 
+        // Mid-golden: if a boss (red) respawned, abort goldens and rebuild bosses-first.
+        if (icon.isGolden) {
+            val layout = BossHuntState.mapLayout
+            if (layout != null && BossMapHuntActions.anyLiveBoss(layout)) {
+                Log.d(TAG, "[HUNT] boss alive mid-golden → rebuild plan (bosses first)")
+                BossHuntState.clearHuntPlan()
+                return CycleResult.OK
+            }
+        }
+
         if (roiCheck) {
             when (val alive = BossMapHuntActions.probePlannedIconAlive(icon)) {
                 null -> return CycleResult.SOFT_FAIL
@@ -246,7 +285,7 @@ object FarmBossesLoop {
                     Log.d(
                         TAG,
                         "[HUNT] plan skip #${plan.nextIndex + 1}/${plan.icons.size} " +
-                            "at=(${icon.centerX},${icon.centerY}) dead_or_gone",
+                            "at=(${icon.centerX},${icon.centerY}) kind=${icon.kind} dead_or_gone",
                     )
                     BossHuntState.skipCurrentPlanIcon()
                     return CycleResult.OK
@@ -258,9 +297,15 @@ object FarmBossesLoop {
         Log.d(
             TAG,
             "[HUNT] plan go #${plan.nextIndex + 1}/${plan.icons.size} " +
-                "at=(${icon.centerX},${icon.centerY}) roiCheck=$roiCheck",
+                "at=(${icon.centerX},${icon.centerY}) kind=${icon.kind} roiCheck=$roiCheck",
         )
         if (!BossMapHuntActions.navigateToPlannedIcon(mapDef, BossHuntState.wireId, icon)) {
+            // Same unreachable golden/boss was retried for minutes (OOB affine / STUCK).
+            Log.w(
+                TAG,
+                "[HUNT] hop failed — skip plan icon #${plan.nextIndex + 1}/${plan.icons.size}",
+            )
+            BossHuntState.skipCurrentPlanIcon()
             return CycleResult.SOFT_FAIL
         }
         BossHuntState.phase = BossHuntPhase.FIGHT
@@ -402,9 +447,10 @@ object FarmBossesLoop {
             }
         }
 
-        // Do not re-check focus in the same tick after acquire/auto — VFX made that a false kill.
+        // Stay on this boss until focus is lost (kill) or combat-focus / re-acquire paths move on.
+        // No holdSec timeout — that abandoned live bosses mid-fight (RiddC 90s skip).
         val elapsed = System.currentTimeMillis() - BossHuntState.fightStartedAtMs
-        Log.d(TAG, "[BOSS] fighting ${elapsed / 1000}s")
+        Log.d(TAG, "[BOSS] fighting ${elapsed / 1000}s map=$mapId")
         delay(FIGHT_POLL_MS)
         return CycleResult.OK
     }

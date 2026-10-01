@@ -23,9 +23,9 @@ import kotlinx.coroutines.delay
 /**
  * Open zone map → layout of all boss icons → classify each ROI → tap lives.
  *
- * Wire 1 captures parchment geometry (alive ∪ dead). Later wires reuse those
- * slots and only re-classify. Close template scores fall through to RGB redness
- * (alive is vivid red; dead is the same icon with a shadow).
+ * Wire 1 captures parchment geometry. Boss slots (red) and golden slots (yellow)
+ * are discovered separately. Classification never mixes colors: bosses use light
+ * vs dark red; goldens use light vs dark yellow. Hunt order is bosses then goldens.
  */
 object BossMapHuntActions {
 
@@ -33,14 +33,24 @@ object BossMapHuntActions {
     const val BOSS_ALIVE = "templates/mu/ui/map/boss_alive.png"
     const val BOSS_DEAD = "templates/mu/ui/map/boss_dead.png"
     const val GOLDEN_ALIVE = "templates/mu/ui/map/golden_alive.png"
+    const val GOLDEN_DEAD = "templates/mu/ui/map/golden_dead.png"
     /** Hunt / classify floor — below this, alive is a miss. */
     private const val HUNT_THRESHOLD = 0.90f
-    /** Full-parchment discovery (both templates). */
+    /** Full-parchment discovery (boss templates). */
     internal const val DISCOVERY_THRESHOLD = 0.80f
-    /** |alive-dead| at or above this trusts scores; below uses redness. */
+    /** Golden icons are smaller / yellower — slightly looser discovery. */
+    internal const val GOLDEN_DISCOVERY_THRESHOLD = 0.72f
+    /** |alive-dead| at or above this trusts scores; below uses family color. */
     internal const val SCORE_DELTA_LARGE = 0.08f
-    /** Mean R-max(G,B) in the icon disk; starting point from the plan. */
+    /** Boss: mean R-max(G,B) — light red = alive; dark / below floor = dead. */
     internal const val REDNESS_ALIVE_MIN = 25f
+    /**
+     * When ranking boss alive∪dead hits for NMS, boost alive so a live red face
+     * is not replaced by a nearby boss_dead / yellow false match.
+     */
+    private const val ALIVE_NMS_SCORE_BOOST = 0.08f
+    /** Golden: mean min(R,G)-B — light yellow = alive, dark yellow = dead. */
+    internal const val YELLOWNESS_ALIVE_MIN = 28f
     /** Dedup union hits that sit on the same skull. */
     internal const val SLOT_NMS_RADIUS_PX = 48
     /** Padding around a planned icon for follow-up alive/dead checks. */
@@ -54,12 +64,14 @@ object BossMapHuntActions {
         val deadScore: Float,
         val delta: Float,
         val redness: Float,
+        val yellowness: Float = 0f,
     )
 
     /** Parchment map canvas @ 1280×720 (excludes left teleport list + chrome). */
     fun zoneMapContentRoi(frameWidth: Int, frameHeight: Int): Rect {
         val left = RefCoords.scaleX(560, frameWidth)
-        val top = RefCoords.scaleY(100, frameHeight)
+        // Divine Realm N calib ~y=140@1280; icons above ~120 are chrome / extrapolate OOB.
+        val top = RefCoords.scaleY(240, frameHeight)
         val right = RefCoords.scaleX(2200, frameWidth)
         val bottom = RefCoords.scaleY(1280, frameHeight)
         return Rect(left, top, right.coerceAtMost(frameWidth), bottom.coerceAtMost(frameHeight))
@@ -75,7 +87,7 @@ object BossMapHuntActions {
         return true
     }
 
-    /** Full parchment scan: union of alive + dead (+ golden). No classification. */
+    /** Full parchment scan: boss union and golden union kept as separate kinds. */
     suspend fun scanMapLayout(mapId: String, includeGolden: Boolean): MapHuntLayout {
         if (!ensureMapOpen()) {
             return MapHuntLayout(mapId, emptyList())
@@ -92,22 +104,45 @@ object BossMapHuntActions {
                 NavigationVision.logBestScore(BOSS_ALIVE, roi)
                 NavigationVision.logBestScore(BOSS_DEAD, roi)
             }
-            val golden = if (includeGolden) {
-                NavigationVision.findAllOnFrame(frame, GOLDEN_ALIVE, DISCOVERY_THRESHOLD, roi)
-                    .also { hits ->
-                        if (hits.isEmpty()) {
-                            NavigationVision.logBestScore(GOLDEN_ALIVE, roi)
-                        }
-                    }
+            val bossSlots = mergeSlots(rawAlive + rawDead, HuntTargetKind.BOSS)
+            val goldenSlots = if (includeGolden) {
+                val rawGoldAlive =
+                    NavigationVision.findAllOnFrame(
+                        frame,
+                        GOLDEN_ALIVE,
+                        GOLDEN_DISCOVERY_THRESHOLD,
+                        roi,
+                    )
+                val rawGoldDead =
+                    NavigationVision.findAllOnFrame(
+                        frame,
+                        GOLDEN_DEAD,
+                        GOLDEN_DISCOVERY_THRESHOLD,
+                        roi,
+                    )
+                if (rawGoldAlive.isEmpty() && rawGoldDead.isEmpty()) {
+                    NavigationVision.logBestScore(GOLDEN_ALIVE, roi)
+                    NavigationVision.logBestScore(GOLDEN_DEAD, roi)
+                }
+                mergeSlots(rawGoldAlive + rawGoldDead, HuntTargetKind.GOLDEN)
             } else {
                 emptyList()
             }
-            val slots = mergeSlots(rawAlive + rawDead + golden)
+            // Goldens claim yellow icons first so boss_dead cannot steal them as BOSS.
+            val merged = mergeBossAndGoldenSlots(bossSlots, goldenSlots)
+            val slots = if (includeGolden) {
+                retagYellowBossSlotsAsGolden(frame, merged)
+            } else {
+                merged
+            }
             Log.d(
                 TAG,
-                "[HUNT] layout scan map=$mapId alive=${rawAlive.size} dead=${rawDead.size} " +
-                    "golden=${golden.size} slots=${slots.size} " +
-                    slots.joinToString { "(${it.centerX},${it.centerY})" },
+                "[HUNT] layout scan map=$mapId includeGolden=$includeGolden " +
+                    "bossAlive=${rawAlive.size} bossDead=${rawDead.size} " +
+                    "goldenTpl=${goldenSlots.size} slots=${slots.size} " +
+                    "boss=${slots.count { it.kind == HuntTargetKind.BOSS }} " +
+                    "gold=${slots.count { it.kind == HuntTargetKind.GOLDEN }} " +
+                    slots.joinToString { "(${it.centerX},${it.centerY}:${it.kind.name.take(1)})" },
             )
             MapHuntLayout(mapId, slots)
         } finally {
@@ -115,10 +150,24 @@ object BossMapHuntActions {
         }
     }
 
-    internal fun mergeSlots(hits: List<PcTemplateMatchResult>): List<HuntSlot> {
+    internal fun mergeSlots(
+        hits: List<PcTemplateMatchResult>,
+        kind: HuntTargetKind,
+    ): List<HuntSlot> {
         val r2 = SLOT_NMS_RADIUS_PX * SLOT_NMS_RADIUS_PX
         val kept = ArrayList<HuntSlot>(hits.size)
-        for (hit in hits.sortedByDescending { it.score }) {
+        val ranked = hits.sortedByDescending { hit ->
+            val boost =
+                if (kind == HuntTargetKind.BOSS &&
+                    hit.templateName.contains("alive", ignoreCase = true)
+                ) {
+                    ALIVE_NMS_SCORE_BOOST
+                } else {
+                    0f
+                }
+            hit.score + boost
+        }
+        for (hit in ranked) {
             val tooClose = kept.any { slot ->
                 val dx = slot.centerX - hit.centerX
                 val dy = slot.centerY - hit.centerY
@@ -133,10 +182,89 @@ object BossMapHuntActions {
                     templateWidth = hit.templateWidth,
                     templateHeight = hit.templateHeight,
                     templateName = hit.templateName,
+                    kind = kind,
                 )
             }
         }
         return kept
+    }
+
+    /**
+     * Goldens claim parchment points first (yellow icons). Bosses only fill gaps
+     * so a boss_dead false match cannot swallow a golden slot.
+     */
+    internal fun mergeBossAndGoldenSlots(
+        bosses: List<HuntSlot>,
+        goldens: List<HuntSlot>,
+    ): List<HuntSlot> {
+        val r2 = SLOT_NMS_RADIUS_PX * SLOT_NMS_RADIUS_PX
+        val out = goldens.toMutableList()
+        for (b in bosses) {
+            val clash = out.any { g ->
+                val dx = g.centerX - b.centerX
+                val dy = g.centerY - b.centerY
+                dx * dx + dy * dy <= r2
+            }
+            if (!clash) out += b
+        }
+        return out
+    }
+
+    /**
+     * boss_dead often matches yellow skulls. Re-tag those slots to GOLDEN by color
+     * so classify uses light/dark yellow instead of red.
+     */
+    internal fun retagYellowBossSlotsAsGolden(
+        frame: Bitmap,
+        slots: List<HuntSlot>,
+    ): List<HuntSlot> {
+        if (slots.isEmpty()) return slots
+        var retagged = 0
+        val out = ArrayList<HuntSlot>(slots.size)
+        for (slot in slots) {
+            if (slot.kind != HuntTargetKind.BOSS) {
+                out += slot
+                continue
+            }
+            val rect = probeRectPx(
+                centerX = slot.centerX,
+                centerY = slot.centerY,
+                templateWidth = slot.templateWidth,
+                templateHeight = slot.templateHeight,
+                frameW = frame.width,
+                frameH = frame.height,
+                padPx = PLAN_ROI_PAD_PX,
+            )
+            val l = rect[0]
+            val t = rect[1]
+            val w = rect[2]
+            val h = rect[3]
+            if (w <= 0 || h <= 0) {
+                out += slot
+                continue
+            }
+            val crop = try {
+                Bitmap.createBitmap(frame, l, t, w, h)
+            } catch (_: Exception) {
+                out += slot
+                continue
+            }
+            try {
+                val (redness, yellowness) = meanColorSignals(crop)
+                if (isGoldenColorFamily(yellowness, redness)) {
+                    retagged++
+                    out += slot.copy(kind = HuntTargetKind.GOLDEN)
+                } else {
+                    out += slot
+                }
+            } finally {
+                crop.recycle()
+            }
+        }
+        if (retagged > 0) {
+            Log.d(TAG, "[HUNT] retag yellow→GOLDEN n=$retagged")
+        }
+        return out
     }
 
     fun huntIconFrom(hit: PcTemplateMatchResult): HuntIcon = HuntIcon(
@@ -150,22 +278,40 @@ object BossMapHuntActions {
         templateName = hit.templateName,
     )
 
-    /** Classify every layout slot on the current wire. Dead slots stay in the layout. */
+    /**
+     * Classify every layout slot. Returns live icons with **bosses first**, then goldens.
+     */
     suspend fun classifyLayoutLives(layout: MapHuntLayout): List<HuntIcon> {
         if (layout.slots.isEmpty()) return emptyList()
         if (!ensureMapOpen()) return emptyList()
-        val lives = ArrayList<HuntIcon>(layout.slots.size)
+        val bosses = ArrayList<HuntIcon>()
+        val goldens = ArrayList<HuntIcon>()
         for (slot in layout.slots) {
             when (val keep = probeSlotAlive(slot)) {
-                true -> lives += slot.toHuntIcon()
+                true -> {
+                    val icon = slot.toHuntIcon()
+                    if (slot.kind == HuntTargetKind.GOLDEN) goldens += icon else bosses += icon
+                }
                 false, null -> Unit
             }
         }
+        val lives = bosses + goldens
         Log.d(
             TAG,
-            "[HUNT] classify map=${layout.mapId} lives=${lives.size}/${layout.slots.size}",
+            "[HUNT] classify map=${layout.mapId} lives=${lives.size}/${layout.slots.size} " +
+                "bosses=${bosses.size} goldens=${goldens.size}",
         )
         return lives
+    }
+
+    /** True if any boss-kind slot on the layout is currently light-red alive. */
+    suspend fun anyLiveBoss(layout: MapHuntLayout): Boolean {
+        if (!ensureMapOpen()) return false
+        for (slot in layout.slots) {
+            if (slot.kind != HuntTargetKind.BOSS) continue
+            if (probeSlotAlive(slot) == true) return true
+        }
+        return false
     }
 
     /**
@@ -182,6 +328,7 @@ object BossMapHuntActions {
                 templateWidth = icon.templateWidth,
                 templateHeight = icon.templateHeight,
                 templateName = icon.templateName,
+                kind = icon.kind,
             ),
         )
     }
@@ -204,14 +351,15 @@ object BossMapHuntActions {
         val crop = ScreenCaptureManager.copyRegion(rect[0], rect[1], rect[2], rect[3])
             ?: return null
         return try {
-            val decision = classifyCrop(crop, slot.templateName)
+            val decision = classifyCrop(crop, slot.kind)
             Log.d(
                 TAG,
-                "[HUNT] roi (${slot.centerX},${slot.centerY}) " +
+                "[HUNT] roi (${slot.centerX},${slot.centerY}) kind=${slot.kind} " +
                     "alive=${decision.aliveScore?.let { "%.3f".format(it) } ?: "miss"} " +
                     "dead=${"%.3f".format(decision.deadScore)} " +
                     "delta=${"%.3f".format(decision.delta)} path=${decision.path} " +
-                    "redness=${"%.1f".format(decision.redness)} keep=${decision.keep}",
+                    "redness=${"%.1f".format(decision.redness)} " +
+                    "yellow=${"%.1f".format(decision.yellowness)} keep=${decision.keep}",
             )
             decision.keep
         } finally {
@@ -219,24 +367,22 @@ object BossMapHuntActions {
         }
     }
 
-    private fun classifyCrop(crop: Bitmap, templateName: String): AliveDecision {
-        val redness = meanRedness(crop)
-        if (templateName.contains("golden", ignoreCase = true)) {
-            val golden = NavigationVision.probeOnFrame(crop, GOLDEN_ALIVE, roi = null)
-            val keep = golden.score >= HUNT_THRESHOLD
-            return AliveDecision(
-                keep = keep,
-                path = "score",
-                aliveScore = golden.score.takeIf { it >= HUNT_THRESHOLD },
-                deadScore = 0f,
-                delta = golden.score,
-                redness = redness,
-            )
+    private fun classifyCrop(crop: Bitmap, kind: HuntTargetKind): AliveDecision {
+        val (redness, yellowness) = meanColorSignals(crop)
+        return when (kind) {
+            HuntTargetKind.GOLDEN -> {
+                val aliveProbe = NavigationVision.probeOnFrame(crop, GOLDEN_ALIVE, roi = null)
+                val deadProbe = NavigationVision.probeOnFrame(crop, GOLDEN_DEAD, roi = null)
+                val aliveScore = aliveProbe.score.takeIf { it >= HUNT_THRESHOLD }
+                decideGoldenAlive(aliveScore, deadProbe.score, yellowness, redness)
+            }
+            HuntTargetKind.BOSS -> {
+                val aliveProbe = NavigationVision.probeOnFrame(crop, BOSS_ALIVE, roi = null)
+                val deadProbe = NavigationVision.probeOnFrame(crop, BOSS_DEAD, roi = null)
+                val aliveScore = aliveProbe.score.takeIf { it >= HUNT_THRESHOLD }
+                decideBossAlive(aliveScore, deadProbe.score, redness, yellowness)
+            }
         }
-        val aliveProbe = NavigationVision.probeOnFrame(crop, BOSS_ALIVE, roi = null)
-        val deadProbe = NavigationVision.probeOnFrame(crop, BOSS_DEAD, roi = null)
-        val aliveScore = aliveProbe.score.takeIf { it >= HUNT_THRESHOLD }
-        return decideAlive(aliveScore, deadProbe.score, redness)
     }
 
     /**
@@ -293,13 +439,15 @@ object BossMapHuntActions {
     }
 
     /**
-     * Large |alive-dead| trusts the higher template. Close scores use redness
-     * (alive is vivid red; dead is a shadowed copy).
+     * Boss only: light red vs dark red. Never compares to yellow.
+     * Large score delta trusts templates; close scores need light-red **and**
+     * alive template ≥ dead (dead winning on a "red" crop = dead icon / false light).
      */
-    internal fun decideAlive(
+    internal fun decideBossAlive(
         aliveScore: Float?,
         deadScore: Float,
         redness: Float,
+        yellowness: Float = 0f,
     ): AliveDecision {
         val alive = aliveScore ?: 0f
         val delta = abs(alive - deadScore)
@@ -312,36 +460,106 @@ object BossMapHuntActions {
                 deadScore = deadScore,
                 delta = delta,
                 redness = redness,
+                yellowness = yellowness,
             )
         }
-        val keep = redness >= REDNESS_ALIVE_MIN
+        val keep = aliveScore != null &&
+            redness >= REDNESS_ALIVE_MIN &&
+            alive >= deadScore
         return AliveDecision(
             keep = keep,
-            path = "rgb",
+            path = "red",
             aliveScore = aliveScore,
             deadScore = deadScore,
             delta = delta,
             redness = redness,
+            yellowness = yellowness,
         )
     }
 
-    internal fun meanRedness(bitmap: Bitmap): Float {
+    /**
+     * Golden only: light yellow vs dark yellow. Never compares to red.
+     */
+    internal fun decideGoldenAlive(
+        aliveScore: Float?,
+        deadScore: Float,
+        yellowness: Float,
+        redness: Float = 0f,
+    ): AliveDecision {
+        val alive = aliveScore ?: 0f
+        val delta = abs(alive - deadScore)
+        if (delta >= SCORE_DELTA_LARGE) {
+            val keep = when {
+                aliveScore != null && alive > deadScore -> true
+                // Template miss but clear light-yellow family (boss_dead often steals discovery).
+                aliveScore == null && isGoldenColorFamily(yellowness, redness) -> true
+                else -> false
+            }
+            return AliveDecision(
+                keep = keep,
+                path = if (aliveScore == null) "yellow" else "score",
+                aliveScore = aliveScore,
+                deadScore = deadScore,
+                delta = delta,
+                redness = redness,
+                yellowness = yellowness,
+            )
+        }
+        val keep = yellowness >= YELLOWNESS_ALIVE_MIN &&
+            (aliveScore != null || isGoldenColorFamily(yellowness, redness))
+        return AliveDecision(
+            keep = keep,
+            path = "yellow",
+            aliveScore = aliveScore,
+            deadScore = deadScore,
+            delta = delta,
+            redness = redness,
+            yellowness = yellowness,
+        )
+    }
+
+    /** Yellow family: yellowness floor and yellowness beats redness. */
+    internal fun isGoldenColorFamily(yellowness: Float, redness: Float): Boolean =
+        yellowness >= YELLOWNESS_ALIVE_MIN && yellowness > redness
+
+    /** @deprecated Use [decideBossAlive] — kept name for older call sites/tests. */
+    internal fun decideAlive(
+        aliveScore: Float?,
+        deadScore: Float,
+        redness: Float,
+        yellowness: Float = 0f,
+    ): AliveDecision = decideBossAlive(aliveScore, deadScore, redness, yellowness)
+
+    internal fun meanRedness(bitmap: Bitmap): Float = meanColorSignals(bitmap).first
+
+    internal fun meanColorSignals(bitmap: Bitmap): Pair<Float, Float> {
         val w = bitmap.width
         val h = bitmap.height
-        if (w <= 0 || h <= 0) return 0f
+        if (w <= 0 || h <= 0) return 0f to 0f
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-        return meanRednessArgb(pixels, w, h)
+        return meanColorSignalsArgb(pixels, w, h)
     }
 
     /** Mean of R - max(G, B) inside the inscribed circle. */
-    internal fun meanRednessArgb(pixels: IntArray, width: Int, height: Int): Float {
-        if (width <= 0 || height <= 0 || pixels.isEmpty()) return 0f
+    internal fun meanRednessArgb(pixels: IntArray, width: Int, height: Int): Float =
+        meanColorSignalsArgb(pixels, width, height).first
+
+    /**
+     * Inscribed-circle means: redness = R-max(G,B), yellowness = min(R,G)-B.
+     */
+    internal fun meanColorSignalsArgb(
+        pixels: IntArray,
+        width: Int,
+        height: Int,
+    ): Pair<Float, Float> {
+        if (width <= 0 || height <= 0 || pixels.isEmpty()) return 0f to 0f
         val cx = (width - 1) / 2.0
         val cy = (height - 1) / 2.0
         val radius = min(width, height) / 2.0
         val r2 = radius * radius
-        var sum = 0.0
+        var sumRed = 0.0
+        var sumYellow = 0.0
         var n = 0
         var i = 0
         for (y in 0 until height) {
@@ -353,13 +571,15 @@ object BossMapHuntActions {
                     val r = (c shr 16) and 0xff
                     val g = (c shr 8) and 0xff
                     val b = c and 0xff
-                    sum += r - max(g, b)
+                    sumRed += r - max(g, b)
+                    sumYellow += min(r, g) - b
                     n++
                 }
                 i++
             }
         }
-        return if (n == 0) 0f else (sum / n).toFloat()
+        if (n == 0) return 0f to 0f
+        return (sumRed / n).toFloat() to (sumYellow / n).toFloat()
     }
 
     /**
@@ -416,6 +636,18 @@ object BossMapHuntActions {
                 "game=${gameCoords?.let { "(${it.first},${it.second})" } ?: "null"} " +
                 "tpl=${best.templateName} candidates=$candidateCount",
         )
+
+        val bounds = mapDef.coordinateBounds
+        if (gameCoords != null && bounds != null && !bounds.contains(gameCoords.first, gameCoords.second)) {
+            Log.w(
+                TAG,
+                "[HUNT] game coords out of bounds " +
+                    "(${gameCoords.first},${gameCoords.second}) " +
+                    "vs [${bounds.xMin}..${bounds.xMax}]x[${bounds.yMin}..${bounds.yMax}] " +
+                    "— skip icon (no arrival wait)",
+            )
+            return false
+        }
 
         if (!NavigationVision.tapScreen(best.centerX, best.centerY, label = "boss_map_icon")) {
             return false

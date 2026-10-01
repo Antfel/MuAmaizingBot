@@ -1,0 +1,55 @@
+{
+  "map_id": "lorencia",
+  "pixel_space": "png_1280_native",
+  "method": "manual_tap_plus_user_coords",
+  "points": [
+    {
+      "label": "manual_1",
+      "ref_x": 704.0,
+      "ref_y": 431.0,
+      "game_x": 134,
+      "game_y": 85,
+      "kind": "manual_user_coords"
+    },
+    {
+      "label": "manual_2",
+      "ref_x": 622.0,
+      "ref_y": 348.0,
+      "game_x": 47,
+      "game_y": 86,
+      "kind": "manual_user_coords"
+    },
+    {
+      "label": "manual_3",
+      "ref_x": 712.0,
+      "ref_y": 308.0,
+      "game_x": 73,
+      "game_y": 155,
+      "kind": "manual_user_coords"
+    },
+    {
+      "label": "manual_4",
+      "ref_x": 770.0,
+      "ref_y": 253.0,
+      "game_x": 75,
+      "game_y": 214,
+      "kind": "manual_user_coords"
+    },
+    {
+      "label": "manual_5",
+      "ref_x": 875.0,
+      "ref_y": 415.0,
+      "game_x": 215,
+      "game_y": 184,
+      "kind": "manual_user_coords"
+    },
+    {
+      "label": "manual_6",
+      "ref_x": 783.0,
+      "ref_y": 488.0,
+      "game_x": 205,
+      "game_y": 98,
+      "kind": "manual_user_coords"
+    }
+  ]
+}

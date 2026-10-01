@@ -38,5 +38,6 @@ class MuBotApplication : Application() {
         com.example.muamaizingbot.settings.UiStrings.init(this)
         com.example.muamaizingbot.bot.BotDiagnosticJournal.init(this)
         com.example.muamaizingbot.bot.maintenance.ElfBuffDebugDump.init(this)
+        com.example.muamaizingbot.bot.maintenance.PetBagScanDebugTrigger.init(this)
     }
 }

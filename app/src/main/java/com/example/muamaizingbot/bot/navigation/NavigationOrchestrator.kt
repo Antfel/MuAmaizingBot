@@ -126,7 +126,29 @@ object NavigationOrchestrator {
             return false
         }
 
-        if (!navigateToMapAndWire(mapDef, location.wire)) {
+        // Same short-paths as farm/boss: DS elf prep used to reopen the map on every
+        // retry even when already standing on the elf pixel, so the player saw 2–3
+        // map opens before Daily Goal.
+        val onMap = NavigationWaitActions.isOnConfiguredMap(mapDef, location)
+        val atSpot = NavigationWaitActions.isAtFarmSpot(location, mapDef)
+        if (onMap && atSpot) {
+            Log.d(TAG, "[NAV] already at visual location pixel=(${location.x},${location.y})")
+            return true
+        }
+        if (onMap) {
+            Log.d(TAG, "[NAV] on visual map; wire + spot tap only")
+            if (!WireSwitchActions.switchToWire(mapDef, location.wire)) {
+                Log.w(TAG, "[NAV] switch_to_wire failed (visual spot-only)")
+                return false
+            }
+            if (!tapVisualLocation(location.x, location.y, location, mapDef)) {
+                Log.w(TAG, "[NAV] tap_visual_location failed (visual spot-only)")
+                return false
+            }
+            return true
+        }
+
+        if (!navigateToMapAndWire(mapDef, location.wire, location)) {
             Log.w(TAG, "[NAV] navigate_to_map_and_wire failed for visual location")
             return false
         }

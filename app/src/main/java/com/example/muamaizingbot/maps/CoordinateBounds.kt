@@ -8,6 +8,11 @@ data class CoordinateBounds(
     val yMin: Int,
     val yMax: Int,
 ) {
+    fun contains(x: Int, y: Int, margin: Int = 0): Boolean {
+        return x in (xMin - margin)..(xMax + margin) &&
+            y in (yMin - margin)..(yMax + margin)
+    }
+
     companion object {
         fun fromJson(json: JSONObject?): CoordinateBounds? {
             if (json == null) {

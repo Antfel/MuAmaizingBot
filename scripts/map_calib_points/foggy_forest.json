@@ -1,0 +1,46 @@
+{
+  "map_id": "foggy_forest",
+  "pixel_space": "png_1280_native",
+  "note": "5-pt W/N/E/S + center. Ridax 127.0.0.1:5585. Residual 0.294. Affine v2/1280 written.",
+  "need": 5,
+  "pending": null,
+  "max_abs_residual": 0.294,
+  "live_hull": [
+    {"label": "V1", "tap": [705, 190], "pred": [15, 207], "hud": [15, 207], "manhattan": 0},
+    {"label": "V2", "tap": [859, 430], "pred": [150, 177], "hud": [145, 180], "manhattan": 8, "note": "gold Entertainer; likely label not skull"},
+    {"label": "V3", "tap": [582, 362], "pred": [32, 106], "hud": [32, 106], "manhattan": 0},
+    {"label": "V4", "tap": [836, 363], "pred": [119, 192], "hud": [119, 192], "manhattan": 0}
+  ],
+  "points": [
+    {
+      "label": "N",
+      "tap": [740, 143],
+      "icon": "Tedus north flame",
+      "hud": [11, 235]
+    },
+    {
+      "label": "W",
+      "tap": [539, 381],
+      "icon": "westmost red mob",
+      "hud": [24, 85]
+    },
+    {
+      "label": "E",
+      "tap": [943, 329],
+      "icon": "Sanguine Shield Guard east flame",
+      "hud": [144, 240]
+    },
+    {
+      "label": "S",
+      "tap": [750, 563],
+      "icon": "Sanguine Lance Guard south flame",
+      "hud": [158, 95]
+    },
+    {
+      "label": "C",
+      "tap": [754, 337],
+      "icon": "center gold (Deadly Butcher)",
+      "hud": [82, 173]
+    }
+  ]
+}

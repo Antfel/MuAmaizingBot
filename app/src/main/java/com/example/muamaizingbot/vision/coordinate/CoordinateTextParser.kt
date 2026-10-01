@@ -79,21 +79,37 @@ object CoordinateTextParser {
     }
 
     /**
-     * HUD OCR often drops digits from a known good axis (e.g. 161 → 61 / 16 / 6).
-     * Only when [read] is a proper shorter fragment of [expected], not equal.
+     * HUD OCR often drops digits from a known good axis (e.g. 161 → 61 / 16 / 1).
+     * Only when [read] is a proper shorter **prefix or suffix** of [expected], not equal.
+     * Mid-string fragments are rejected (e.g. 4 inside 247, 6 inside 161) — that caused
+     * false boss arrivals mid-walk. Also allows one-digit OCR noise on a same-length
+     * contiguous prefix/suffix fragment (e.g. 114 → 13 near fragment "14").
      */
     fun looksLikeTruncatedAxis(read: Int, expected: Int): Boolean {
         if (read == expected) return false
         val r = read.toString()
         val e = expected.toString()
         if (r.length >= e.length) return false
-        return e.startsWith(r) || e.endsWith(r) || e.contains(r)
+        if (e.startsWith(r) || e.endsWith(r)) return true
+        return isNearDigitFragment(r, e)
+    }
+
+    /** [r] is within ±1 of the leading- or trailing-truncated form of [e]. */
+    private fun isNearDigitFragment(r: String, e: String): Boolean {
+        if (r.length < 2) return false
+        val drop = e.length - r.length
+        if (drop < 1) return false
+        val readVal = r.toIntOrNull() ?: return false
+        val suffixVal = e.substring(drop).toIntOrNull() ?: return false
+        if (kotlin.math.abs(suffixVal - readVal) <= 1) return true
+        val prefixVal = e.substring(0, r.length).toIntOrNull() ?: return false
+        return kotlin.math.abs(prefixVal - readVal) <= 1
     }
 
     /**
      * True when at least one axis looks truncated and both axes remain plausible
      * versus the farm-spot target. This avoids treating a real move such as
-     * `(1,190)` as sticky only because `1` is contained in target `161`.
+     * `(1,190)` as sticky only because `1` is a loose fragment of target `161`.
      */
     fun looksLikeTruncatedHudRead(
         current: Pair<Int, Int>,

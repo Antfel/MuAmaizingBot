@@ -1,0 +1,43 @@
+{
+  "id": "eversong_forest",
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 1,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.204582499,
+        0.202719695,
+        -102.541330974
+      ],
+      "coord_y": [
+        0.201276021,
+        -0.205746752,
+        52.719182229
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ref_x": 601,
+      "ref_y": 363,
+      "game_x": 94,
+      "game_y": 99
+    },
+    {
+      "ref_x": 674,
+      "ref_y": 240,
+      "game_x": 84,
+      "game_y": 139
+    },
+    {
+      "ref_x": 810,
+      "ref_y": 305,
+      "game_x": 125,
+      "game_y": 153
+    }
+  ]
+}

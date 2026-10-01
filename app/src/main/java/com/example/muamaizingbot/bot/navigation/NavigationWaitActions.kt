@@ -58,6 +58,11 @@ object NavigationWaitActions {
      */
     private const val PATH_ENDED_GONE_MS = 1_500L
     private const val PATH_ENDED_STABLE_MS = 2_000L
+    /**
+     * Trunc-OCR sticky arrival only after HUD coords stay unchanged this long.
+     * Mid-walk flash reads (e.g. 247→4) must not confirm arrival while still moving.
+     */
+    private const val TRUNC_STICKY_STABLE_MS = 3_000L
 
     /** Result of HUD-coordinate arrival wait (boss hunt uses non-ARRIVED branches). */
     enum class CoordArrivalResult {
@@ -484,31 +489,6 @@ object NavigationWaitActions {
 
             val current = readHudCoordinates(mapDef)
             if (current != null) {
-                val dist = manhattanDistance(current.first, current.second, targetX, targetY)
-                Log.d(TAG, "[COORD_ARRIVAL] current=(${current.first},${current.second}) dist=$dist")
-                if (dist <= radius) {
-                    Log.d(TAG, "[COORD_ARRIVAL] arrived")
-                    return CoordArrivalResult.ARRIVED
-                }
-                // HUD often drops leading digits (179→7). Same heuristic as farm-spot sticky:
-                // require Y near target so a real x=7 elsewhere does not count as arrived.
-                val yNear = abs(current.second - targetY) <= radius
-                if (yNear &&
-                    CoordinateTextParser.looksLikeTruncatedHudRead(
-                        current,
-                        targetX to targetY,
-                        tolerance = radius,
-                    )
-                ) {
-                    Log.d(
-                        TAG,
-                        "[COORD_ARRIVAL] trunc sticky " +
-                            "current=(${current.first},${current.second}) " +
-                            "target=($targetX,$targetY) → arrived",
-                    )
-                    return CoordArrivalResult.ARRIVED
-                }
-
                 val now = System.currentTimeMillis()
                 if (lastCoord != null &&
                     current.first == lastCoord.first &&
@@ -517,67 +497,103 @@ object NavigationWaitActions {
                     if (stableSinceMs == 0L) {
                         stableSinceMs = now
                     }
-                    val stableFor = now - stableSinceMs
-                    val pathGoneFor = if (pathGoneSinceMs > 0L) now - pathGoneSinceMs else 0L
-
-                    // Path finished + standing still: arrived for boss even when OCR dist is wrong.
-                    if (acceptPathEndedAsArrival &&
-                        sawAutoNav &&
-                        pathGoneFor >= PATH_ENDED_GONE_MS &&
-                        stableFor >= PATH_ENDED_STABLE_MS
-                    ) {
-                        Log.d(
-                            TAG,
-                            "[COORD_ARRIVAL] path ended + stable ${stableFor}ms " +
-                                "pathGone=${pathGoneFor}ms " +
-                                "at=(${current.first},${current.second}) dist=$dist → arrived",
-                        )
-                        return CoordArrivalResult.ARRIVED
-                    }
-
-                    if (stableFor >= COORD_STUCK_DEATH_CHECK_MS &&
-                        now - lastDeathCheckAtMs >= COORD_STUCK_DEATH_CHECK_MS
-                    ) {
-                        lastDeathCheckAtMs = now
-                        Log.d(
-                            TAG,
-                            "[COORD_ARRIVAL] coords unchanged ${stableFor}ms " +
-                                "at=(${current.first},${current.second}) → death check",
-                        )
-                        if (DeathActions.isDead()) {
-                            Log.w(
-                                TAG,
-                                "[COORD_ARRIVAL] dead mid-nav — wait auto-revive " +
-                                    "(${DeathActions.DEATH_LOCKOUT_MS}ms lockout)",
-                            )
-                            DeathActions.waitForAutoRevive()
-                            return CoordArrivalResult.DEAD
-                        }
-                        // Do not reset stableSinceMs — death checks must not block stuck abort.
-                        if (stableFor >= COORD_STUCK_ABORT_MS) {
-                            // Boss: path gone long enough — prefer arrived over stuck (OCR may lie).
-                            if (acceptPathEndedAsArrival &&
-                                sawAutoNav &&
-                                pathGoneFor >= PATH_ENDED_GONE_MS
-                            ) {
-                                Log.d(
-                                    TAG,
-                                    "[COORD_ARRIVAL] stuck but path ended — arrived " +
-                                        "at=(${current.first},${current.second}) dist=$dist",
-                                )
-                                return CoordArrivalResult.ARRIVED
-                            }
-                            Log.w(
-                                TAG,
-                                "[COORD_ARRIVAL] stuck ${stableFor}ms " +
-                                    "at=(${current.first},${current.second}) dist=$dist — abort for re-nav",
-                            )
-                            return CoordArrivalResult.STUCK
-                        }
-                    }
                 } else {
                     lastCoord = current
                     stableSinceMs = now
+                }
+                val stableFor = now - stableSinceMs
+
+                val dist = manhattanDistance(current.first, current.second, targetX, targetY)
+                Log.d(TAG, "[COORD_ARRIVAL] current=(${current.first},${current.second}) dist=$dist")
+                if (dist <= radius) {
+                    Log.d(TAG, "[COORD_ARRIVAL] arrived")
+                    return CoordArrivalResult.ARRIVED
+                }
+                // HUD often drops leading digits (179→7). Same heuristic as farm-spot sticky:
+                // require Y near target so a real x=7 elsewhere does not count as arrived.
+                // Only confirm after coords stop changing — mid-walk OCR flashes stay navigation.
+                val yNear = abs(current.second - targetY) <= radius
+                if (yNear &&
+                    CoordinateTextParser.looksLikeTruncatedHudRead(
+                        current,
+                        targetX to targetY,
+                        tolerance = radius,
+                    )
+                ) {
+                    if (stableFor >= TRUNC_STICKY_STABLE_MS) {
+                        Log.d(
+                            TAG,
+                            "[COORD_ARRIVAL] trunc sticky " +
+                                "current=(${current.first},${current.second}) " +
+                                "target=($targetX,$targetY) stable=${stableFor}ms → arrived",
+                        )
+                        return CoordArrivalResult.ARRIVED
+                    }
+                    Log.d(
+                        TAG,
+                        "[COORD_ARRIVAL] trunc sticky pending " +
+                            "current=(${current.first},${current.second}) " +
+                            "target=($targetX,$targetY) stable=${stableFor}ms/" +
+                            "${TRUNC_STICKY_STABLE_MS}ms (still moving)",
+                    )
+                }
+
+                val pathGoneFor = if (pathGoneSinceMs > 0L) now - pathGoneSinceMs else 0L
+
+                // Path finished + standing still: arrived for boss even when OCR dist is wrong.
+                if (acceptPathEndedAsArrival &&
+                    sawAutoNav &&
+                    pathGoneFor >= PATH_ENDED_GONE_MS &&
+                    stableFor >= PATH_ENDED_STABLE_MS
+                ) {
+                    Log.d(
+                        TAG,
+                        "[COORD_ARRIVAL] path ended + stable ${stableFor}ms " +
+                            "pathGone=${pathGoneFor}ms " +
+                            "at=(${current.first},${current.second}) dist=$dist → arrived",
+                    )
+                    return CoordArrivalResult.ARRIVED
+                }
+
+                if (stableFor >= COORD_STUCK_DEATH_CHECK_MS &&
+                    now - lastDeathCheckAtMs >= COORD_STUCK_DEATH_CHECK_MS
+                ) {
+                    lastDeathCheckAtMs = now
+                    Log.d(
+                        TAG,
+                        "[COORD_ARRIVAL] coords unchanged ${stableFor}ms " +
+                            "at=(${current.first},${current.second}) → death check",
+                    )
+                    if (DeathActions.isDead()) {
+                        Log.w(
+                            TAG,
+                            "[COORD_ARRIVAL] dead mid-nav — wait auto-revive " +
+                                "(${DeathActions.DEATH_LOCKOUT_MS}ms lockout)",
+                        )
+                        DeathActions.waitForAutoRevive()
+                        return CoordArrivalResult.DEAD
+                    }
+                    // Do not reset stableSinceMs — death checks must not block stuck abort.
+                    if (stableFor >= COORD_STUCK_ABORT_MS) {
+                        // Boss: path gone long enough — prefer arrived over stuck (OCR may lie).
+                        if (acceptPathEndedAsArrival &&
+                            sawAutoNav &&
+                            pathGoneFor >= PATH_ENDED_GONE_MS
+                        ) {
+                            Log.d(
+                                TAG,
+                                "[COORD_ARRIVAL] stuck but path ended — arrived " +
+                                    "at=(${current.first},${current.second}) dist=$dist",
+                            )
+                            return CoordArrivalResult.ARRIVED
+                        }
+                        Log.w(
+                            TAG,
+                            "[COORD_ARRIVAL] stuck ${stableFor}ms " +
+                                "at=(${current.first},${current.second}) dist=$dist — abort for re-nav",
+                        )
+                        return CoordArrivalResult.STUCK
+                    }
                 }
             }
             delay(AdaptiveWait.POLL_MS)

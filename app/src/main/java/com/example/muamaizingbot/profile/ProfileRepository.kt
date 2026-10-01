@@ -143,7 +143,7 @@ object ProfileRepository {
         Log.d(
             TAG,
             "[PROFILE] kill_bosses maps=${config.maps.size} " +
-                "golden=${config.includeGoldenMobs} hold=${config.holdSec}s file=$profileFilename",
+                "golden=${config.includeGoldenMobs} file=$profileFilename",
         )
         return updated
     }

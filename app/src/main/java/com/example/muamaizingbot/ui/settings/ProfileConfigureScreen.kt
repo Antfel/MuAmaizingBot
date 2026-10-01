@@ -1001,37 +1001,26 @@ private fun FarmBossesConfigCard(
     var selectedMaps by remember(profile?.filename, config.maps) {
         mutableStateOf(config.maps)
     }
-    var holdText by remember(profile?.filename, config.holdSec) {
-        mutableStateOf(config.holdSec.toString())
-    }
     var golden by remember(profile?.filename, config.includeGoldenMobs) {
         mutableStateOf(config.includeGoldenMobs)
     }
     var searchQuery by remember { mutableStateOf("") }
 
-    LaunchedEffect(config.maps, config.holdSec, config.includeGoldenMobs) {
+    LaunchedEffect(config.maps, config.includeGoldenMobs) {
         selectedMaps = config.maps
-        holdText = config.holdSec.toString()
         golden = config.includeGoldenMobs
     }
 
     fun persist(
         maps: List<String> = selectedMaps,
-        holdOverride: Int? = null,
         goldenOverride: Boolean? = null,
     ) {
         if (profile == null) return
-        val hold = holdOverride
-            ?: holdText.toIntOrNull()
-                ?.coerceIn(KillBossesConfig.MIN_HOLD_SEC, KillBossesConfig.MAX_HOLD_SEC)
-            ?: KillBossesConfig.DEFAULT_HOLD_SEC
         ProfileRepository.setKillBossesConfig(
             profileFilename,
-            KillBossesConfig(
+            config.copy(
                 includeGoldenMobs = goldenOverride ?: golden,
-                holdSec = hold,
                 maps = maps,
-                pet = config.pet,
             ),
         )
     }
@@ -1149,43 +1138,6 @@ private fun FarmBossesConfigCard(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                OutlinedTextField(
-                    value = holdText,
-                    onValueChange = { holdText = it.filter { ch -> ch.isDigit() }.take(3) },
-                    modifier = Modifier.weight(0.32f),
-                    label = { Text(stringResource(R.string.profile_bosses_hold)) },
-                    singleLine = true,
-                    enabled = profile != null,
-                )
-                CompactInfoButton(
-                    title = stringResource(R.string.profile_bosses_hold),
-                    info = stringResource(
-                        R.string.profile_bosses_hold_hint,
-                        KillBossesConfig.DEFAULT_HOLD_SEC,
-                    ),
-                )
-                OutlinedButton(
-                    onClick = {
-                        val hold = holdText.toIntOrNull()
-                            ?.coerceIn(KillBossesConfig.MIN_HOLD_SEC, KillBossesConfig.MAX_HOLD_SEC)
-                            ?: KillBossesConfig.DEFAULT_HOLD_SEC
-                        holdText = hold.toString()
-                        persist(holdOverride = hold)
-                    },
-                    modifier = Modifier
-                        .weight(0.68f)
-                        .height(38.dp),
-                    enabled = profile != null,
-                ) {
-                    Text(stringResource(R.string.profile_bosses_save_hold))
-                }
             }
 
             Row(

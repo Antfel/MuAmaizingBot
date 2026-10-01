@@ -1,0 +1,61 @@
+{
+  "map_id": "raklion_1",
+  "pixel_space": "png_1280_native",
+  "method": "boss_golden_arrival",
+  "points": [
+    {
+      "label": "seed_1",
+      "ref_x": 809.0,
+      "ref_y": 239.0,
+      "game_x": 149,
+      "game_y": 203,
+      "seals_used": 0,
+      "kind": "seed"
+    },
+    {
+      "label": "golden_2",
+      "ref_x": 755.0,
+      "ref_y": 149.0,
+      "game_x": 101,
+      "game_y": 215,
+      "seals_used": 0,
+      "kind": "golden"
+    },
+    {
+      "label": "golden_3",
+      "ref_x": 811.0,
+      "ref_y": 487.0,
+      "game_x": 234,
+      "game_y": 119,
+      "seals_used": 0,
+      "kind": "golden"
+    },
+    {
+      "label": "golden_4",
+      "ref_x": 681.0,
+      "ref_y": 313.0,
+      "game_x": 132,
+      "game_y": 134,
+      "seals_used": 0,
+      "kind": "golden"
+    },
+    {
+      "label": "red_5",
+      "ref_x": 760.0,
+      "ref_y": 434.0,
+      "game_x": 199,
+      "game_y": 120,
+      "seals_used": 0,
+      "kind": "red"
+    },
+    {
+      "label": "red_6",
+      "ref_x": 821.0,
+      "ref_y": 297.0,
+      "game_x": 173,
+      "game_y": 187,
+      "seals_used": 0,
+      "kind": "red"
+    }
+  ]
+}

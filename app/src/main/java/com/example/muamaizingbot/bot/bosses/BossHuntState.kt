@@ -14,6 +14,12 @@ data class BossHuntCheckpoint(
     val wireId: Int,
 )
 
+/** Boss (red skull) vs golden mob (yellow skull) — never mixed in color checks. */
+enum class HuntTargetKind {
+    BOSS,
+    GOLDEN,
+}
+
 /** One boss icon on the parchment (geometry only — no alive/dead). */
 data class HuntSlot(
     val centerX: Int,
@@ -23,6 +29,7 @@ data class HuntSlot(
     val templateWidth: Int,
     val templateHeight: Int,
     val templateName: String,
+    val kind: HuntTargetKind = HuntTargetKind.BOSS,
 ) {
     fun toHuntIcon(score: Float = 0f): HuntIcon = HuntIcon(
         centerX = centerX,
@@ -33,6 +40,7 @@ data class HuntSlot(
         templateHeight = templateHeight,
         score = score,
         templateName = templateName,
+        kind = kind,
     )
 }
 
@@ -52,7 +60,11 @@ data class HuntIcon(
     val templateHeight: Int,
     val score: Float,
     val templateName: String,
-)
+    val kind: HuntTargetKind = HuntTargetKind.BOSS,
+) {
+    val isGolden: Boolean get() = kind == HuntTargetKind.GOLDEN
+    val isBoss: Boolean get() = kind == HuntTargetKind.BOSS
+}
 
 /** Cursor over this wire's live icons (re-classified from [MapHuntLayout]). */
 data class WireHuntPlan(

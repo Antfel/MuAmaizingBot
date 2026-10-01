@@ -28,6 +28,46 @@ object NavigationVision {
 
     suspend fun captureFrame(): Bitmap? = ScreenCaptureManager.getLatestBitmap()
 
+    /**
+     * Frame to run a template search on, plus the offset needed to map matches
+     * back to full-frame coordinates.
+     *
+     * With a usable [roi] only that rectangle is copied instead of the whole
+     * screen, which is what the HUD-bound searches (elf buffs, focus bar, PK
+     * popups) actually need. [searchRoi] is null in that case because the crop
+     * already is the search area.
+     */
+    private class RoiFrame(
+        val bitmap: Bitmap,
+        val offsetX: Int,
+        val offsetY: Int,
+        val searchRoi: Rect?,
+    )
+
+    private fun captureForRoi(roi: Rect?): RoiFrame? {
+        if (roi == null || roi.width() <= 0 || roi.height() <= 0) {
+            val full = ScreenCaptureManager.getLatestBitmap() ?: return null
+            return RoiFrame(full, 0, 0, roi)
+        }
+        val (frameWidth, frameHeight) = ScreenCaptureManager.peekLatestBitmapSize() ?: return null
+        if (frameWidth <= 0 || frameHeight <= 0) return null
+
+        // Clamp here so the offset added back below matches the pixels that
+        // copyRegion actually copies.
+        val left = roi.left.coerceIn(0, frameWidth - 1)
+        val top = roi.top.coerceIn(0, frameHeight - 1)
+        val width = roi.width().coerceAtMost(frameWidth - left).coerceAtLeast(1)
+        val height = roi.height().coerceAtMost(frameHeight - top).coerceAtLeast(1)
+
+        val crop = ScreenCaptureManager.copyRegion(left, top, width, height) ?: return null
+        return RoiFrame(crop, left, top, null)
+    }
+
+    private fun PcTemplateMatchResult.offsetBy(dx: Int, dy: Int): PcTemplateMatchResult {
+        if (dx == 0 && dy == 0) return this
+        return copy(bestX = bestX + dx, bestY = bestY + dy)
+    }
+
     fun findOnFrame(
         frame: Bitmap,
         assetPath: String,
@@ -76,11 +116,12 @@ object NavigationVision {
         threshold: Float,
         roi: Rect? = null,
     ): PcTemplateMatchResult? {
-        val frame = captureFrame() ?: return null
+        val roiFrame = captureForRoi(roi) ?: return null
         return try {
-            findOnFrame(frame, assetPath, threshold, roi)
+            findOnFrame(roiFrame.bitmap, assetPath, threshold, roiFrame.searchRoi)
+                ?.offsetBy(roiFrame.offsetX, roiFrame.offsetY)
         } finally {
-            frame.recycle()
+            roiFrame.bitmap.recycle()
         }
     }
 
@@ -90,11 +131,12 @@ object NavigationVision {
         roi: Rect? = null,
         maxMatches: Int = 20,
     ): List<PcTemplateMatchResult> {
-        val frame = captureFrame() ?: return emptyList()
+        val roiFrame = captureForRoi(roi) ?: return emptyList()
         return try {
-            findAllOnFrame(frame, assetPath, threshold, roi, maxMatches)
+            findAllOnFrame(roiFrame.bitmap, assetPath, threshold, roiFrame.searchRoi, maxMatches)
+                .map { it.offsetBy(roiFrame.offsetX, roiFrame.offsetY) }
         } finally {
-            frame.recycle()
+            roiFrame.bitmap.recycle()
         }
     }
 
@@ -225,24 +267,29 @@ object NavigationVision {
     }
 
     suspend fun logBestScore(assetPath: String, roi: Rect? = null) {
-        val frame = captureFrame() ?: run {
+        val roiFrame = captureForRoi(roi) ?: run {
             Log.w(TAG, "[VISION] best score skipped path=$assetPath reason=no_frame")
             return
         }
         try {
-            val probe = probeOnFrame(frame, assetPath, roi)
+            val probe = probeOnFrame(roiFrame.bitmap, assetPath, roiFrame.searchRoi)
+                .offsetBy(roiFrame.offsetX, roiFrame.offsetY)
             val maskNote = buildString {
                 if (wantsCircularMask(assetPath)) append(" circularMask=true")
                 if (wantsOpaqueMask(assetPath)) append(" opaqueMask=true")
             }
+            // Report the screen size, not the crop, so scores stay comparable
+            // across ROI and full-frame probes.
+            val (frameWidth, frameHeight) = ScreenCaptureManager.peekLatestBitmapSize()
+                ?: (roiFrame.bitmap.width to roiFrame.bitmap.height)
             Log.w(
                 TAG,
                 "[VISION] best score path=$assetPath score=${"%.3f".format(probe.score)} " +
                     "at=(${probe.bestX},${probe.bestY}) template=${probe.templateWidth}x${probe.templateHeight} " +
-                    "frame=${frame.width}x${frame.height}$maskNote"
+                    "frame=${frameWidth}x${frameHeight}$maskNote"
             )
         } finally {
-            frame.recycle()
+            roiFrame.bitmap.recycle()
         }
     }
 
@@ -424,7 +471,8 @@ object NavigationVision {
         val name = assetPath.substringAfterLast('/')
         return name == "boss_alive.png" ||
             name == "boss_dead.png" ||
-            name == "golden_alive.png"
+            name == "golden_alive.png" ||
+            name == "golden_dead.png"
     }
 
     private fun emptyMatch(assetPath: String): PcTemplateMatchResult {

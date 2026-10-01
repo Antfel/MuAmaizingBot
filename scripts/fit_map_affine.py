@@ -113,11 +113,17 @@ def fit_affine(points: list[tuple[float, float, float, float]]) -> tuple[list[fl
     return ax, ay, max_res
 
 
-def mapping_block(coord_x: list[float], coord_y: list[float]) -> dict:
+def mapping_block(
+    coord_x: list[float],
+    coord_y: list[float],
+    *,
+    source_width: int = 2560,
+    source_height: int = 1440,
+) -> dict:
     return {
         "type": "affine",
         "version": 1,
-        "source_image_size": {"width": 2560, "height": 1440},
+        "source_image_size": {"width": source_width, "height": source_height},
         "transform": {
             "coord_x": [round(v, 9) for v in coord_x],
             "coord_y": [round(v, 9) for v in coord_y],

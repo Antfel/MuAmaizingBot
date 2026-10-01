@@ -1,0 +1,86 @@
+{
+  "id": "ferea",
+  "name": "Ferea",
+  "group": "Ferea",
+  "is_cross": false,
+  "requirements": {
+    "min_level": 550
+  },
+  "order": 31,
+  "wire": 2,
+  "maintenance": {
+    "image_width": 1280,
+    "image_height": 720,
+    "map_ui_image": "templates/maps/Ferea/maintenance/ferea_map_open_reference.png"
+  },
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 2,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.510097192,
+        0.509894661,
+        -448.01497332
+      ],
+      "coord_y": [
+        0.509951332,
+        -0.509360431,
+        -65.229293137
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ref_x": 748,
+      "ref_y": 197,
+      "game_x": 34,
+      "game_y": 216
+    },
+    {
+      "ref_x": 546,
+      "ref_y": 399,
+      "game_x": 34,
+      "game_y": 10
+    },
+    {
+      "ref_x": 943,
+      "ref_y": 396,
+      "game_x": 235,
+      "game_y": 214
+    },
+    {
+      "ref_x": 788,
+      "ref_y": 561,
+      "game_x": 240,
+      "game_y": 51
+    },
+    {
+      "ref_x": 775,
+      "ref_y": 388,
+      "game_x": 145,
+      "game_y": 132
+    }
+  ],
+  "coordinate_bounds": {
+    "x_min": 0,
+    "x_max": 400,
+    "y_min": 0,
+    "y_max": 400
+  },
+  "navigation": {
+    "behavior": "direct_teleport",
+    "map_option_template": "templates/maps/Ferea/mapsui/ferea.png",
+    "enter_wait": 10,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  }
+}

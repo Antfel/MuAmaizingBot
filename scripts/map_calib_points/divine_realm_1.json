@@ -1,24 +1,65 @@
 {
   "map_id": "divine_realm_1",
-  "pixel_space": "png_1280_converted_to_ref",
+  "pixel_space": "png_1280_native",
+  "method": "adb_tap_plus_user_hud_cardinals",
   "points": [
     {
-      "ref_x": 1303.0,
-      "ref_y": 840.2,
-      "game_x": 104,
-      "game_y": 47
+      "ref_x": 758.0,
+      "ref_y": 140.0,
+      "game_x": 16,
+      "game_y": 243,
+      "label": "N"
     },
     {
-      "ref_x": 1729.0,
-      "ref_y": 762.4,
-      "game_x": 193,
-      "game_y": 175
+      "ref_x": 935.0,
+      "ref_y": 375.0,
+      "game_x": 226,
+      "game_y": 214,
+      "label": "E"
     },
     {
-      "ref_x": 1514.0,
-      "ref_y": 548.6,
-      "game_x": 84,
-      "game_y": 175
+      "ref_x": 759.0,
+      "ref_y": 564.0,
+      "game_x": 233,
+      "game_y": 28,
+      "label": "S"
+    },
+    {
+      "ref_x": 566.0,
+      "ref_y": 373.0,
+      "game_x": 36,
+      "game_y": 25,
+      "label": "W"
+    },
+    {
+      "ref_x": 755.0,
+      "ref_y": 369.0,
+      "game_x": 131,
+      "game_y": 126,
+      "label": "C"
     }
-  ]
+  ],
+  "portals": [],
+  "pixel_plan": {
+    "N": [
+      758,
+      140
+    ],
+    "E": [
+      975,
+      377
+    ],
+    "S": [
+      761,
+      608
+    ],
+    "W": [
+      525,
+      375
+    ],
+    "C": [
+      755,
+      369
+    ]
+  }
 }

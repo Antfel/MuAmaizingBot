@@ -14,7 +14,9 @@ import kotlinx.coroutines.delay
 object ElfBuffNavigationActions {
 
     private const val TAG = "ElfBuffNav"
-    private const val BUFF_PICKUP_WAIT_MS = 5000L
+    /** Stand at elf until both buffs appear, or this timeout (not a blind short delay). */
+    private const val BUFF_PICKUP_TIMEOUT_MS = 30_000L
+    private const val BUFF_PICKUP_POLL_MS = 1_500L
 
     /** Go to elf, wait pickup, do not return to farm (Devil Square prep). */
     suspend fun goToElfBuffWithoutReturn(): Boolean {
@@ -31,7 +33,8 @@ object ElfBuffNavigationActions {
         if (DeathActions.isDead()) {
             if (!DeathActions.recoverIfDead()) return false
         }
-        return goToElfBuff(elfLocation)
+        if (!navigateToElf(elfLocation)) return false
+        return waitForBuffPickup()
     }
 
     suspend fun goToElfBuffAndReturn(): Boolean {
@@ -69,13 +72,26 @@ object ElfBuffNavigationActions {
                     BotRecoveryActions.recoverFromLostState("post-revive-defer-elf")
             }
 
-            if (!goToElfBuff(elfLocation)) {
+            if (!navigateToElf(elfLocation)) {
                 // Mode-aware: farm → farm spot; farm_bosses → boss checkpoint; war → war post.
-                // Recovery may succeed while buff was never picked up — always return false
-                // so callers do not treat this as a successful buff run (e.g. skip returnToBoss).
                 Log.w(TAG, "[ELF] route to buff failed; mode-aware recovery checkpoint")
                 BotRecoveryActions.recoverFromLostState("elf-route-failed")
                 return false
+            }
+
+            val gotBuff = waitForBuffPickup()
+            if (!gotBuff) {
+                // Reached elf but no cast — do not loop as a nav ERROR; seek gate counts the miss.
+                Log.w(TAG, "[ELF] no buff after wait — leaving elf spot")
+                if (profile.isFarmBossesMode()) {
+                    Log.d(TAG, "[ELF] farm_bosses post-miss; checkpoint return deferred")
+                    return true
+                }
+                if (!BotRecoveryActions.navigateToFarmWithRetry("post-elf-buff-miss")) {
+                    Log.w(TAG, "[ELF] return to farm after miss failed; recovery checkpoint")
+                    return BotRecoveryActions.recoverFromLostState("elf-return-failed")
+                }
+                return true
             }
 
             // Farm Bosses: post-kill resumes via FarmBossesLoop.resumeAfterMaintenance.
@@ -96,20 +112,42 @@ object ElfBuffNavigationActions {
         }
     }
 
-    private suspend fun goToElfBuff(location: FarmLocation): Boolean {
+    private suspend fun navigateToElf(location: FarmLocation): Boolean {
         Log.d(
             TAG,
             "[ELF] going to buff map=${location.map} wire=${location.wire} " +
                 "pixel=(${location.x},${location.y})",
         )
-
         if (!NavigationOrchestrator.goToVisualLocation(location)) {
             Log.w(TAG, "[ELF] failed to reach elf buff location")
             return false
         }
-
-        delay(BUFF_PICKUP_WAIT_MS)
-        Log.d(TAG, "[ELF] buff pickup wait done")
         return true
+    }
+
+    /**
+     * Stay on the elf spot up to [BUFF_PICKUP_TIMEOUT_MS], polling icons.
+     * Leaves early once both buffs are present. Returns false if still missing
+     * after the window so callers do not treat it as a successful renew.
+     */
+    private suspend fun waitForBuffPickup(): Boolean {
+        val deadline = System.currentTimeMillis() + BUFF_PICKUP_TIMEOUT_MS
+        Log.d(TAG, "[ELF] buff pickup wait up to ${BUFF_PICKUP_TIMEOUT_MS}ms")
+        while (true) {
+            if (ElfBuffCheckActions.hasElfBuff()) {
+                val left = (deadline - System.currentTimeMillis()).coerceAtLeast(0L)
+                Log.d(TAG, "[ELF] buff pickup confirmed (~${left}ms early)")
+                return true
+            }
+            val remaining = deadline - System.currentTimeMillis()
+            if (remaining <= 0L) {
+                Log.w(
+                    TAG,
+                    "[ELF] buff pickup wait done — still missing after ${BUFF_PICKUP_TIMEOUT_MS}ms",
+                )
+                return false
+            }
+            delay(minOf(BUFF_PICKUP_POLL_MS, remaining))
+        }
     }
 }

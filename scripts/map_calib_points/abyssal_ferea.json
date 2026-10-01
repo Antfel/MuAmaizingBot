@@ -1,0 +1,55 @@
+{
+  "map_id": "abyssal_ferea",
+  "pixel_space": "png_1280_native",
+  "copied_from": "ferea",
+  "affine_version": 2,
+  "pending_live_validation": false,
+  "note": "Same parchment as Ferea local. Affine copied. wire=3. Live hull 3/3 radius 5 on RiddB 127.0.0.1:5575.",
+  "points": [
+    {
+      "label": "N",
+      "ref_x": 748,
+      "ref_y": 197,
+      "game_x": 34,
+      "game_y": 216,
+      "kind": "copied_from_ferea"
+    },
+    {
+      "label": "W",
+      "ref_x": 546,
+      "ref_y": 399,
+      "game_x": 34,
+      "game_y": 10,
+      "kind": "copied_from_ferea"
+    },
+    {
+      "label": "E",
+      "ref_x": 943,
+      "ref_y": 396,
+      "game_x": 235,
+      "game_y": 214,
+      "kind": "copied_from_ferea"
+    },
+    {
+      "label": "S",
+      "ref_x": 788,
+      "ref_y": 561,
+      "game_x": 240,
+      "game_y": 51,
+      "kind": "copied_from_ferea"
+    },
+    {
+      "label": "C",
+      "ref_x": 775,
+      "ref_y": 388,
+      "game_x": 145,
+      "game_y": 132,
+      "kind": "copied_from_ferea"
+    }
+  ],
+  "live_hull": [
+    {"label": "A1", "ref_x": 854, "ref_y": 438, "pred": [210.9, 147.2], "hud": [211, 147]},
+    {"label": "A2", "ref_x": 856, "ref_y": 355, "pred": [169.6, 190.5], "hud": [170, 190]},
+    {"label": "A3", "ref_x": 638, "ref_y": 376, "pred": [69.1, 68.6], "hud": [69, 68]}
+  ]
+}

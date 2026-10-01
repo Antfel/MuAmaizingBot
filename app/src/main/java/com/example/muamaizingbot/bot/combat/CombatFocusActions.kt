@@ -60,6 +60,12 @@ object CombatFocusActions {
     private const val ARRIVAL_ENEMY_CONFIRM_MS = 150L
     /** Log continuous focus spam every N taps while boss emblem is up. */
     private const val FOCUS_PROBE_LOG_EVERY = 10
+    /**
+     * First burst hunts nearby PJs aggressively; after this many taps without a PJ
+     * panel, slow down so we don't cancel Auto / spam "No target around" on goldens.
+     */
+    private const val FOCUS_SPAM_BURST_TAPS = 40
+    private const val FOCUS_SPAM_THROTTLE_MS = 2_500L
     /** Log attack spam progress every N taps (loop is unbounded until focus lost). */
     private const val ATTACK_LOG_EVERY = 10
     /** Probe potions/buff about every ~1.5–2s of spam taps. */
@@ -389,7 +395,9 @@ object CombatFocusActions {
                 }
                 NavigationVision.tapScreen(match.centerX, match.centerY, label = "focus_player")
             }
-            delay(BotTiming.ms(POST_FOCUS_PROBE_MS, BotTimingCategory.POST_TAP))
+            val probeMs =
+                if (taps >= FOCUS_SPAM_BURST_TAPS) FOCUS_SPAM_THROTTLE_MS else POST_FOCUS_PROBE_MS
+            delay(BotTiming.ms(probeMs, BotTimingCategory.POST_TAP))
             taps++
         }
     }

@@ -1,0 +1,146 @@
+{
+  "map_id": "swamp_of_peace_1",
+  "pixel_space": "png_1280_native",
+  "method": "manual_tap_plus_user_coords_hub_islands",
+  "topology": {
+    "hub_island": 0,
+    "spoke_islands": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "notes": "Enter map \u2192 hub (0). Hub has 4 portals to spokes. Each spoke has return portal to hub. Calib: 2 local taps per island 0..4."
+  },
+  "points": [
+    {
+      "label": "island0_a",
+      "ref_x": 757.0,
+      "ref_y": 417.0,
+      "game_x": 148,
+      "game_y": 115,
+      "kind": "island_local",
+      "island": 0
+    },
+    {
+      "label": "island0_b",
+      "ref_x": 728.0,
+      "ref_y": 414.0,
+      "game_x": 132,
+      "game_y": 101,
+      "kind": "island_local",
+      "island": 0
+    },
+    {
+      "label": "island1_a",
+      "ref_x": 794.0,
+      "ref_y": 259.0,
+      "game_x": 85,
+      "game_y": 218,
+      "kind": "island_local",
+      "island": 1
+    },
+    {
+      "label": "island1_b",
+      "ref_x": 684.0,
+      "ref_y": 224.0,
+      "game_x": 9,
+      "game_y": 178,
+      "kind": "island_local",
+      "island": 1
+    },
+    {
+      "label": "island2_a",
+      "ref_x": 917.0,
+      "ref_y": 425.0,
+      "game_x": 237,
+      "game_y": 195,
+      "kind": "island_local",
+      "island": 2
+    },
+    {
+      "label": "island2_b",
+      "ref_x": 923.0,
+      "ref_y": 390.0,
+      "game_x": 221,
+      "game_y": 217,
+      "kind": "island_local",
+      "island": 2
+    },
+    {
+      "label": "island3_a",
+      "ref_x": 752.0,
+      "ref_y": 587.0,
+      "game_x": 235,
+      "game_y": 23,
+      "kind": "island_local",
+      "island": 3
+    },
+    {
+      "label": "island3_b",
+      "ref_x": 785.0,
+      "ref_y": 519.0,
+      "game_x": 217,
+      "game_y": 76,
+      "kind": "island_local",
+      "island": 3
+    },
+    {
+      "label": "island4_a",
+      "ref_x": 582.0,
+      "ref_y": 436.0,
+      "game_x": 66,
+      "game_y": 13,
+      "kind": "island_local",
+      "island": 4
+    },
+    {
+      "label": "island4_b",
+      "ref_x": 569.0,
+      "ref_y": 345.0,
+      "game_x": 11,
+      "game_y": 54,
+      "kind": "island_local",
+      "island": 4
+    }
+  ],
+  "portals": [
+    {
+      "id": "hub_to_1",
+      "from_island": 0,
+      "to_island": 1,
+      "kind": "hub_exit",
+      "ref_x": 667.5923214285715,
+      "ref_y": 439.6171428571429,
+      "host_x": 2921.0,
+      "host_y": 672.0,
+      "game_x": 113.11009366776273,
+      "game_y": 56.02837029769469,
+      "zoom": "max",
+      "method": "open_map_zoom_max_then_tap",
+      "notes": "User-confirmed after zoom-max (TAP 73). Reproduce: open map \u2192 zoom+ to max \u2192 tap ref.",
+      "source": "user_confirmed_zoom_tap",
+      "zoom_handle_ref": [
+        1134,
+        89
+      ],
+      "zoom_swipe_to_y": 469,
+      "zoom_method": "swipe_orange_handle_down_from_top",
+      "zoom_handle_start": [
+        1108,
+        145
+      ],
+      "zoom_swipe_end_y": 540,
+      "zoom_swipe_end": [
+        1108,
+        545
+      ],
+      "zoom_swipe": {
+        "x": 1114,
+        "y1": 216,
+        "y2": 465,
+        "duration_ms": 700
+      }
+    }
+  ]
+}

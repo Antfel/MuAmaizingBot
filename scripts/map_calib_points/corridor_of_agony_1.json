@@ -1,0 +1,52 @@
+{
+  "map_id": "corridor_of_agony_1",
+  "pixel_space": "png_1280_native",
+  "method": "boss_golden_arrival",
+  "points": [
+    {
+      "label": "golden_1",
+      "ref_x": 729.0,
+      "ref_y": 383.0,
+      "game_x": 213,
+      "game_y": 210,
+      "seals_used": 0,
+      "kind": "golden"
+    },
+    {
+      "label": "lance_2",
+      "ref_x": 692.0,
+      "ref_y": 210.0,
+      "game_x": 177,
+      "game_y": 232,
+      "seals_used": 0,
+      "kind": "boss"
+    },
+    {
+      "label": "boss_aqua_3",
+      "ref_x": 571.0,
+      "ref_y": 417.0,
+      "game_x": 192,
+      "game_y": 178,
+      "seals_used": 0,
+      "kind": "boss_aqua"
+    },
+    {
+      "label": "boss_ghost_4",
+      "ref_x": 695.0,
+      "ref_y": 499.0,
+      "game_x": 226,
+      "game_y": 185,
+      "seals_used": 0,
+      "kind": "boss_ghost"
+    },
+    {
+      "label": "red_validate",
+      "ref_x": 666.0,
+      "ref_y": 253.0,
+      "game_x": 182,
+      "game_y": 222,
+      "seals_used": 0,
+      "kind": "red"
+    }
+  ]
+}

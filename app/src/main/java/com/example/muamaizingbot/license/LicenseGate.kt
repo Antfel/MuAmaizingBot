@@ -139,6 +139,14 @@ object LicenseGate {
                     is LicenseApiResult.Ok -> Log.d(TAG, "heartbeat ok")
                     is LicenseApiResult.Failed -> {
                         Log.w(TAG, "heartbeat failed code=${result.code}")
+                        if (isRecoverableLeaseError(result.code)) {
+                            // Session row vanished (other instance Stop on a shared
+                            // device_id, admin expire, or stale status). Re-acquire
+                            // and keep the bot running — do not sit in IDLE.
+                            Log.w(TAG, "lease gone code=${result.code} → re-acquire (keep running)")
+                            recoverLease()
+                            break
+                        }
                         if (isFatalLeaseError(result.code)) {
                             handleLeaseRevoked(result.code, result.message)
                             break
@@ -152,16 +160,38 @@ object LicenseGate {
         }
     }
 
+    private fun isRecoverableLeaseError(code: String): Boolean {
+        return code == "SESSION_EXPIRED" || code == "SESSION_NOT_FOUND"
+    }
+
     private fun isFatalLeaseError(code: String): Boolean {
-        return code == "SESSION_EXPIRED" ||
-            code == "SESSION_NOT_FOUND" ||
-            code == "INVALID_LICENSE" ||
+        return code == "INVALID_LICENSE" ||
             code == "REVOKED" ||
             code == "EXPIRED"
     }
 
+    /** Same device gets a new/reused lease. Stop the bot only if acquire is denied. */
+    private fun recoverLease() {
+        stopHeartbeat()
+        _sessionId.value = null
+        _hasSession.value = false
+        scope.launch {
+            val ok = acquire()
+            if (ok) {
+                Log.i(TAG, "re-acquire ok — bot kept running")
+                _userMessage.value = null
+            } else {
+                handleLeaseRevoked(
+                    "SESSION_NOT_FOUND",
+                    UiStrings.get(R.string.license_err_session_released),
+                )
+            }
+        }
+    }
+
     /**
-     * Admin kill / expired lease: clear local session and force bot Stop (no auto-restart).
+     * License key revoked/expired/invalid: clear local session and force bot Stop
+     * (no auto-restart). Session-not-found is recovered via [recoverLease] first.
      */
     private fun handleLeaseRevoked(code: String, message: String) {
         val userMsg = when (code) {

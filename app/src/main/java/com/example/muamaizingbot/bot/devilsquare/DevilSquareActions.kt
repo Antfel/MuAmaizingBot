@@ -71,9 +71,15 @@ object DevilSquareActions {
     private const val DIAMOND_REF_Y = 728
 
     private const val C5_TIMEOUT_MS = 30_000L
-    private const val ENTER_WAIT_MS = 12_000L
+    /** Load + Noria staging + OCR settle; 12s was too short (RiddB 22:04). */
+    private const val ENTER_WAIT_MS = 28_000L
+    private const val ENTER_LATE_CONFIRM_MS = 2_500L
     private const val POST_TAP_MS = 800L
     private const val AUTO_WAIT_MS = 5_000L
+
+    /** OCR often drops letters: Devil→Devl/Devi, Square→Squore/Squar. */
+    private val DEVIL_OCR_TOKENS = listOf("devil", "devl", "devi", "dewl", "devll")
+    private val SQUARE_OCR_TOKENS = listOf("square", "squore", "squar", "sqare", "squa")
 
     private val recognizer by lazy {
         TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
@@ -86,6 +92,29 @@ object DevilSquareActions {
         DevilSquareState.clearDayOffIfNewAccessDay()
         if (DevilSquareState.isHoldingPriority()) return true
         return shouldStart(profile)
+    }
+
+    /**
+     * If the character is already on a Devil Square HUD but DS process is idle
+     * (false Enter miss, restart mid-event), latch [INSIDE_SETUP] so the loop
+     * holds priority and does not farm/bosses-navigate out of the instance.
+     */
+    suspend fun rescueIfAlreadyInside(profile: BotProfile): Boolean {
+        if (!profile.devilSquare.enabled) return false
+        if (DevilSquareState.isHoldingPriority()) return true
+        if (!isOnDevilSquareHud()) return false
+        Log.w(TAG, "[DS] rescue adopt — already on Devil Square HUD")
+        DevilSquareState.adoptInsideFromHud()
+        return true
+    }
+
+    /** Public for tests / callers — fuzzy match on HUD / open-map title OCR. */
+    fun looksLikeDevilSquareName(raw: String): Boolean {
+        val n = raw.lowercase().filter { it.isLetterOrDigit() }
+        if (n.length < 6) return false
+        val devil = DEVIL_OCR_TOKENS.any { n.contains(it) }
+        val square = SQUARE_OCR_TOKENS.any { n.contains(it) }
+        return devil && square
     }
 
     private fun shouldStart(profile: BotProfile): Boolean {
@@ -180,20 +209,22 @@ object DevilSquareActions {
             DevilSquareState.setPhase(DevilSquareState.Phase.OPEN_DAILY_GOAL)
             return TickResult.RUNNING
         }
+        // Profile toggle ON means always renew at the elf — do not skip when icons
+        // are already present (loop may have buffed minutes earlier).
         Log.d(TAG, "[DS] phase=prep_elf renew")
         DisconnectDetector.beginUiAction("ds-elf")
         try {
             var ok = false
-            repeat(ELF_RETRIES) { attempt ->
+            // Use for+break: return@repeat only ends the current iteration (like continue).
+            for (attempt in 0 until ELF_RETRIES) {
                 ok = ElfBuffNavigationActions.goToElfBuffWithoutReturn()
-                if (ok) return@repeat
+                if (ok) break
                 Log.w(TAG, "[DS] elf renew miss attempt=${attempt + 1}/$ELF_RETRIES")
                 delay(800)
             }
             if (!ok) {
-                Log.w(TAG, "[DS] elf renew failed — skip slot")
-                DevilSquareState.finishAttempt(consumeSlot = true)
-                return TickResult.FINISHED
+                // Soft-fail: potions/pet already done; still try to join instead of burning the hour.
+                Log.w(TAG, "[DS] elf renew failed — continue to join (soft-fail)")
             }
         } finally {
             DisconnectDetector.endUiAction("ds-elf")
@@ -352,13 +383,18 @@ object DevilSquareActions {
             delay(600)
             dismissLowPotionClueIfVisible()
             if (!waitUntilInsideSquare()) {
-                Log.w(TAG, "[DS] Enter did not load Devil Square")
-                if (isC5Visible()) {
-                    NavigationVision.tapTemplate(MapWindowActions.CLOSE_X, MATCH)
-                    delay(400)
+                Log.w(TAG, "[DS] Enter wait expired — late HUD confirm")
+                delay(ENTER_LATE_CONFIRM_MS)
+                if (!isOnDevilSquareHud()) {
+                    Log.w(TAG, "[DS] Enter did not load Devil Square")
+                    if (isC5Visible()) {
+                        NavigationVision.tapTemplate(MapWindowActions.CLOSE_X, MATCH)
+                        delay(400)
+                    }
+                    DevilSquareState.finishAttempt(consumeSlot = true)
+                    return TickResult.FINISHED
                 }
-                DevilSquareState.finishAttempt(consumeSlot = true)
-                return TickResult.FINISHED
+                Log.d(TAG, "[DS] Devil Square HUD late confirm")
             }
         } finally {
             DisconnectDetector.endUiAction("ds-enter")
@@ -472,7 +508,11 @@ object DevilSquareActions {
             }
             delay(500)
         }
-        return isOnDevilSquareHud()
+        val late = isOnDevilSquareHud()
+        if (late) {
+            Log.d(TAG, "[DS] Devil Square HUD confirmed at wait end")
+        }
+        return late
     }
 
     /**
@@ -581,8 +621,11 @@ object DevilSquareActions {
         val frame = NavigationVision.captureFrame() ?: return false
         return try {
             val raw = CurrentMapOcr.readRaw(frame) ?: return false
-            raw.replace(" ", "").contains("devil", ignoreCase = true) &&
-                raw.replace(" ", "").contains("square", ignoreCase = true)
+            val ok = looksLikeDevilSquareName(raw)
+            if (!ok) {
+                Log.d(TAG, "[DS] hud not DS raw=\"$raw\"")
+            }
+            ok
         } finally {
             frame.recycle()
         }

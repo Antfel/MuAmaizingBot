@@ -27,9 +27,13 @@ import kotlinx.coroutines.delay
  * Union in the open menu is matched in [pkPopupRoi]; closed-bar state uses a
  * separate Local template (button bevel differs from the popup row).
  *
- * Cross maps use UnionKuaFu popup [PK_MODE_UNION_CROSS] / bar [PK_MODE_UNION_CROSS_BAR].
- * Local maps: Union popup [PK_MODE_UNION_LOCAL] / bar [PK_MODE_UNION_LOCAL_BAR];
- * All popup [PK_MODE_ALL_POPUP] / bar [PK_MODE_ALL].
+ * Map [MapDefinition.isCross] prefers UnionKuaFu (cross) or short Union (local),
+ * but both label templates are accepted — game load can leave Cross maps showing
+ * short "Union" (or the reverse), and that must not stop giver buffs.
+ *
+ * Templates: cross popup/bar [PK_MODE_UNION_CROSS] / [PK_MODE_UNION_CROSS_BAR];
+ * local [PK_MODE_UNION_LOCAL] / [PK_MODE_UNION_LOCAL_BAR];
+ * All [PK_MODE_ALL_POPUP] / [PK_MODE_ALL].
  */
 object ElfBuffTargetingActions {
 
@@ -73,8 +77,9 @@ object ElfBuffTargetingActions {
     }
 
     /**
-     * PK Union template variant from the **map** [MapDefinition.isCross], not the
-     * saved spot override. UnionKuaFu when cross; short Union otherwise.
+     * PK Union template preference from the **map** [MapDefinition.isCross], not the
+     * saved spot override. Prefer UnionKuaFu when cross; short Union otherwise.
+     * Detection and switch still accept **both** labels (load lag / sticky HUD).
      *
      * Resolution order: trusted HUD map → farm_bosses active map → farm/elf spot map.
      */
@@ -106,15 +111,38 @@ object ElfBuffTargetingActions {
         return true
     }
 
-    /** Template for open-menu / popup Union option. */
-    private fun unionPopupTemplatePath(isCross: Boolean = resolveIsCross()): String {
-        return if (isCross) PK_MODE_UNION_CROSS else PK_MODE_UNION_LOCAL
+    /** Popup Union rows: preferred map variant first, then the alternate. */
+    private fun unionPopupCandidates(preferCross: Boolean = resolveIsCross()): List<Pair<String, String>> {
+        return if (preferCross) {
+            listOf(
+                PK_MODE_UNION_CROSS to "UnionKuaFu",
+                PK_MODE_UNION_LOCAL to "Union",
+            )
+        } else {
+            listOf(
+                PK_MODE_UNION_LOCAL to "Union",
+                PK_MODE_UNION_CROSS to "UnionKuaFu",
+            )
+        }
     }
 
-    /** Template for closed targeting-bar Union state. */
-    private fun unionBarTemplatePath(isCross: Boolean = resolveIsCross()): String {
-        return if (isCross) PK_MODE_UNION_CROSS_BAR else PK_MODE_UNION_LOCAL_BAR
+    /** Closed-bar Union labels: preferred first, then alternate. */
+    private fun unionBarCandidates(preferCross: Boolean = resolveIsCross()): List<Pair<String, String>> {
+        return if (preferCross) {
+            listOf(
+                PK_MODE_UNION_CROSS_BAR to "UnionKuaFu",
+                PK_MODE_UNION_LOCAL_BAR to "Union",
+            )
+        } else {
+            listOf(
+                PK_MODE_UNION_LOCAL_BAR to "Union",
+                PK_MODE_UNION_CROSS_BAR to "UnionKuaFu",
+            )
+        }
     }
+
+    private fun preferredUnionLabel(preferCross: Boolean = resolveIsCross()): String =
+        if (preferCross) "UnionKuaFu" else "Union"
 
     private enum class PkBarMode {
         ALL,
@@ -126,6 +154,7 @@ object ElfBuffTargetingActions {
     private data class PkBarMatch(
         val mode: PkBarMode,
         val match: PcTemplateMatchResult,
+        val label: String = mode.name,
     )
 
     private data class PkModeSpec(
@@ -157,10 +186,10 @@ object ElfBuffTargetingActions {
             )
             CombatFocusPkMode.UNION -> {
                 val isCross = resolveIsCross()
-                val label = if (isCross) "UnionKuaFu" else "Union"
+                val (popupPath, label) = unionPopupCandidates(isCross).first()
                 PkModeSpec(
                     barMode = PkBarMode.UNION,
-                    popupPath = unionPopupTemplatePath(isCross),
+                    popupPath = popupPath,
                     label = label,
                     tapLabel = "pk_union",
                 )
@@ -170,19 +199,35 @@ object ElfBuffTargetingActions {
 
     /**
      * Match every supported closed-bar state and keep the strongest candidate.
-     * This allows recovery even when the game changes the selector to Peace or Team.
+     * Union accepts both UnionKuaFu and short Union — whichever scores higher.
      */
     private suspend fun detectPkBarMode(): PkBarMatch? {
         val bar = barRoi()
-        val paths = listOf(
-            PkBarMode.ALL to PK_MODE_ALL,
-            PkBarMode.UNION to unionBarTemplatePath(),
-            PkBarMode.PEACE to PK_MODE_PEACE_BAR,
-            PkBarMode.TEAM to PK_MODE_TEAM_BAR,
-        )
-        return paths.mapNotNull { (mode, path) ->
-            NavigationVision.findTemplate(path, PK_TEMPLATE_THRESHOLD, bar)
-                ?.let { PkBarMatch(mode, it) }
+        val candidates = buildList {
+            NavigationVision.findTemplate(PK_MODE_ALL, PK_TEMPLATE_THRESHOLD, bar)?.let {
+                add(PkBarMatch(PkBarMode.ALL, it, "All"))
+            }
+            for ((path, label) in unionBarCandidates()) {
+                NavigationVision.findTemplate(path, PK_TEMPLATE_THRESHOLD, bar)?.let {
+                    add(PkBarMatch(PkBarMode.UNION, it, label))
+                }
+            }
+            NavigationVision.findTemplate(PK_MODE_PEACE_BAR, PK_TEMPLATE_THRESHOLD, bar)?.let {
+                add(PkBarMatch(PkBarMode.PEACE, it, "Peace"))
+            }
+            NavigationVision.findTemplate(PK_MODE_TEAM_BAR, PK_TEMPLATE_THRESHOLD, bar)?.let {
+                add(PkBarMatch(PkBarMode.TEAM, it, "Team"))
+            }
+        }
+        return candidates.maxByOrNull { it.match.score }
+    }
+
+    /** Best Union/UnionKuaFu row currently visible in the open PK popup (if any). */
+    private suspend fun findBestUnionInPopup(): PkBarMatch? {
+        val popup = pkPopupRoi()
+        return unionPopupCandidates().mapNotNull { (path, label) ->
+            NavigationVision.findTemplate(path, PK_TEMPLATE_THRESHOLD, popup)
+                ?.let { PkBarMatch(PkBarMode.UNION, it, label) }
         }.maxByOrNull { it.match.score }
     }
 
@@ -191,7 +236,7 @@ object ElfBuffTargetingActions {
         return detectPkBarMode()?.mode == PkBarMode.ALL
     }
 
-    /** True when the closed targeting bar shows Union. */
+    /** True when the closed targeting bar shows Union or UnionKuaFu. */
     suspend fun isPkModeUnion(): Boolean {
         return detectPkBarMode()?.mode == PkBarMode.UNION
     }
@@ -228,11 +273,48 @@ object ElfBuffTargetingActions {
         return null
     }
 
+    /**
+     * Wait for either Union label in the popup. Prefers the map variant, accepts the
+     * alternate if that is what the game painted (cross load lag → short Union).
+     */
+    private suspend fun waitPkUnionOption(
+        timeoutMs: Long,
+        logMiss: Boolean,
+    ): PkBarMatch? {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            findBestUnionInPopup()?.let { hit ->
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] pk popup ${hit.label} at=(${hit.match.centerX},${hit.match.centerY}) " +
+                        "score=${"%.3f".format(hit.match.score)} prefer=${preferredUnionLabel()}",
+                )
+                return hit
+            }
+            delay(80L)
+        }
+        if (logMiss) {
+            Log.w(
+                TAG,
+                "[ELF_GIVER] pk popup Union/UnionKuaFu not found within adaptive wait " +
+                    "prefer=${preferredUnionLabel()}",
+            )
+            val popup = pkPopupRoi()
+            for ((path, label) in unionPopupCandidates()) {
+                NavigationVision.logBestScore(path, popup)
+                Log.d(TAG, "[ELF_GIVER] pk popup miss probe label=$label path=$path")
+            }
+        }
+        return null
+    }
+
     /** Peace and Team only occur as popup rows in this ROI, making them safe witnesses. */
     private suspend fun isPkPopupVisible(): Boolean {
         val popup = pkPopupRoi()
         return NavigationVision.findTemplate(PK_MODE_PEACE_POPUP, PK_TEMPLATE_THRESHOLD, popup) != null ||
-            NavigationVision.findTemplate(PK_MODE_TEAM_POPUP, PK_TEMPLATE_THRESHOLD, popup) != null
+            NavigationVision.findTemplate(PK_MODE_TEAM_POPUP, PK_TEMPLATE_THRESHOLD, popup) != null ||
+            findBestUnionInPopup() != null ||
+            NavigationVision.findTemplate(PK_MODE_ALL_POPUP, PK_TEMPLATE_THRESHOLD, popup) != null
     }
 
     private suspend fun openPkMenuAndFindOption(
@@ -280,6 +362,39 @@ object ElfBuffTargetingActions {
         )
     }
 
+    private suspend fun openPkMenuAndFindUnion(
+        openAt: PcTemplateMatchResult,
+    ): PkBarMatch? {
+        if (!NavigationVision.tapScreen(openAt.centerX, openAt.centerY, label = "pk_open")) {
+            return null
+        }
+        delay(BotTiming.ms(POST_PK_TAP_MS, BotTimingCategory.POST_TAP))
+
+        waitPkUnionOption(
+            BotTiming.ms(PK_POPUP_QUICK_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
+            logMiss = false,
+        )?.let { return it }
+
+        if (!isPkPopupVisible()) {
+            Log.d(TAG, "[ELF_GIVER] pk popup absent after quick wait — retry open for Union")
+            if (!NavigationVision.tapScreen(openAt.centerX, openAt.centerY, label = "pk_open_retry")) {
+                return null
+            }
+            delay(BotTiming.ms(POST_PK_TAP_MS, BotTimingCategory.POST_TAP))
+            waitPkUnionOption(
+                BotTiming.ms(PK_POPUP_SECOND_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
+                logMiss = false,
+            )?.let { return it }
+        } else {
+            Log.d(TAG, "[ELF_GIVER] pk popup visible; waiting for Union/UnionKuaFu")
+        }
+
+        return waitPkUnionOption(
+            BotTiming.ms(PK_POPUP_FALLBACK_WAIT_MS, BotTimingCategory.SCREEN_LOAD),
+            logMiss = true,
+        )
+    }
+
     /** True when the closed targeting bar shows [mode]. */
     suspend fun isPkMode(mode: CombatFocusPkMode): Boolean {
         return isPkBarMode(pkModeSpec(mode).barMode)
@@ -288,23 +403,29 @@ object ElfBuffTargetingActions {
     /**
      * Ensure the closed targeting bar shows [mode] (Peace / Team / Union / All).
      * Opens the PK popup when needed and taps the matching row.
+     * Union accepts either UnionKuaFu or short Union on the closed bar.
      */
     suspend fun ensurePkMode(mode: CombatFocusPkMode): Boolean {
         val spec = pkModeSpec(mode)
         val currentBar = detectPkBarMode()
         if (currentBar?.mode == spec.barMode) {
-            Log.d(TAG, "[ELF_GIVER] pk mode already ${spec.label}")
+            Log.d(TAG, "[ELF_GIVER] pk mode already ${currentBar.label}")
             return true
         }
         val popup = pkPopupRoi()
-        val optionInPopup = NavigationVision.findTemplate(
-            spec.popupPath,
-            PK_TEMPLATE_THRESHOLD,
-            popup,
-        )
+        val optionInPopup = if (mode == CombatFocusPkMode.UNION) {
+            findBestUnionInPopup()
+        } else {
+            NavigationVision.findTemplate(
+                spec.popupPath,
+                PK_TEMPLATE_THRESHOLD,
+                popup,
+            )?.let { PkBarMatch(spec.barMode, it, spec.label) }
+        }
         val popupWitness = listOf(
             PK_MODE_ALL_POPUP,
-            unionPopupTemplatePath(),
+            PK_MODE_UNION_CROSS,
+            PK_MODE_UNION_LOCAL,
             PK_MODE_PEACE_POPUP,
             PK_MODE_TEAM_POPUP,
         ).any { path ->
@@ -313,10 +434,25 @@ object ElfBuffTargetingActions {
 
         when {
             optionInPopup != null && popupWitness -> {
-                Log.d(TAG, "[ELF_GIVER] pk menu already open — tap ${spec.label}")
+                Log.d(TAG, "[ELF_GIVER] pk menu already open — tap ${optionInPopup.label}")
                 if (!NavigationVision.tapScreen(
-                        optionInPopup.centerX,
-                        optionInPopup.centerY,
+                        optionInPopup.match.centerX,
+                        optionInPopup.match.centerY,
+                        label = spec.tapLabel,
+                    )
+                ) {
+                    return false
+                }
+            }
+            currentBar != null && mode == CombatFocusPkMode.UNION -> {
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] pk mode ${currentBar.label} — open menu to select Union/UnionKuaFu",
+                )
+                val opt = openPkMenuAndFindUnion(currentBar.match) ?: return false
+                if (!NavigationVision.tapScreen(
+                        opt.match.centerX,
+                        opt.match.centerY,
                         label = spec.tapLabel,
                     )
                 ) {
@@ -326,7 +462,7 @@ object ElfBuffTargetingActions {
             currentBar != null -> {
                 Log.d(
                     TAG,
-                    "[ELF_GIVER] pk mode ${currentBar.mode} — open menu to select ${spec.label}",
+                    "[ELF_GIVER] pk mode ${currentBar.label} — open menu to select ${spec.label}",
                 )
                 val opt = openPkMenuAndFindOption(
                     currentBar.match,
@@ -347,8 +483,12 @@ object ElfBuffTargetingActions {
             }
         }
         delay(BotTiming.ms(POST_PK_TAP_MS, BotTimingCategory.POST_TAP))
-        val ok = isPkBarMode(spec.barMode)
-        Log.d(TAG, "[ELF_GIVER] ensurePkMode ${spec.label} ok=$ok")
+        val confirmed = detectPkBarMode()
+        val ok = confirmed?.mode == spec.barMode
+        Log.d(
+            TAG,
+            "[ELF_GIVER] ensurePkMode ${spec.label} ok=$ok bar=${confirmed?.label}",
+        )
         return ok
     }
 
@@ -356,51 +496,62 @@ object ElfBuffTargetingActions {
 
     /**
      * Switch to Union with All as the required initial closed-bar state.
-     * An already-open popup is allowed for a retry, but an already-Union bar is
-     * not accepted as the beginning of a fresh focus-validation attempt.
+     * Prefers the map's Union variant but accepts the alternate label in popup and
+     * on the closed bar (cross map can still show short Union during load).
      */
     suspend fun switchPkModeUnionFromAll(): Boolean {
-        val isCross = resolveIsCross()
-        val unionPopupPath = unionPopupTemplatePath(isCross)
-        val unionBarPath = unionBarTemplatePath(isCross)
-        val unionLabel = if (isCross) "UnionKuaFu" else "Union"
+        val preferCross = resolveIsCross()
+        val preferLabel = preferredUnionLabel(preferCross)
         val currentBar = detectPkBarMode()
-        val popup = pkPopupRoi()
-        val unionInPopup = NavigationVision.findTemplate(unionPopupPath, PK_TEMPLATE_THRESHOLD, popup)
+        val unionInPopup = findBestUnionInPopup()
 
         when {
             unionInPopup != null -> {
-                Log.d(TAG, "[ELF_GIVER] pk menu open — tap $unionLabel")
-                if (!NavigationVision.tapScreen(unionInPopup.centerX, unionInPopup.centerY, label = "pk_union")) {
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] pk menu open — tap ${unionInPopup.label} " +
+                        "(prefer=$preferLabel)",
+                )
+                if (!NavigationVision.tapScreen(
+                        unionInPopup.match.centerX,
+                        unionInPopup.match.centerY,
+                        label = "pk_union",
+                    )
+                ) {
                     return false
                 }
             }
             currentBar?.mode == PkBarMode.ALL -> {
-                Log.d(TAG, "[ELF_GIVER] pk mode ALL — open menu for $unionLabel")
-                val unionOpt = openPkMenuAndFindOption(
-                    currentBar.match,
-                    unionPopupPath,
-                    unionLabel,
-                ) ?: return false
-                if (!NavigationVision.tapScreen(unionOpt.centerX, unionOpt.centerY, label = "pk_union")) {
+                Log.d(
+                    TAG,
+                    "[ELF_GIVER] pk mode ALL — open menu for Union/UnionKuaFu prefer=$preferLabel",
+                )
+                val unionOpt = openPkMenuAndFindUnion(currentBar.match) ?: return false
+                if (!NavigationVision.tapScreen(
+                        unionOpt.match.centerX,
+                        unionOpt.match.centerY,
+                        label = "pk_union",
+                    )
+                ) {
                     return false
                 }
             }
             else -> {
                 Log.w(
                     TAG,
-                    "[ELF_GIVER] switch $unionLabel rejected: expected All, " +
-                        "actual=${currentBar?.mode}",
+                    "[ELF_GIVER] switch Union rejected: expected All, " +
+                        "actual=${currentBar?.label}",
                 )
                 return false
             }
         }
         delay(BotTiming.ms(POST_PK_TAP_MS, BotTimingCategory.POST_TAP))
-        val ok = isPkModeUnion()
+        val confirmed = detectPkBarMode()
+        val ok = confirmed?.mode == PkBarMode.UNION
         Log.d(
             TAG,
-            "[ELF_GIVER] switchPkModeUnion ok=$ok isCross=$isCross " +
-                "popup=$unionPopupPath bar=$unionBarPath",
+            "[ELF_GIVER] switchPkModeUnion ok=$ok preferCross=$preferCross " +
+                "prefer=$preferLabel bar=${confirmed?.label}",
         )
         return ok
     }
