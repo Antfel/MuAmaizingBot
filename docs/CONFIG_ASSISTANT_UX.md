@@ -1,328 +1,252 @@
 # Configurador asistente — diseño de experiencia
 
 **Producto:** MuAmaizingBot (perfil / configuración)  
-**Estado:** propuesta UX (sin implementación)  
+**Estado:** propuesta UX acordada (sin implementación UI aún)  
+**Branch:** `cursor/config-assistant-ux-bffa` · PR #3  
+**Mockups:** [`docs/ux-mocks/`](ux-mocks/)  
+**Prompt para agente local:** [`docs/LOCAL_AGENT_PROMPT.md`](LOCAL_AGENT_PROMPT.md)
+
 **Objetivo:** que el usuario arme un perfil entendiendo *qué va a hacer el bot*, no pelear con 20 toggles sueltos.
 
 ---
 
 ## 1. Problema hoy
 
-El perfil ya es potente (modos, Programación Ciclos/Horario, pets, elf, potes, bosses, combat focus…), pero la UI es un **scroll de opciones** con algo de ocultar/mostrar según modo.
+El perfil ya es potente (modos, Programación Ciclos/Horario, pets por modo, elf, potes, bosses, combat focus…), pero la UI es un **scroll de opciones** Material3 densas/altas (Switch + OutlinedTextField + Card) poco aptas para **1280×720**.
 
-Lo que duele:
+Duele:
 
 - Hay que conocer el modelo mental del bot antes de configurar bien.
 - Opciones relacionadas están lejos (Programación ↔ farm spot ↔ mapas bosses ↔ pet).
-- Un detalle “avanzado” (hold, golden, dots) compite visualmente con lo imprescindible.
-- Casos como *“Eversong en ciclos → al wire 1 va a farm y cambia pet”* sorprenden si no se leyó la hint.
+- Pet de farm y pet de bosses son distintos en datos, pero la UI no lo comunica bien.
+- Casos como *“Eversong en ciclos → al wire 1 va a farm y cambia pet”* sorprenden (es Programación MAP_LAP, no bug).
 
 ---
 
 ## 2. Principio de diseño
 
-> **Primero la intención, después el detalle.**
-
-Dos puertas al mismo perfil JSON:
+> **Primero la intención, después el detalle.**  
+> **Cambios puntuales sin repetir el wizard.**
 
 | Puerta | Para quién | Sensación |
 |--------|------------|-----------|
-| **Asistente** (“Crear / rearmar perfil”) | Primera vez, cambio de estilo | Guiado, preguntas cortas, resumen en español |
-| **Editor por capas** | Ajuste fino diario | Rápido, secciones colapsables, avanzado oculto |
+| **Asistente** (“Crear / rearmar perfil”) | Primera vez, cambio de estilo | Guiado, 1 pregunta por pantalla |
+| **Editor denso + chips** | Día a día / level-up | 2 taps: Angel→Imp, nuevo spot, reordenar mapas |
 
-El asistente **no reemplaza** el editor. Escribe el perfil; el editor lo retoca.
-
----
-
-## 3. Cómo lo sentiría el usuario
-
-### Primera vez (perfil nuevo)
-
-1. Abre Configuración → ve **dos botones claros**:
-   - **Crear con asistente** (primario)
-   - **Configuración avanzada** (secundario / texto)
-2. Entra al asistente: fondo limpio, una pregunta por pantalla, barra de progreso (paso 2 de 6).
-3. Responde en lenguaje de juego (“Quiero bosses y descansar en farm”), no en jerga interna.
-4. Al final ve un **resumen humano** y **Empezar** / **Editar detalle**.
-5. Sensación: “ya sé qué va a hacer” — no “espero no haber tocado mal un switch”.
-
-### Usuario que ya tiene perfil
-
-- Entra al **editor**: arriba un resumen de 3–4 líneas del estilo actual.
-- Botón discreto: **Rearmar con asistente** (reutiliza valores actuales como defaults).
-- Ajusta solo potes o hold sin repetir el wizard.
-- Sensación: control sin ruido.
-
-### Momento “¿por qué hizo eso?”
-
-- El resumen y las hints del editor explican dependencias  
-  (*Ciclos ON → tras una vuelta de mapas → farm X min → pet de farm*).
-- Menos tickets tipo “bug de wire 1”; más “ah, es el descanso”.
+Mismo JSON de perfil. No hay modelo nuevo: UI + defaults + validación.
 
 ---
 
-## 4. Plantillas de intención (el corazón)
+## 3. Dos niveles de navegación (APP vs PERFIL)
 
-Cuatro estilos. Cada uno define **obligatorio / opcional / oculto**.
+**Licencia y Sistema no van dentro del editor de perfil.**
+
+```
+☰ Configuración (APP)
+├── Inicio
+├── Perfiles  →  editar perfil
+│                 ├── Estilo
+│                 ├── Lugares
+│                 ├── Mantenimiento
+│                 └── Avanzado
+├── Sistema      (idioma, velocidad, Telegram, DPI)
+└── Licencia     (key, sesión, sync map pack)
+```
+
+Mockups: `ux-nav-map-overview.jpg`, `ux-app-drawer.jpg`, `ux-app-inicio.jpg`, `ux-app-perfiles.jpg`, `ux-app-sistema.jpg`, `ux-app-licencia.jpg`.
+
+### APP — qué muestra cada pantalla
+
+| Pantalla | Contenido |
+|----------|-----------|
+| **Inicio** | Perfil activo, modo, estado overlay / accesibilidad / captura / bot |
+| **Perfiles** | Lista, activo, **Crear con asistente**, entrar al editor |
+| **Sistema** | Idioma, velocidad bot, Telegram (chat/alertas/test), nota 1280×720 @ 240 DPI |
+| **Licencia** | License key, device id, sesión, sync content pack |
+
+### PERFIL — nav izquierda fija (siempre igual al abrir sheets)
+
+| Sección | Contenido |
+|---------|-----------|
+| **Estilo** | Modo (solo farm / solo bosses / Farm↔Bosses / elf) · Programación off/Ciclos/Horario · rest o HH:MM · frase resumen · Rearmar con asistente |
+| **Lugares** | Chips + filas: Farm spot (+ pet farm) · Bosses mapas+pet · Zona elf · Post buff/war si aplica |
+| **Mantenimiento** | Potes + stacks · Elf seek on/off (zona en Lugares) · atajos pets · Random + dots · intervalo check pet |
+| **Avanzado** | Combat focus / PK · hold · golden · params elf cast/war/pausa — **no** licencia/sistema |
+
+Mockups: `ux-profile-estilo.jpg`, `ux-profile-lugares.jpg`, `ux-profile-mantenimiento.jpg`, `ux-profile-avanzado.jpg`.
+
+Al abrir un sheet (Bosses, Spot…), **el nav izquierdo no cambia** (misma pantalla + overlay).
+
+---
+
+## 4. Pets: no son un valor global
+
+En código hoy:
+
+| Contexto | Storage |
+|----------|---------|
+| Farm / elf | `general_config` pet |
+| Farm bosses | `killBossesConfig.pet` |
+| Runtime | `BotProfile.effectivePetConfig()` según modo |
+
+Con Programación, al pasar a farm valida pet de farm; al volver a bosses, pet de bosses.
+
+### Chips de resumen (estilo acordado)
+
+Pills compactas (no pet suelto global):
+
+```
+[ Ciclos · 60m ]   [ Spot: Corrupted w3 · Pet Imp ]   [ Bosses: 1 mapa · Pet Angel ]
+```
+
+- Tap **Spot** → sheet: pet farm + “Editar punto en mapa”.  
+- Tap **Bosses** → sheet: pet bosses + ruta de mapas.  
+- Tap **Ciclos** → sheet/sección Estilo (rest / estrategia).
+
+Mock: `config-ux-chips-with-pet.jpg`, `config-ux-v2-summary.jpg`, `config-ux-v2-bosses-sheet.jpg`.
+
+---
+
+## 5. Cambios puntuales (level-up) — sin asistente completo
+
+| Quiere | Hace |
+|--------|------|
+| Angel → Imp en bosses | Chip Bosses → Pet bosses → Imp → Listo |
+| Nuevo farm spot | Chip Spot → Editar punto → SpotPicker |
+| Otros mapas bosses | Chip Bosses → Mapas → catálogo / drag orden |
+| Cambiar estilo entero (solo farm → ciclos) | **Rearmar con asistente** |
+
+Asistente = armar/rearmar intención. Level-up = cirugía desde chips.
+
+---
+
+## 6. Mapas de bosses
+
+- Lista ordenada = orden del ciclo (wires 1..N por mapa, luego siguiente mapa).  
+- **Drag and drop** para reordenar (no borrar y re-agregar).  
+- Derecha: catálogo + buscar + check.  
+- Un solo mapa (Eversong) también cierra “vuelta” al terminar wires si Ciclos ON → descanso farm (comportamiento actual `ModeRotationGate.noteBossLapComplete`).
+
+Mock: `config-ux-v2-maps-reorder.jpg`.
+
+---
+
+## 7. Ubicaciones en el mapa (farm spot / elf)
+
+Misma UX tipo `SpotPickerScreen` actual:
+
+1. Elegir **mapa**  
+2. Elegir **wire**  
+3. **Tocar** el punto en el minimapa (zoom +/−)  
+4. Guardar  
+
+**Ocultar** el campo “nombre opcional” (no aporta).  
+Mismo flujo para Farm spot y Zona elf (cambia título / qué location persiste).
+
+Mock: `config-ux-v2-spot-picker.jpg`.
+
+---
+
+## 8. Lenguaje visual (emulador 1280×720)
+
+| Evitar | Preferir |
+|--------|----------|
+| Switch + OutlinedTextField + Guardar por card | Fila densa ~36–40 dp |
+| TextField para ints con rango | Stepper − / + o chips |
+| Scroll infinito de cards altas | Lista + **bottom sheet** / panel para editar |
+| Asistente con filas densas | Asistente: **CTAs grandes**; editor: filas densas |
+
+Componentes sugeridos: `SummaryChipRow`, `CompactSettingsRow`, `InlineStepper`, `EditSheet`, nav landscape opcional (izq secciones / der detalle).
+
+---
+
+## 9. Plantillas de intención
 
 ### A. Solo farm
-
-| Obligatorio | Opcional | Oculto al inicio |
-|-------------|----------|------------------|
-| Farm spot (mapa, wire, punto) | Elf seek, potes, pet farm, random, combat focus | Hold bosses, Programación, mapas bosses |
-
-**Resumen ejemplo:**  
-*Farmea en Corrupted Lands wire 3. Compra potes si faltan. Busca elf si no hay buff.*
+Obligatorio: farm spot. Opcional: elf, potes, pet farm, random, focus.  
+Oculto: Programación, mapas bosses.
 
 ### B. Solo bosses
+Obligatorio: ≥1 mapa. Opcional: golden, hold, pet bosses, potes, elf.  
+Sin Programación: terminar wires **no** manda a farm spot.
 
-| Obligatorio | Opcional | Oculto al inicio |
-|-------------|----------|------------------|
-| ≥1 mapa de bosses | Golden, hold, pet bosses, potes, elf | Farm spot*, Programación |
+### C. Farm ↔ Bosses
+Obligatorio: spot + mapas + Ciclos|Horario + rest/horas.  
+Pets **ambos**. Resumen debe mencionar descanso y cambio de pet.
 
-\*Farm spot no se pide salvo que active Programación después.
-
-**Resumen ejemplo:**  
-*Recorre Eversong Forest (wires en orden). Tras cada kill: potes/elf si aplica. Sin descanso en farm.*
-
-### C. Farm ↔ Bosses (Programación)
-
-| Obligatorio | Opcional | Oculto al inicio |
-|-------------|----------|------------------|
-| Farm spot + mapas bosses + estrategia (Ciclos o Horario) + rest o horas | Pets farm/bosses, potes, elf | Detalles de hold/golden (paso avanzado corto) |
-
-**Resumen ejemplo (Ciclos):**  
-*Bosses en Eversong. Cuando termina una vuelta de mapas → farm spot 60 min (pet de farm) → vuelve a bosses (pet de bosses).*
-
-**Resumen ejemplo (Horario):**  
-*Farm spot de 08:00 a 14:00. Bosses el resto del día.*
-
-### D. Elf buff (giver / war)
-
-| Obligatorio | Opcional | Oculto al inicio |
-|-------------|----------|------------------|
-| Post (spot) + params de cast / war | Pet | Farm bosses, Programación |
-
-**Resumen ejemplo:**  
-*Da buff en post configurado. Pausa 1s entre ciclos. Modo war: off.*
+### D. Elf buff
+Obligatorio: post + params cast/war. Opcional: pet.
 
 ---
 
-## 5. Flujo del asistente (pantalla a pantalla)
+## 10. Flujo del asistente (resumen)
 
-Progreso visual: `● ● ○ ○ ○ ○` + título corto.
-
-### Paso 0 — Bienvenida
-
-```
-¿Cómo quieres usar este perfil?
-
-[ Solo farmear en un spot      ]
-[ Solo matar bosses            ]
-[ Alternar farm y bosses       ]  ← Programación
-[ Dar buff de elf              ]
-
-Más tarde puedes cambiar esto o abrir configuración avanzada.
-```
-
-**Sensación:** elección de producto, no de checkbox.
+0. Estilo (4 botones grandes)  
+1. Núcleo (spot / mapas / Programación)  
+2. Mantenimiento (potes, elf, pets)  
+3. Combate opcional (skip defaults)  
+4. Resumen humano + Empezar / Editar detalle  
 
 ---
 
-### Paso 1 — Núcleo del estilo
+## 11. Mapa a código existente
 
-**Solo farm** → picker de farm spot (reutiliza SpotPicker actual).  
-**Solo bosses** → lista ordenada de mapas (igual que FarmBossesConfig).  
-**Farm ↔ Bosses** → primero estrategia:
-
-```
-¿Cómo alternas?
-
-( ) Ciclos — al terminar los mapas de bosses, descanso en el farm spot
-( ) Horario — horas fijas Spot / Bosses (hora del celular)
-```
-
-Luego: mapas bosses → farm spot → (si Ciclos) minutos de descanso → (si Horario) HH:MM.
-
-**Solo elf** → post + war on/off + pausa entre ciclos.
-
-**Sensación:** solo ve lo que ese estilo necesita.
+| Pieza | UX |
+|-------|-----|
+| `botMode` | Estilo |
+| `modeRotation` | Estilo / chip Ciclos |
+| `LocationRepository` farm/elf | Lugares / SpotPicker |
+| `killBossesConfig.maps` + `.pet` | Chip/sheet Bosses |
+| Pet `general_config` | Chip/sheet Spot |
+| Potes, elf seek, random | Mantenimiento |
+| Focus, hold, golden, elf fine | Avanzado |
+| `ProfileConfigureScreen` | Editor denso por secciones |
+| Drawer Inicio/Perfiles/Sistema/Licencia | Sin meter en nav del perfil |
 
 ---
 
-### Paso 2 — Mantenimiento (mismo para casi todos)
+## 12. Gates de Start
 
-Preguntas sí/no + mínimos:
-
-```
-¿Recuperar potes automáticamente?     [Sí] [No]
-  → si Sí: stacks HP / MP (defaults OK)
-
-¿Buscar elf si no tienes buff?        [Sí] [No]
-  → si Sí: zona elf (picker) si falta
-
-¿Usar pet distinto por modo?          [Sí] [No]
-  → si Farm↔Bosses y Sí: pet farm + pet bosses
-  → si un solo modo: un pet
-```
-
-**Sensación:** checklist de supervivencia, no laboratorio.
-
----
-
-### Paso 3 — Combate (opcional, skippeable)
-
-```
-[ Continuar con defaults ]     [ Ajustar combate ]
-
-Si ajusta:
-- Combat focus / PK mode
-- Random teleport (far dots) — solo farm / rotación
-- Bosses: hold sec, golden mobs
-```
-
-**Sensación:** el 80% sale en 2 minutos; el power user no está bloqueado.
-
----
-
-### Paso 4 — Resumen + confirmar
-
-```
-Tu perfil: “Eversong ciclos”
-
-Estilo: Farm ↔ Bosses (Ciclos)
-Bosses: Eversong Forest (wires en orden)
-Tras cada vuelta → farm spot 60 min
-Pets: farm = … · bosses = …
-Potes: sí · Elf seek: sí
-
-[ Empezar a usar ]   [ Editar un detalle ]   [ Atrás ]
-```
-
-“Editar un detalle” abre el **editor por capas** con la sección relevante expandida.
-
-**Sensación:** contrato claro de comportamiento (incluye el “vuelve a farm al cerrar la vuelta”).
-
----
-
-## 6. Editor por capas (día a día)
-
-Misma pantalla de perfil, reorganizada:
-
-```
-┌─────────────────────────────────────────┐
-│ Perfil: Eversong ciclos                 │
-│ Farm ↔ Bosses · Ciclos · descanso 60m   │
-│ Spot: Corrupted w3 · Bosses: 1 mapa     │
-│ [ Rearmar con asistente ]               │
-├─────────────────────────────────────────┤
-│ ▼ Estilo de juego                       │
-│     Modo / Programación / resumen       │
-│ ▼ Lugares                               │
-│     Farm spot · Mapas bosses · Elf zona │
-│ ▼ Mantenimiento                         │
-│     Potes · Elf · Pet                   │
-│ ▸ Combate y avanzado                    │
-│     Focus, random, hold, golden…        │
-└─────────────────────────────────────────┘
-```
-
-Reglas UX del editor:
-
-1. **Resumen siempre visible** (intención en una frase).
-2. **Dependencias explícitas** — si Ciclos ON y falta farm spot: chip rojo “Falta farm spot para el descanso”.
-3. **Avanzado colapsado** por defecto.
-4. Cards densas OK aquí; el asistente ya filtró el miedo inicial.
-5. Info (ⓘ) explica *efecto en runtime*, no solo la etiqueta  
-   (ej. Ciclos: “Al volver a wire 1 tras el último mapa, pasa a farm y puede cambiar pet”).
-
----
-
-## 7. Microcopys clave (tono)
-
-| Situación | Texto propuesto |
-|-----------|-----------------|
-| Chip Programación | `Tras 1 vuelta de bosses → farm {n} min` |
-| Cambio de pet | `Al cambiar de segmento se valida el pet del modo nuevo` |
-| Solo bosses | `Sin Programación: no va al farm spot solo por terminar wires` |
-| Asistente skip | `Puedes cambiar esto después en Configuración` |
-
-Evitar jerga interna en el asistente (`MAP_LAP`, `SEGMENT_REST`). El editor puede mostrar el nombre técnico en ⓘ si hace falta.
-
----
-
-## 8. Mapa a lo que ya existe (sin inventar backend)
-
-| Pieza actual | Rol en la nueva UX |
-|--------------|-------------------|
-| `botMode` | Paso 0 / Estilo |
-| `modeRotation` | Paso 1 estilo C |
-| `LocationRepository` farm / elf | Pickers del asistente y sección Lugares |
-| `killBossesConfig.maps` | Paso bosses |
-| `enablePotionRecovery` + stacks | Paso mantenimiento |
-| `enableElfBuff` + zona | Paso mantenimiento |
-| `enablePet` / pet por modo | Paso mantenimiento |
-| `enableCombatFocus`, random, hold, golden | Paso combate / Avanzado |
-| `ProfileConfigureScreen` | Se convierte en editor por capas |
-| Spot / potion screens | Se reutilizan embebidos o como destinos del asistente |
-
-No hace falta nuevo modelo de datos: el asistente es **UI + defaults + validación de completitud**.
-
----
-
-## 9. Criterios de “perfil listo para Play”
-
-El botón Play / Start puede usar las mismas reglas que el asistente:
-
-| Estilo | Bloquea Start si falta |
-|--------|-------------------------|
+| Estilo | Bloquea si falta |
+|--------|------------------|
 | Solo farm | Farm spot |
-| Solo bosses | ≥1 mapa bosses |
-| Farm ↔ Bosses | Spot + ≥1 mapa + (rest OK o horas válidas) |
-| Elf | Post configurado |
-
-Mensaje: *“Falta farm spot para el descanso de Ciclos”* → CTA al paso/sección.
+| Solo bosses | ≥1 mapa |
+| Farm ↔ Bosses | Spot + mapas + rest/horas OK |
+| Elf | Post |
 
 ---
 
-## 10. Fuera de alcance (esta propuesta)
+## 13. Fases de implementación
 
-- IA / LLM generando configs
-- Cambiar el JSON del perfil
-- Asistente dentro del overlay flotante (solo app de configuración)
-- Multi-idioma del copy (se traduce después como el resto de strings)
-
----
-
-## 11. Fases de implementación sugeridas
-
-| Fase | Entrega | Valor |
-|------|---------|--------|
-| **P0** | Resumen de perfil + dependencias en el editor actual | Claridad inmediata |
-| **P1** | Asistente pasos 0–4 (sin combate fino) | Onboarding |
-| **P2** | Editor colapsable por capas | Día a día |
-| **P3** | Paso combate + “Rearmar” + gates de Start | Redondeo |
+| Fase | Entrega |
+|------|---------|
+| **P0** | Chips resumen + dependencias + copy Ciclos (sin wizard) |
+| **P1** | Asistente pasos 0–4 |
+| **P2** | Editor nav Estilo/Lugares/Mantenimiento/Avanzado + sheets densos |
+| **P3** | Drag mapas, SpotPicker sin nombre, Rearmar, gates Start |
 
 ---
 
-## 12. Escenarios de prueba de sensación (manual)
+## 14. Fuera de alcance
 
-1. **Nuevo → Solo farm** — ¿sale jugando en &lt;3 min con spot + potes default?  
-2. **Nuevo → Ciclos Eversong** — ¿el resumen menciona descanso y pet?  
-3. **Solo bosses sin Programación** — ¿entiende que wire 1 **no** implica ir a farm?  
-4. **Power user** — ¿llega a hold/golden en ≤2 taps desde el resumen?  
-5. **Rearmar** — ¿conserva mapas/spot y solo cambia estilo?
+- LLM generando configs  
+- Cambiar schema JSON del perfil (salvo UX)  
+- Asistente en overlay flotante  
+- Producto alquiler de emuladores (`muamaizing-platform`) — **otro proyecto**
 
 ---
 
-## 13. Veredicto de producto
+## 15. Escenarios de sensación
 
-El usuario debe sentir:
+1. Nuevo solo farm &lt;3 min  
+2. Ciclos Eversong — resumen menciona descanso + pets  
+3. Solo bosses — wire 1 no implica farm  
+4. Level-up: cambiar solo pet bosses en 2 taps  
+5. Reordenar mapas por drag  
+6. Power user: hold/golden en Avanzado ≤2 taps desde resumen  
 
-1. **Elegí un estilo de juego**, no “configuré un sistema”.  
-2. **Sé qué hará al terminar los wires / la vuelta**.  
-3. **Puedo afinar sin miedo** porque lo avanzado está guardado detrás.  
-4. **El asistente y el editor hablan el mismo idioma** (mismo resumen).
+---
 
-Si solo reordenamos cards sin resumen + dependencias + asistente corto, seguirá sintiéndose panel de avión.  
-Si solo hay asistente sin editor por capas, frustrará al que ya sabe.
+## 16. Veredicto
+
+El usuario debe sentir: elegí un **estilo**, sé qué pasa al cerrar la vuelta, cambios puntuales son **chips**, y Licencia/Sistema viven en el **menú app**, no en el perfil.
