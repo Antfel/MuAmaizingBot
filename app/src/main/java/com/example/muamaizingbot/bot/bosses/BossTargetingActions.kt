@@ -5,7 +5,6 @@ import android.util.Log
 import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
 import com.example.muamaizingbot.bot.maintenance.TopHudRailActions
 import com.example.muamaizingbot.vision.coord.RefCoords
-import com.example.muamaizingbot.vision.focus.FocusPortraitClassifier
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import com.example.muamaizingbot.vision.roi.MuCombatRois
 import com.example.muamaizingbot.vision.roi.ScaledRoi
@@ -13,16 +12,17 @@ import kotlinx.coroutines.delay
 
 /**
  * Acquire elite/boss focus via Focus Boss (skull).
- * Fight validation uses [FocusPortraitClassifier] on the focus-HUD face slot
- * (boss / golden share the same emblem class).
+ * Fight validation is a template score on [BOSS_FOCUS] (circularMask).
+ * Boss and golden share that emblem. Other players stay on
+ * [com.example.muamaizingbot.vision.focus.FocusPortraitClassifier].
  */
 object BossTargetingActions {
 
     private const val TAG = "FarmBosses"
-    private const val FOCUS_BOSS = "templates/mu/ui/targeting/focus_elite_skull.png"
-    private const val FOCUS_BOSS_THRESHOLD = 0.70f
-    private const val FALLBACK_BOSS_X_1280 = 1115
-    private const val FALLBACK_BOSS_Y_720 = 656
+    /** Top-bar circular emblem — stays while HP drops. Boss and golden share it. */
+    const val BOSS_FOCUS = "templates/mu/ui/targeting/boss_focus.png"
+    /** Real emblem sits ~0.99; empty ground and PJ portraits stay under ~0.89. */
+    private const val BOSS_FOCUS_THRESHOLD = 0.90f
     private const val MAX_ATTEMPTS = 4
     /** Post-skull settle before reading boss emblem (initial acquire). */
     private const val SETTLE_MS = 1_200L
@@ -30,8 +30,7 @@ object BossTargetingActions {
     const val FAST_SETTLE_MS = 400L
 
     /**
-     * Legacy search box around the focus emblem @ 1280×720 (kept for callers /
-     * overlays that still want the HUD band).
+     * Search box for [BOSS_FOCUS] authored at 1280×720: (510,5)–(600,80).
      */
     fun bossFocusRoi(frameWidth: Int, frameHeight: Int): Rect {
         return ScaledRoi.fromRefRect(
@@ -44,13 +43,25 @@ object BossTargetingActions {
         )
     }
 
-    /** True while the focus HUD portrait classifies as boss (incl. golden). */
+    /** True while the boss/golden emblem matches [BOSS_FOCUS] at [BOSS_FOCUS_THRESHOLD]. */
     suspend fun hasBossFocus(): Boolean {
         // Expanded Store/VIP rail overlaps the top boss emblem ROI.
         TopHudRailActions.ensureCollapsed()
-        val kind = FocusPortraitClassifier.classifyLatest()
-        val hit = kind == FocusPortraitClassifier.Kind.BOSS
-        Log.d(TAG, "[BOSS] boss_focus portrait=$kind hit=$hit")
+        val (w, h) = RefCoords.activeScreenSize()
+        val roi = bossFocusRoi(w, h)
+        // Threshold 0 asks for the best peak so a miss still logs its score.
+        val match = NavigationVision.findTemplate(BOSS_FOCUS, 0f, roi = roi)
+        val score = match?.score ?: 0f
+        val hit = score >= BOSS_FOCUS_THRESHOLD
+        if (match != null) {
+            Log.d(
+                TAG,
+                "[BOSS] boss_focus at=(${match.centerX},${match.centerY}) " +
+                    "score=${"%.3f".format(score)} hit=$hit",
+            )
+        } else {
+            Log.d(TAG, "[BOSS] boss_focus score=0.000 hit=false")
+        }
         return hit
     }
 
@@ -97,24 +108,8 @@ object BossTargetingActions {
 
     private suspend fun tapFocusBossSkull(): Boolean {
         val (w, h) = RefCoords.activeScreenSize()
-        val barRoi = MuCombatRois.targetingHudRoi(w, h)
-        val match = NavigationVision.findTemplate(
-            FOCUS_BOSS,
-            FOCUS_BOSS_THRESHOLD,
-            roi = barRoi,
-        )
-        if (match != null) {
-            Log.d(
-                TAG,
-                "[BOSS] Focus Boss at=(${match.centerX},${match.centerY}) " +
-                    "score=${"%.3f".format(match.score)}",
-            )
-            return NavigationVision.tapScreen(match.centerX, match.centerY, label = "focus_boss")
-        }
-        NavigationVision.logBestScore(FOCUS_BOSS, barRoi)
-        val x = FALLBACK_BOSS_X_1280 * w / 1280
-        val y = FALLBACK_BOSS_Y_720 * h / 720
-        Log.w(TAG, "[BOSS] Focus Boss miss — fallback tap=($x,$y)")
-        return NavigationVision.tapScreen(x, y, label = "focus_boss_fallback")
+        val (x, y) = MuCombatRois.focusBossTap(w, h)
+        Log.d(TAG, "[BOSS] Focus Boss tap=($x,$y)")
+        return NavigationVision.tapScreen(x, y, label = "focus_boss")
     }
 }

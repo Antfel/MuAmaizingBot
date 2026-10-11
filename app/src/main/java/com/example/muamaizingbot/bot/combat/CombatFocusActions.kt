@@ -13,6 +13,7 @@ import com.example.muamaizingbot.bot.maintenance.ElfBuffFocusHud
 import com.example.muamaizingbot.bot.maintenance.ElfBuffNavigationActions
 import com.example.muamaizingbot.bot.maintenance.ElfBuffSeekGate
 import com.example.muamaizingbot.bot.maintenance.ElfBuffTargetingActions
+import com.example.muamaizingbot.bot.maintenance.LootToastDismiss
 import com.example.muamaizingbot.bot.maintenance.PotionCheckActions
 import com.example.muamaizingbot.bot.maintenance.PotionPurchaseActions
 import com.example.muamaizingbot.maps.MapDefinitionRepository
@@ -48,9 +49,7 @@ object CombatFocusActions {
 
     private const val TAG = "CombatFocus"
     private const val ATTACK_MAIN = "templates/mu/ui/targeting/attack_main.png"
-    private const val FOCUS_PLAYER = "templates/mu/ui/targeting/focus_player.png"
     private const val ATTACK_THRESHOLD = 0.75f
-    private const val FOCUS_PLAYER_THRESHOLD = 0.62f
     private const val POST_ATTACK_TAP_MS = 160L
     private const val POST_FOCUS_PROBE_MS = 180L
     /** Arrival burst: find a PJ already on the boss before spending settle on skull. */
@@ -157,7 +156,7 @@ object CombatFocusActions {
 
     /**
      * On boss arrival (before [BossTargetingActions.ensureFocusBoss]): burst
-     * [FOCUS_PLAYER] taps so a PJ already fighting the boss is acquired first.
+     * fixed PJ-button taps so a PJ already fighting the boss is acquired first.
      * Avoids ~1s+ skull settle while taking free hits.
      */
     suspend fun probeEnemyOnBossArrival(profile: BotProfile): TickResult {
@@ -182,7 +181,7 @@ object CombatFocusActions {
                 "taps=$ARRIVAL_ENEMY_BURST_TAPS settle=${ARRIVAL_ENEMY_TAP_MS}ms",
         )
         val (w, h) = RefCoords.activeScreenSize()
-        val roi = MuCombatRois.targetingHudRoi(w, h)
+        val (focusX, focusY) = MuCombatRois.focusPlayerTap(w, h)
         repeat(ARRIVAL_ENEMY_BURST_TAPS) { i ->
             if (BotController.state.value != BotRuntimeState.RUNNING) {
                 return TickResult.Idle
@@ -190,10 +189,7 @@ object CombatFocusActions {
             if (DeathActions.isDead()) {
                 return TickResult.Idle
             }
-            val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_PLAYER_THRESHOLD, roi)
-            if (match != null) {
-                NavigationVision.tapScreen(match.centerX, match.centerY, label = "focus_player_arrival")
-            }
+            NavigationVision.tapScreen(focusX, focusY, label = "focus_player_arrival")
             delay(BotTiming.ms(ARRIVAL_ENEMY_TAP_MS, BotTimingCategory.POST_TAP))
             if (confirmArrivalEnemyPanel()) {
                 Log.d(
@@ -289,7 +285,7 @@ object CombatFocusActions {
     }
 
     /**
-     * Continuous [FOCUS_PLAYER] spam for the active boss FIGHT.
+     * Continuous fixed PJ-button taps for the active boss FIGHT.
      * Boss DPS is [GameActions.ensureAutoMode] (Auto) — this loop only hunts mid-fight PJs.
      * Runs until:
      * - a player focus is acquired (portrait=PJ, no boss) → attack spam, or
@@ -303,7 +299,7 @@ object CombatFocusActions {
             Log.w(TAG, "[COMBAT_FOCUS] ensureAuto soft-fail at boss-fight focus spam start")
         }
         val (w, h) = RefCoords.activeScreenSize()
-        val roi = MuCombatRois.targetingHudRoi(w, h)
+        val (focusX, focusY) = MuCombatRois.focusPlayerTap(w, h)
         var taps = 0
         var lastMaintMs = 0L
         var lastAutoMs = System.currentTimeMillis()
@@ -354,7 +350,7 @@ object CombatFocusActions {
             }
 
             val bossEmblem = BossTargetingActions.hasBossFocus()
-            // Portrait classifier: PJ vs boss (boss HUD no longer mistaken via clear-X).
+            // Emblem template vs PJ portrait. A boss HUD is not a player.
             if (!bossEmblem && ElfBuffFocusHud.isClearXVisible()) {
                 Log.d(
                     TAG,
@@ -375,26 +371,13 @@ object CombatFocusActions {
                 return TickResult.Idle
             }
 
-            val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_PLAYER_THRESHOLD, roi)
-            if (match == null) {
-                if (taps == 0 || (taps + 1) % FOCUS_PROBE_LOG_EVERY == 0) {
-                    Log.d(
-                        TAG,
-                        "[COMBAT_FOCUS] focus_player miss spam tap=${taps + 1}",
-                    )
-                    NavigationVision.logBestScore(FOCUS_PLAYER, roi)
-                }
-            } else {
-                if (taps == 0 || (taps + 1) % FOCUS_PROBE_LOG_EVERY == 0) {
-                    Log.d(
-                        TAG,
-                        "[COMBAT_FOCUS] focus spam tap=${taps + 1} " +
-                            "at=(${match.centerX},${match.centerY}) " +
-                            "score=${"%.3f".format(match.score)}",
-                    )
-                }
-                NavigationVision.tapScreen(match.centerX, match.centerY, label = "focus_player")
+            if (taps == 0 || (taps + 1) % FOCUS_PROBE_LOG_EVERY == 0) {
+                Log.d(
+                    TAG,
+                    "[COMBAT_FOCUS] focus spam tap=${taps + 1} at=($focusX,$focusY)",
+                )
             }
+            NavigationVision.tapScreen(focusX, focusY, label = "focus_player")
             val probeMs =
                 if (taps >= FOCUS_SPAM_BURST_TAPS) FOCUS_SPAM_THROTTLE_MS else POST_FOCUS_PROBE_MS
             delay(BotTiming.ms(probeMs, BotTimingCategory.POST_TAP))
@@ -553,6 +536,7 @@ object CombatFocusActions {
         if (BotController.state.value != BotRuntimeState.RUNNING) {
             return FightMaintResult.AbortIdle
         }
+        LootToastDismiss.dismissIfPresent()
 
         if (profile.enablePotionRecovery && PotionCheckActions.isAnyPotionEmpty()) {
             Log.d(TAG, "[COMBAT_FOCUS] spam pause → potions")

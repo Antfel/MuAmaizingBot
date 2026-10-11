@@ -22,6 +22,7 @@ import com.example.muamaizingbot.bot.maintenance.ElfBuffWarTapGrid
 import com.example.muamaizingbot.bot.maintenance.HudValidationGate
 import com.example.muamaizingbot.bot.maintenance.MapCheckActions
 import com.example.muamaizingbot.bot.maintenance.InventoryCheckActions
+import com.example.muamaizingbot.bot.maintenance.LootToastDismiss
 import com.example.muamaizingbot.bot.maintenance.InventoryRecycleActions
 import com.example.muamaizingbot.bot.maintenance.PetActions
 import com.example.muamaizingbot.bot.maintenance.PetCheckGate
@@ -108,6 +109,8 @@ object BotPriorityLoop {
                 else -> navigateToFarm("post-revive")
             }
         }
+
+        LootToastDismiss.dismissIfPresent()
 
         // While a UI action is in progress (shouldn't normally overlap this loop),
         // skip HUD probes that would false-miss under open panels. Death already ran.

@@ -65,6 +65,19 @@ fun HomeScreen(
     onRequestCapture: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    com.example.muamaizingbot.ui.theme.ContextoTheme {
+        HomeScreenContent(
+            onRequestCapture = onRequestCapture,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun HomeScreenContent(
+    onRequestCapture: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     var overlayGranted by remember { mutableStateOf(OverlayPermission.canDrawOverlays(context)) }

@@ -307,6 +307,67 @@ object ProfileRepository {
         return updated
     }
 
+    /** Always writes farm/elf pet in `general_config` (ignores current bot mode). */
+    fun setPetEnabledForFarm(profileFilename: String, enabled: Boolean): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(enablePet = enabled)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] farm enable_pet=$enabled file=$profileFilename")
+        return updated
+    }
+
+    fun setPetTypeForFarm(profileFilename: String, type: PetType): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val updated = profile.copy(petType = type)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] farm pet_type=${type.toStorage()} file=$profileFilename")
+        return updated
+    }
+
+    fun setPetCheckIntervalForFarm(profileFilename: String, minutes: Int): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val clamped = minutes.coerceIn(
+            BotProfile.MIN_PET_CHECK_INTERVAL_MINUTES,
+            BotProfile.MAX_PET_CHECK_INTERVAL_MINUTES,
+        )
+        val updated = profile.copy(petCheckIntervalMinutes = clamped)
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] farm pet_check_interval_minutes=$clamped file=$profileFilename")
+        return updated
+    }
+
+    /** Always writes bosses pet in `killBossesConfig.pet` (ignores current bot mode). */
+    fun setPetEnabledForBosses(profileFilename: String, enabled: Boolean): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val pet = profile.killBossesConfig.pet.copy(enablePet = enabled)
+        val updated = profile.copy(killBossesConfig = profile.killBossesConfig.copy(pet = pet))
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] bosses enable_pet=$enabled file=$profileFilename")
+        return updated
+    }
+
+    fun setPetTypeForBosses(profileFilename: String, type: PetType): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val pet = profile.killBossesConfig.pet.copy(petType = type)
+        val updated = profile.copy(killBossesConfig = profile.killBossesConfig.copy(pet = pet))
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] bosses pet_type=${type.toStorage()} file=$profileFilename")
+        return updated
+    }
+
+    fun setPetCheckIntervalForBosses(profileFilename: String, minutes: Int): BotProfile? {
+        val profile = getProfile(profileFilename) ?: return null
+        val clamped = minutes.coerceIn(
+            BotProfile.MIN_PET_CHECK_INTERVAL_MINUTES,
+            BotProfile.MAX_PET_CHECK_INTERVAL_MINUTES,
+        )
+        val pet = profile.killBossesConfig.pet.copy(petCheckIntervalMinutes = clamped)
+        val updated = profile.copy(killBossesConfig = profile.killBossesConfig.copy(pet = pet))
+        saveProfile(updated)
+        Log.d(TAG, "[PROFILE] bosses pet_check_interval_minutes=$clamped file=$profileFilename")
+        return updated
+    }
+
     fun setElfGiverCastConfig(
         profileFilename: String,
         skillRefX: Int?,

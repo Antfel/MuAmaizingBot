@@ -6,12 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -22,12 +19,36 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseField
+import com.example.muamaizingbot.ui.settings.components.ContextoPrimaryButton
+import com.example.muamaizingbot.ui.settings.components.ContextoSecondaryButton
+import com.example.muamaizingbot.ui.settings.components.ContextoSectionTitle
+import com.example.muamaizingbot.ui.settings.components.ContextoSurfaceCard
+import com.example.muamaizingbot.ui.theme.ContextoColors
+import com.example.muamaizingbot.ui.theme.ContextoTheme
 
 @Composable
 fun PotionConfigScreen(
+    profileStem: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ContextoTheme {
+        PotionConfigScreenContent(
+            profileStem = profileStem,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun PotionConfigScreenContent(
     profileStem: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -51,108 +72,90 @@ fun PotionConfigScreen(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            text = stringResource(R.string.potion_config_title),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
+        ContextoSectionTitle(
+            title = stringResource(R.string.potion_config_title),
+            subtitle = profile?.displayName ?: profileStem,
         )
 
-        Text(
-            text = profile?.displayName ?: profileStem,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.potion_auto_recovery),
-                    fontWeight = FontWeight.Medium,
-                )
-                Text(
-                    text = stringResource(R.string.potion_auto_recovery_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ContextoSurfaceCard {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.potion_auto_recovery),
+                        color = ContextoColors.TextPrimary,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        text = stringResource(R.string.potion_auto_recovery_hint),
+                        color = ContextoColors.TextMuted,
+                        fontSize = 11.sp,
+                    )
+                }
+                Switch(
+                    checked = enableRecovery,
+                    onCheckedChange = { enableRecovery = it },
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = ContextoColors.Bg,
+                        checkedTrackColor = ContextoColors.Teal,
+                        uncheckedThumbColor = ContextoColors.TextSecondary,
+                        uncheckedTrackColor = ContextoColors.Border,
+                    ),
                 )
             }
-            Switch(
-                checked = enableRecovery,
-                onCheckedChange = { enableRecovery = it },
+            ContextoDenseField(
+                value = hpStacks.toString(),
+                onValueChange = { text ->
+                    text.toIntOrNull()?.let { hpStacks = it.coerceIn(1, 99) }
+                },
+                label = stringResource(R.string.potion_stacks_hp),
+                keyboardType = KeyboardType.Number,
+            )
+            ContextoDenseField(
+                value = mpStacks.toString(),
+                onValueChange = { text ->
+                    text.toIntOrNull()?.let { mpStacks = it.coerceIn(1, 99) }
+                },
+                label = stringResource(R.string.potion_stacks_mp),
+                keyboardType = KeyboardType.Number,
             )
         }
-
-        StackField(
-            label = stringResource(R.string.potion_stacks_hp),
-            value = hpStacks,
-            onValueChange = { hpStacks = it.coerceIn(1, 99) },
-        )
-
-        StackField(
-            label = stringResource(R.string.potion_stacks_mp),
-            value = mpStacks,
-            onValueChange = { mpStacks = it.coerceIn(1, 99) },
-        )
 
         if (statusMessage.isNotEmpty()) {
-            Text(
-                text = statusMessage,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text(text = statusMessage, color = ContextoColors.Teal, fontSize = 12.sp)
         }
 
-        TextButton(
+        ContextoPrimaryButton(
+            text = stringResource(R.string.action_save),
             onClick = {
                 val current = profile
                 if (current == null) {
                     statusMessage = profileMissing
-                    return@TextButton
+                    return@ContextoPrimaryButton
                 }
                 ProfileRepository.saveProfile(
                     current.copy(
                         enablePotionRecovery = enableRecovery,
                         hpPotionStacks = hpStacks,
                         mpPotionStacks = mpStacks,
-                    )
+                    ),
                 )
                 statusMessage = savedMessage
             },
-            modifier = Modifier.fillMaxWidth(),
             enabled = profile != null,
-        ) {
-            Text(stringResource(R.string.action_save))
-        }
-
-        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+        )
+        ContextoSecondaryButton(
+            text = stringResource(R.string.action_back),
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.action_back))
-        }
+        )
     }
-}
-
-@Composable
-private fun StackField(
-    label: String,
-    value: Int,
-    onValueChange: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    OutlinedTextField(
-        value = value.toString(),
-        onValueChange = { text ->
-            text.toIntOrNull()?.let(onValueChange)
-        },
-        label = { Text(label) },
-        singleLine = true,
-        modifier = modifier.fillMaxWidth(),
-    )
 }

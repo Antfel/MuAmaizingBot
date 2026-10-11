@@ -16,8 +16,8 @@ import kotlinx.coroutines.delay
  * Giver mode: clear via Focus Boss template. War mode: hard tap @ (516,26).
  *
  * Combat-focus (farm / farm_bosses):
- * - Boss → [com.example.muamaizingbot.bot.bosses.BossTargetingActions.hasBossFocus]
- *   ([FocusPortraitClassifier] boss class; golden uses the same emblem)
+ * - Boss / golden → [com.example.muamaizingbot.bot.bosses.BossTargetingActions.hasBossFocus]
+ *   (`boss_focus` template score; they share the emblem)
  * - Enemy PJ → [isEnemyFocusVisible] / [isClearXVisible] → portrait class PJ
  */
 object ElfBuffFocusHud {
@@ -37,13 +37,6 @@ object ElfBuffFocusHud {
     const val FOCUS_CLEAR_X = "templates/mu/ui/focus_clear_x.png"
     /** Bench: true focus ~0.87; terrain FP ~0.78 — keep above FP band. */
     private const val FOCUS_CLEAR_X_THRESHOLD = 0.85f
-
-    private const val FOCUS_BOSS = "templates/mu/ui/targeting/focus_elite_skull.png"
-    private const val FOCUS_BOSS_THRESHOLD = 0.70f
-
-    /** Fallback Focus Boss tap @ 1280×720 if template miss (giver). */
-    private const val FALLBACK_BOSS_X_1280 = 1115
-    private const val FALLBACK_BOSS_Y_720 = 656
 
     /** War: close focus HUD with hard tap (X button) @ 1280×720. */
     private const val WAR_CLEAR_X_1280 = 516
@@ -151,8 +144,8 @@ object ElfBuffFocusHud {
 
     /**
      * Enemy / PJ focus panel via portrait classifier (not red-bar / clear-X templates).
-     * Boss HUD classifies as [FocusPortraitClassifier.Kind.BOSS], so it does not
-     * trip this path.
+     * A boss or golden HUD is the emblem template, not [FocusPortraitClassifier.Kind.PJ],
+     * so it does not trip this path.
      */
     suspend fun isEnemyFocusVisible(): Boolean {
         return isClearXVisible()
@@ -220,26 +213,9 @@ object ElfBuffFocusHud {
      */
     suspend fun clearFocus(): Boolean {
         val (w, h) = RefCoords.activeScreenSize()
-        val barRoi = MuCombatRois.targetingHudRoi(w, h)
-        val match = NavigationVision.findTemplate(
-            FOCUS_BOSS,
-            FOCUS_BOSS_THRESHOLD,
-            roi = barRoi,
-        )
-        if (match != null) {
-            Log.d(
-                TAG,
-                "[ELF_GIVER] unfocus via Focus Boss at=(${match.centerX},${match.centerY}) " +
-                    "score=${"%.3f".format(match.score)}",
-            )
-            return NavigationVision.tapScreen(match.centerX, match.centerY, label = "unfocus_boss")
-        }
-
-        NavigationVision.logBestScore(FOCUS_BOSS, barRoi)
-        val x = FALLBACK_BOSS_X_1280 * w / 1280
-        val y = FALLBACK_BOSS_Y_720 * h / 720
-        Log.w(TAG, "[ELF_GIVER] Focus Boss miss — fallback tap=($x,$y)")
-        return NavigationVision.tapScreen(x, y, label = "unfocus_boss_fallback")
+        val (x, y) = MuCombatRois.focusBossTap(w, h)
+        Log.d(TAG, "[ELF_GIVER] unfocus via Focus Boss tap=($x,$y)")
+        return NavigationVision.tapScreen(x, y, label = "unfocus_boss")
     }
 
     /**

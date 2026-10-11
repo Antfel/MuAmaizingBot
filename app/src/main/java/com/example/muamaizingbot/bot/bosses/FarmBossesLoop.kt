@@ -14,6 +14,8 @@ import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.ProfileRepository
 import com.example.muamaizingbot.profile.isFarmBossesMode
+import com.example.muamaizingbot.settings.BotTiming
+import com.example.muamaizingbot.settings.BotTimingCategory
 import com.example.muamaizingbot.vision.navigation.NavigationVision
 import kotlinx.coroutines.delay
 
@@ -31,10 +33,12 @@ object FarmBossesLoop {
     /** Mid-fight focus can flicker under VFX; require several failed re-acquires before kill. */
     private const val FOCUS_MISS_BEFORE_KILL = 3
     /**
-     * When classify finds 0 lives (or empty layout), wait before next open-map scan.
-     * Without this, single-wire maps open/close the map every ~2s in a tight loop.
+     * After an empty parchment the scan is already done. This is only a short
+     * settle before the next wire or map, scaled by Sistema → Velocidad
+     * (Normal adds 1s, Rápido shortens it). Closing the map already waits
+     * until the window is gone; the old fixed 20s is not part of the decision.
      */
-    private const val NO_LIVE_BACKOFF_MS = 20_000L
+    private const val NO_LIVE_SETTLE_MS = 1_000L
 
     @Volatile
     private var consecutiveFocusFails = 0
@@ -176,81 +180,30 @@ object FarmBossesLoop {
         val includeGolden = profile.killBossesConfig.includeGoldenMobs
         val wire = BossHuntState.wireId
 
-        var layout = BossHuntState.mapLayout?.takeIf { it.mapId == mapId }
-        // Drop a layout that still carries golden slots after the profile turned them off.
-        if (layout != null &&
-            !includeGolden &&
-            layout.slots.any { it.kind == HuntTargetKind.GOLDEN }
-        ) {
-            Log.d(TAG, "[HUNT] clearing layout — include_golden_mobs=false")
-            BossHuntState.mapLayout = null
-            BossHuntState.clearHuntPlan()
-            layout = null
-        }
-        if (layout == null) {
-            layout = BossMapHuntActions.scanMapLayout(mapId, includeGolden)
-            if (layout.slots.isEmpty()) {
-                layout = BossMapHuntActions.scanMapLayout(mapId, includeGolden)
-            }
-            if (layout.slots.isEmpty()) {
-                Log.d(
-                    TAG,
-                    "[HUNT] layout empty map=$mapId wire=$wire — " +
-                        "backoff ${NO_LIVE_BACKOFF_MS}ms then advance",
-                )
-                MapWindowActions.closeMapWindow()
-                delay(NO_LIVE_BACKOFF_MS)
-                advanceWireOrMap(profile, mapDef)
-                BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
-                return CycleResult.OK
-            }
-            BossHuntState.mapLayout = layout
+        // Fresh parchment every time we pick the next target. A list saved on the
+        // first wire misses a boss that revived while another was being killed.
+        BossHuntState.clearMapLayout()
+        val icons = BossMapHuntActions.scanParchmentLives(includeGolden)
+        BossHuntState.huntPlan = WireHuntPlan(mapId = mapId, wireId = wire, icons = icons)
+        Log.d(
+            TAG,
+            "[HUNT] parchment wire=$wire includeGolden=$includeGolden lives=${icons.size} " +
+                icons.joinToString { "(${it.centerX},${it.centerY})" },
+        )
+        if (icons.isEmpty()) {
+            val settleMs = BotTiming.ms(NO_LIVE_SETTLE_MS, BotTimingCategory.FIXED_SETTLE)
             Log.d(
                 TAG,
-                "[HUNT] layout n=${layout.slots.size} map=$mapId " +
-                    layout.slots.joinToString { "(${it.centerX},${it.centerY})" },
+                "[BOSS] no live bosses/goldens on wire=$wire → " +
+                    "settle ${settleMs}ms then next wire/map",
             )
-        }
-
-        val existing = BossHuntState.huntPlan
-        val planFresh = existing == null || existing.mapId != mapId || existing.wireId != wire
-        if (planFresh) {
-            val icons = BossMapHuntActions.classifyLayoutLives(layout)
-                .let { lives ->
-                    if (includeGolden) lives else lives.filter { it.isBoss }
-                }
-            BossHuntState.huntPlan = WireHuntPlan(mapId = mapId, wireId = wire, icons = icons)
-            Log.d(
-                TAG,
-                "[HUNT] plan wire=$wire includeGolden=$includeGolden " +
-                    "lives=${icons.size}/${layout.slots.size} " +
-                    icons.joinToString { "(${it.centerX},${it.centerY})" },
-            )
-            if (icons.isEmpty()) {
-                Log.d(
-                    TAG,
-                    "[BOSS] no live bosses/goldens on wire=$wire → " +
-                        "backoff ${NO_LIVE_BACKOFF_MS}ms then next wire/map",
-                )
-                MapWindowActions.closeMapWindow()
-                delay(NO_LIVE_BACKOFF_MS)
-                advanceWireOrMap(profile, mapDef)
-                BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
-                return CycleResult.OK
-            }
-            return goToPlanIcon(profile, mapDef, roiCheck = false)
-        }
-
-        val plan = BossHuntState.huntPlan
-        if (plan == null || plan.isExhausted()) {
-            Log.d(TAG, "[HUNT] plan done wire=$wire → next wire/map")
             MapWindowActions.closeMapWindow()
+            delay(settleMs)
             advanceWireOrMap(profile, mapDef)
             BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
             return CycleResult.OK
         }
-
-        return goToPlanIcon(profile, mapDef, roiCheck = true)
+        return goToPlanIcon(profile, mapDef, roiCheck = false)
     }
 
     private suspend fun goToPlanIcon(
@@ -261,10 +214,7 @@ object FarmBossesLoop {
         val plan = BossHuntState.huntPlan ?: return CycleResult.SOFT_FAIL
         val icon = plan.current()
         if (icon == null) {
-            Log.d(TAG, "[HUNT] plan done wire=${plan.wireId} → next wire/map (no rescan)")
-            MapWindowActions.closeMapWindow()
-            advanceWireOrMap(profile, mapDef)
-            BossHuntState.phase = BossHuntPhase.ENSURE_LOCATION
+            BossHuntState.clearHuntPlan()
             return CycleResult.OK
         }
 
@@ -524,22 +474,9 @@ object FarmBossesLoop {
         consecutiveFocusFails = 0
         consecutiveFocusMisses = 0
         BossHuntState.clearBossTarget()
+        BossHuntState.clearHuntPlan()
         val wire = BossHuntState.wireId
         BossHuntState.markPostKill(mapId, wire)
-        if (BossHuntState.huntPlan == null || BossHuntState.huntPlan?.isExhausted() == true) {
-            val mapDef = MapDefinitionRepository.getById(mapId)
-            val live = ProfileRepository.currentProfile.value
-            if (mapDef != null && live != null) {
-                MapWindowActions.closeMapWindow()
-                advanceWireOrMap(live, mapDef)
-                val nextMap = currentMapId(live) ?: mapId
-                BossHuntState.saveCheckpoint(nextMap, BossHuntState.wireId)
-                Log.d(
-                    TAG,
-                    "[BOSS] last live → next wire=${BossHuntState.wireId} (no parchment reopen)",
-                )
-            }
-        }
         return CycleResult.NEED_MAINTENANCE
     }
 

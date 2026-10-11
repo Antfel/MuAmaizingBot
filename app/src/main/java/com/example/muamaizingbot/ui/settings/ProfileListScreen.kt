@@ -1,22 +1,22 @@
 package com.example.muamaizingbot.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -29,16 +29,41 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.profile.isElfBuffPostMode
+import com.example.muamaizingbot.profile.isFarmBossesMode
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseField
+import com.example.muamaizingbot.ui.theme.ContextoColors
+import com.example.muamaizingbot.ui.theme.ContextoTheme
 
 @Composable
 fun ProfileListScreen(
     onConfigureProfile: (String) -> Unit,
+    onCreateWithAssistant: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ContextoTheme {
+        ProfileListScreenContent(
+            onConfigureProfile = onConfigureProfile,
+            onCreateWithAssistant = onCreateWithAssistant,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun ProfileListScreenContent(
+    onConfigureProfile: (String) -> Unit,
+    onCreateWithAssistant: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -52,18 +77,13 @@ fun ProfileListScreen(
         modifier = modifier
             .fillMaxSize()
             .padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         Text(
             text = stringResource(R.string.profiles_title),
-            style = MaterialTheme.typography.headlineSmall,
+            color = ContextoColors.TextPrimary,
+            fontSize = 22.sp,
             fontWeight = FontWeight.Bold,
-        )
-
-        Text(
-            text = stringResource(R.string.profiles_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         LazyColumn(
@@ -71,23 +91,26 @@ fun ProfileListScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             items(profiles, key = { it.filename }) { profile ->
-                ProfileCard(
+                val isActive = currentProfile?.filename == profile.filename
+                val farmSpot = LocationRepository.getFarmSpot(profile.filename)
+                val farmLabel = farmSpot?.summaryLabel(
+                    MapDefinitionRepository.getById(farmSpot.map)?.name,
+                ) ?: stringResource(R.string.profiles_unset)
+                val modeLabel = when {
+                    profile.modeRotation.enabled -> stringResource(R.string.profile_mode_rotation_map_lap)
+                    profile.isFarmBossesMode() -> stringResource(R.string.profile_mode_bosses)
+                    profile.isElfBuffPostMode() -> stringResource(R.string.profile_mode_elf)
+                    else -> stringResource(R.string.profile_mode_farm)
+                }
+                ProfileListCard(
                     profile = profile,
-                    isActive = currentProfile?.filename == profile.filename,
-                    farmSummary = LocationRepository.getFarmSpot(profile.filename)?.summaryLabel(
-                        MapDefinitionRepository.getById(
-                            LocationRepository.getFarmSpot(profile.filename)?.map.orEmpty()
-                        )?.name
+                    isActive = isActive,
+                    summary = stringResource(
+                        R.string.profiles_summary_line,
+                        modeLabel,
+                        farmLabel,
+                        profile.killBossesConfig.maps.size,
                     ),
-                    elfSummary = LocationRepository.getElfBuff(profile.filename)?.summaryLabel(
-                        MapDefinitionRepository.getById(
-                            LocationRepository.getElfBuff(profile.filename)?.map.orEmpty()
-                        )?.name
-                    ),
-                    onSelect = {
-                        ProfileRepository.setCurrentProfile(profile.filename)
-                        LocationRepository.refreshForCurrentProfile()
-                    },
                     onConfigure = {
                         ProfileRepository.setCurrentProfile(profile.filename)
                         LocationRepository.refreshForCurrentProfile()
@@ -102,28 +125,50 @@ fun ProfileListScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Button(
-                onClick = { showCreateDialog = true },
-                modifier = Modifier.weight(1f),
+                onClick = onCreateWithAssistant,
+                modifier = Modifier
+                    .weight(1.2f)
+                    .height(44.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ContextoColors.Teal,
+                    contentColor = ContextoColors.Bg,
+                ),
             ) {
-                Text(stringResource(R.string.profiles_new))
+                Text(
+                    text = stringResource(R.string.profiles_create_assistant),
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                )
             }
-
             OutlinedButton(
-                onClick = {
-                    currentProfile?.let { ProfileRepository.duplicateProfile(it.filename) }
-                },
-                modifier = Modifier.weight(1f),
-                enabled = currentProfile != null,
+                onClick = { showCreateDialog = true },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(44.dp),
             ) {
-                Text(stringResource(R.string.profiles_duplicate))
+                Text(
+                    text = stringResource(R.string.profiles_create_empty),
+                    fontSize = 12.sp,
+                    color = ContextoColors.TextPrimary,
+                )
             }
+        }
+
+        OutlinedButton(
+            onClick = {
+                currentProfile?.let { ProfileRepository.duplicateProfile(it.filename) }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = currentProfile != null,
+        ) {
+            Text(stringResource(R.string.profiles_duplicate), color = ContextoColors.TextSecondary)
         }
 
         OutlinedButton(
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(stringResource(R.string.action_back))
+            Text(stringResource(R.string.action_back), color = ContextoColors.TextSecondary)
         }
     }
 
@@ -132,11 +177,10 @@ fun ProfileListScreen(
             onDismissRequest = { showCreateDialog = false },
             title = { Text(stringResource(R.string.profiles_create_title)) },
             text = {
-                OutlinedTextField(
+                ContextoDenseField(
                     value = newProfileName,
                     onValueChange = { newProfileName = it },
-                    label = { Text(stringResource(R.string.profiles_name)) },
-                    singleLine = true,
+                    label = stringResource(R.string.profiles_name),
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
@@ -165,75 +209,65 @@ fun ProfileListScreen(
 }
 
 @Composable
-private fun ProfileCard(
+private fun ProfileListCard(
     profile: BotProfile,
     isActive: Boolean,
-    farmSummary: String?,
-    elfSummary: String?,
-    onSelect: () -> Unit,
+    summary: String,
     onConfigure: () -> Unit,
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onSelect),
-        colors = CardDefaults.cardColors(
-            containerColor = if (isActive) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant
-            }
-        ),
+            .background(ContextoColors.Surface, RoundedCornerShape(12.dp))
+            .then(
+                if (isActive) {
+                    Modifier.border(1.dp, ContextoColors.Teal, RoundedCornerShape(12.dp))
+                } else {
+                    Modifier.border(1.dp, ContextoColors.Border, RoundedCornerShape(12.dp))
+                },
+            )
+            .clickable(onClick = onConfigure)
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            RadioButton(selected = isActive, onClick = onSelect)
-            Column(modifier = Modifier.weight(1f)) {
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 Text(
                     text = profile.displayName,
+                    color = ContextoColors.TextPrimary,
                     fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Text(
-                    text = stringResource(
-                        R.string.profiles_map_wire,
-                        profile.map.ifBlank { "-" },
-                        profile.wire,
-                    ),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-                farmSummary?.let {
+                if (isActive) {
                     Text(
-                        text = stringResource(R.string.profiles_farm, it),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                elfSummary?.let {
-                    Text(
-                        text = stringResource(R.string.profiles_elf, it),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                if (profile.enableElfBuff && elfSummary == null) {
-                    Text(
-                        text = stringResource(
-                            R.string.profiles_elf,
-                            stringResource(R.string.profiles_unset),
-                        ),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
+                        text = stringResource(R.string.profiles_active_badge),
+                        color = ContextoColors.Bg,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier
+                            .background(ContextoColors.Teal, RoundedCornerShape(4.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp),
                     )
                 }
             }
-            TextButton(onClick = onConfigure) {
-                Text(stringResource(R.string.profiles_configure))
-            }
+            Text(
+                text = summary,
+                color = ContextoColors.TextMuted,
+                fontSize = 11.sp,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
+        Text(
+            text = "›",
+            color = ContextoColors.TextSecondary,
+            fontSize = 22.sp,
+        )
     }
 }

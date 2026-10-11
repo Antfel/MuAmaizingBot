@@ -7,6 +7,7 @@ import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
 import com.example.muamaizingbot.bot.navigation.TrustedCurrentMapMemory
 import com.example.muamaizingbot.capture.ScreenCaptureManager
 import com.example.muamaizingbot.license.LicenseGate
+import com.example.muamaizingbot.profile.ProfileStartGate
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -41,6 +42,10 @@ object BotController {
     private val _state = MutableStateFlow(BotRuntimeState.IDLE)
     val state: StateFlow<BotRuntimeState> = _state.asStateFlow()
 
+    private val _startBlockMessage = MutableStateFlow<String?>(null)
+    /** Shown on the overlay when Play is blocked by profile gates (missing spot/maps/…). */
+    val startBlockMessage: StateFlow<String?> = _startBlockMessage.asStateFlow()
+
     @Volatile
     private var pausedAtMs: Long = 0L
 
@@ -61,6 +66,16 @@ object BotController {
             BotDiagnosticJournal.record(TAG, "start blocked: capture inactive")
             return
         }
+
+        val gate = ProfileStartGate.evaluate()
+        if (!gate.ok) {
+            val msg = gate.message.orEmpty().ifBlank { "profile incomplete" }
+            _startBlockMessage.value = msg
+            Log.w(TAG, "[BOT] start blocked: profile gate — $msg")
+            BotDiagnosticJournal.record(TAG, "start blocked: profile gate")
+            return
+        }
+        _startBlockMessage.value = null
 
         val previous = _state.value
         val pauseAgeMs = pauseAgeMs()

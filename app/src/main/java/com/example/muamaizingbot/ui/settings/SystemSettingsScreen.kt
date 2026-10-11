@@ -9,13 +9,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -27,9 +23,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.settings.AppLanguage
 import com.example.muamaizingbot.settings.AppSettingsStore
@@ -38,12 +35,31 @@ import com.example.muamaizingbot.telegram.TelegramEndpoint
 import com.example.muamaizingbot.telegram.TelegramNotifier
 import com.example.muamaizingbot.telegram.TelegramSendResult
 import com.example.muamaizingbot.telegram.TelegramStore
+import com.example.muamaizingbot.ui.settings.components.ContextoChip
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseField
+import com.example.muamaizingbot.ui.settings.components.ContextoSecondaryButton
+import com.example.muamaizingbot.ui.settings.components.ContextoSectionTitle
+import com.example.muamaizingbot.ui.theme.ContextoColors
+import com.example.muamaizingbot.ui.theme.ContextoTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun SystemSettingsScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ContextoTheme {
+        SystemSettingsScreenContent(
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun SystemSettingsScreenContent(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -68,28 +84,26 @@ fun SystemSettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.system_title),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
+        ContextoSectionTitle(title = stringResource(R.string.system_title))
 
         Text(
             text = stringResource(R.string.system_language),
-            style = MaterialTheme.typography.titleMedium,
+            color = ContextoColors.TextPrimary,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = stringResource(R.string.system_language_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ContextoColors.TextSecondary,
+            fontSize = 13.sp,
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             AppLanguage.entries.forEach { lang ->
-                FilterChip(
+                ContextoChip(
+                    label = lang.nativeLabel,
                     selected = language == lang,
                     onClick = {
                         if (language != lang) {
@@ -97,25 +111,25 @@ fun SystemSettingsScreen(
                             activity?.recreate()
                         }
                     },
-                    label = { Text(lang.nativeLabel) },
                 )
             }
         }
 
         Text(
             text = stringResource(R.string.system_telegram_title),
-            style = MaterialTheme.typography.titleMedium,
+            color = ContextoColors.TextPrimary,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = stringResource(R.string.system_telegram_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ContextoColors.TextSecondary,
+            fontSize = 13.sp,
         )
         Text(
             text = stringResource(R.string.system_telegram_steps),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ContextoColors.TextMuted,
+            fontSize = 12.sp,
         )
 
         Row(
@@ -123,7 +137,11 @@ fun SystemSettingsScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.system_alerts_enabled))
+            Text(
+                text = stringResource(R.string.system_alerts_enabled),
+                color = ContextoColors.TextPrimary,
+                fontSize = 13.sp,
+            )
             Switch(
                 checked = alertsEnabled,
                 onCheckedChange = {
@@ -131,28 +149,34 @@ fun SystemSettingsScreen(
                     TelegramStore.setAlertsEnabled(it)
                     savedHint = ""
                 },
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = ContextoColors.Bg,
+                    checkedTrackColor = ContextoColors.Teal,
+                    uncheckedThumbColor = ContextoColors.TextSecondary,
+                    uncheckedTrackColor = ContextoColors.Border,
+                ),
             )
         }
 
-        OutlinedTextField(
+        ContextoDenseField(
             value = chatId,
             onValueChange = {
                 chatId = it.filter { ch -> ch.isDigit() || ch == '-' }
                 savedHint = ""
                 testStatus = null
             },
-            label = { Text(stringResource(R.string.system_chat_id)) },
-            placeholder = { Text("6054316335") },
-            singleLine = true,
+            label = stringResource(R.string.system_chat_id),
+            placeholder = "6054316335",
             modifier = Modifier.fillMaxWidth(),
-            textStyle = MaterialTheme.typography.bodyLarge.copy(fontFamily = FontFamily.Monospace),
+            keyboardType = KeyboardType.Number,
         )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            OutlinedButton(
+            ContextoSecondaryButton(
+                text = stringResource(R.string.system_save_chat_id),
                 onClick = {
                     TelegramStore.setChatId(chatId)
                     chatId = TelegramStore.chatId()
@@ -160,10 +184,13 @@ fun SystemSettingsScreen(
                     testStatus = null
                 },
                 modifier = Modifier.weight(1f),
-            ) {
-                Text(stringResource(R.string.system_save_chat_id))
-            }
-            OutlinedButton(
+            )
+            ContextoSecondaryButton(
+                text = if (testing) {
+                    stringResource(R.string.system_testing)
+                } else {
+                    stringResource(R.string.system_test_telegram)
+                },
                 onClick = {
                     TelegramStore.setChatId(chatId)
                     chatId = TelegramStore.chatId()
@@ -182,22 +209,14 @@ fun SystemSettingsScreen(
                 },
                 enabled = !testing && chatId.isNotBlank(),
                 modifier = Modifier.weight(1f),
-            ) {
-                Text(
-                    if (testing) {
-                        stringResource(R.string.system_testing)
-                    } else {
-                        stringResource(R.string.system_test_telegram)
-                    },
-                )
-            }
+            )
         }
 
         if (savedHint.isNotEmpty()) {
             Text(
                 text = savedHint,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodySmall,
+                color = ContextoColors.Teal,
+                fontSize = 12.sp,
             )
         }
 
@@ -205,46 +224,47 @@ fun SystemSettingsScreen(
             Text(
                 text = status,
                 color = if (status == testOkLabel) {
-                    MaterialTheme.colorScheme.primary
+                    ContextoColors.Teal
                 } else {
-                    MaterialTheme.colorScheme.error
+                    ContextoColors.Danger
                 },
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 12.sp,
             )
         }
 
         if (!TelegramEndpoint.isConfigured()) {
             Text(
                 text = stringResource(R.string.system_token_missing),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
+                color = ContextoColors.Danger,
+                fontSize = 12.sp,
             )
         }
 
         Text(
             text = stringResource(R.string.system_speed_title),
-            style = MaterialTheme.typography.titleMedium,
+            color = ContextoColors.TextPrimary,
+            fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             text = stringResource(R.string.system_speed_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ContextoColors.TextSecondary,
+            fontSize = 13.sp,
         )
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            FilterChip(
+            ContextoChip(
+                label = stringResource(R.string.system_speed_normal),
                 selected = speedMode == BotSpeedMode.NORMAL,
                 onClick = { AppSettingsStore.setBotSpeed(BotSpeedMode.NORMAL) },
-                label = { Text(stringResource(R.string.system_speed_normal)) },
             )
-            FilterChip(
+            ContextoChip(
+                label = stringResource(R.string.system_speed_fast),
                 selected = speedMode == BotSpeedMode.FAST,
                 onClick = { AppSettingsStore.setBotSpeed(BotSpeedMode.FAST) },
-                label = { Text(stringResource(R.string.system_speed_fast)) },
             )
         }
 
@@ -253,12 +273,14 @@ fun SystemSettingsScreen(
                 BotSpeedMode.NORMAL -> stringResource(R.string.system_speed_selected_normal)
                 BotSpeedMode.FAST -> stringResource(R.string.system_speed_selected_fast)
             },
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ContextoColors.TextMuted,
+            fontSize = 12.sp,
         )
 
-        TextButton(onClick = onBack) {
-            Text(stringResource(R.string.action_back))
-        }
+        ContextoSecondaryButton(
+            text = stringResource(R.string.action_back),
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }

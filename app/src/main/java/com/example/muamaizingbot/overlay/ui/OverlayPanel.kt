@@ -302,9 +302,11 @@ private fun ExpandedOverlay(
         }
 
         val licenseDetail = licenseMessage.orEmpty()
-        if (licenseDetail.isNotEmpty()) {
+        val startBlock by BotController.startBlockMessage.collectAsState()
+        val bannerDetail = licenseDetail.ifEmpty { startBlock.orEmpty() }
+        if (bannerDetail.isNotEmpty()) {
             Text(
-                text = licenseDetail,
+                text = bannerDetail,
                 color = OverlayHudStyle.accentOrange,
                 fontSize = OverlayHudStyle.metaFontSize,
                 maxLines = 2,

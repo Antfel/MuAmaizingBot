@@ -469,6 +469,7 @@ object NavigationWaitActions {
 
         var lastCoord: Pair<Int, Int>? = null
         var stableSinceMs = 0L
+        var blankSinceMs = 0L
         var lastDeathCheckAtMs = 0L
         var sawAutoNav = false
         var pathGoneSinceMs = 0L
@@ -488,7 +489,40 @@ object NavigationWaitActions {
             }
 
             val current = readHudCoordinates(mapDef)
-            if (current != null) {
+            if (current == null) {
+                val prev = lastCoord
+                val now = System.currentTimeMillis()
+                if (prev == null) {
+                    blankSinceMs = 0L
+                } else {
+                    if (blankSinceMs == 0L) blankSinceMs = now
+                    val blankFor = now - blankSinceMs
+                    val pathGoneFor = if (pathGoneSinceMs > 0L) now - pathGoneSinceMs else 0L
+                    val prevDist = manhattanDistance(prev.first, prev.second, targetX, targetY)
+                    val pathEnded = acceptPathEndedAsArrival &&
+                        sawAutoNav &&
+                        pathGoneFor >= PATH_ENDED_GONE_MS
+                    val alreadyThere = prevDist <= radius
+                    if (blankFor >= PATH_ENDED_STABLE_MS && (pathEnded || alreadyThere)) {
+                        Log.d(
+                            TAG,
+                            "[COORD_ARRIVAL] blank OCR, previous point " +
+                                "(${prev.first},${prev.second}) dist=$prevDist " +
+                                "blank=${blankFor}ms pathEnded=$pathEnded → arrived",
+                        )
+                        return CoordArrivalResult.ARRIVED
+                    }
+                    if (!pathEnded && !alreadyThere && blankFor >= COORD_STUCK_ABORT_MS) {
+                        Log.w(
+                            TAG,
+                            "[COORD_ARRIVAL] blank OCR ${blankFor}ms, previous point far " +
+                                "(${prev.first},${prev.second}) dist=$prevDist — abort for re-nav",
+                        )
+                        return CoordArrivalResult.STUCK
+                    }
+                }
+            } else {
+                blankSinceMs = 0L
                 val now = System.currentTimeMillis()
                 if (lastCoord != null &&
                     current.first == lastCoord.first &&

@@ -279,6 +279,81 @@ object BossMapHuntActions {
     )
 
     /**
+     * Fresh parchment pass: search the whole zone ROI for alive icons and drop any
+     * spot where the dead template scores at least as high. Not a saved slot list,
+     * so a boss that revived since the last kill shows up on the next pass.
+     * Bosses first, then goldens.
+     */
+    suspend fun scanParchmentLives(includeGolden: Boolean): List<HuntIcon> {
+        if (!ensureMapOpen()) return emptyList()
+        val frame = ScreenCaptureManager.getLatestBitmap() ?: run {
+            Log.w(TAG, "[HUNT] no frame for parchment scan")
+            return emptyList()
+        }
+        return try {
+            val roi = zoneMapContentRoi(frame.width, frame.height)
+            val rawBoss = NavigationVision.findAllOnFrame(frame, BOSS_ALIVE, HUNT_THRESHOLD, roi)
+            if (rawBoss.isEmpty()) {
+                NavigationVision.logBestScore(BOSS_ALIVE, roi)
+            }
+            val bosses = filterAliveOverDead(frame, rawBoss, BOSS_DEAD).map { huntIconFrom(it) }
+            val goldens = if (includeGolden) {
+                val rawGold = NavigationVision.findAllOnFrame(
+                    frame,
+                    GOLDEN_ALIVE,
+                    HUNT_THRESHOLD,
+                    roi,
+                )
+                if (rawGold.isEmpty()) {
+                    NavigationVision.logBestScore(GOLDEN_ALIVE, roi)
+                }
+                filterAliveOverDead(frame, rawGold, GOLDEN_DEAD).map {
+                    huntIconFrom(it).copy(kind = HuntTargetKind.GOLDEN)
+                }
+            } else {
+                emptyList()
+            }
+            Log.d(
+                TAG,
+                "[HUNT] parchment bosses=${bosses.size}/${rawBoss.size} " +
+                    "goldens=${goldens.size} includeGolden=$includeGolden",
+            )
+            bosses + goldens
+        } finally {
+            frame.recycle()
+        }
+    }
+
+    /** Keep a hit only when its alive score beats the dead template on the same patch. */
+    private fun filterAliveOverDead(
+        frame: Bitmap,
+        candidates: List<PcTemplateMatchResult>,
+        deadTemplate: String,
+    ): List<PcTemplateMatchResult> {
+        if (candidates.isEmpty()) return emptyList()
+        val kept = ArrayList<PcTemplateMatchResult>(candidates.size)
+        for (hit in candidates) {
+            val pad = 6
+            val local = Rect(
+                (hit.bestX - pad).coerceAtLeast(0),
+                (hit.bestY - pad).coerceAtLeast(0),
+                (hit.bestX + hit.templateWidth + pad).coerceAtMost(frame.width),
+                (hit.bestY + hit.templateHeight + pad).coerceAtMost(frame.height),
+            )
+            val dead = NavigationVision.probeOnFrame(frame, deadTemplate, local)
+            val aliveWins = hit.score >= dead.score
+            Log.d(
+                TAG,
+                "[HUNT] alive_vs_dead at=(${hit.centerX},${hit.centerY}) " +
+                    "alive=${"%.3f".format(hit.score)} dead=${"%.3f".format(dead.score)} " +
+                    "keep=$aliveWins tpl=$deadTemplate",
+            )
+            if (aliveWins) kept += hit
+        }
+        return kept
+    }
+
+    /**
      * Classify every layout slot. Returns live icons with **bosses first**, then goldens.
      */
     suspend fun classifyLayoutLives(layout: MapHuntLayout): List<HuntIcon> {

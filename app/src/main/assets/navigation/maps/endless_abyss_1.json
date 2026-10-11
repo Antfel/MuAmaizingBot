@@ -7,11 +7,75 @@
   "requirements": {
     "min_level": 300
   },
+  "navigation": {
+    "behavior": "direct_teleport",
+    "map_option_template": "templates/maps/Endless_abyss/mapsui/endless_abyss_1.png",
+    "enter_wait": 10,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  },
   "maintenance": {
     "map_ui_image": "templates/maps/Endless_abyss/maintenance/endless_abyss_1_map_open_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "order": 18,
-  "wire": 1
+  "wire": 1,
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 2,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.257985608,
+        0.256657762,
+        -137.215439844
+      ],
+      "coord_y": [
+        0.255631865,
+        -0.256168876,
+        39.471232882
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ref_x": 672.0,
+      "ref_y": 226.0,
+      "game_x": 94,
+      "game_y": 153
+    },
+    {
+      "ref_x": 715.0,
+      "ref_y": 185.0,
+      "game_x": 95,
+      "game_y": 175
+    },
+    {
+      "ref_x": 790.0,
+      "ref_y": 376.0,
+      "game_x": 163,
+      "game_y": 145
+    },
+    {
+      "ref_x": 690.0,
+      "ref_y": 495.0,
+      "game_x": 168,
+      "game_y": 89
+    },
+    {
+      "ref_x": 690.0,
+      "ref_y": 321.0,
+      "game_x": 123,
+      "game_y": 134
+    }
+  ]
 }

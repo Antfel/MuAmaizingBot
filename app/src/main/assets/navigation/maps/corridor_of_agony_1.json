@@ -7,11 +7,75 @@
   "requirements": {
     "min_level": 300
   },
+  "navigation": {
+    "behavior": "direct_teleport",
+    "map_option_template": "templates/maps/Corridor_of_agony/mapsui/corridor_of_agony_1.png",
+    "enter_wait": 10,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  },
   "maintenance": {
     "map_ui_image": "templates/maps/Corridor_of_agony/maintenance/corridor_of_agony_1_map_open_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "order": 19,
-  "wire": 1
+  "wire": 1,
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 2,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.170538372,
+        0.169097459,
+        23.720007808
+      ],
+      "coord_y": [
+        0.169785096,
+        -0.171003691,
+        151.86889846
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ref_x": 500.0,
+      "ref_y": 373.0,
+      "game_x": 172,
+      "game_y": 173
+    },
+    {
+      "ref_x": 734.0,
+      "ref_y": 172.0,
+      "game_x": 178,
+      "game_y": 247
+    },
+    {
+      "ref_x": 936.0,
+      "ref_y": 366.0,
+      "game_x": 245,
+      "game_y": 248
+    },
+    {
+      "ref_x": 708.0,
+      "ref_y": 560.0,
+      "game_x": 239,
+      "game_y": 176
+    },
+    {
+      "ref_x": 800.0,
+      "ref_y": 446.0,
+      "game_x": 236,
+      "game_y": 212
+    }
+  ]
 }

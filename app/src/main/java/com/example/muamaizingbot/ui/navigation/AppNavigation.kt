@@ -11,6 +11,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -21,6 +22,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.muamaizingbot.R
@@ -33,10 +35,13 @@ import com.example.muamaizingbot.ui.picker.SpotPickerScreen
 import com.example.muamaizingbot.ui.settings.LicenseSettingsScreen
 import com.example.muamaizingbot.ui.settings.DevilSquareConfigScreen
 import com.example.muamaizingbot.ui.settings.PotionConfigScreen
+import com.example.muamaizingbot.ui.settings.ProfileAssistantScreen
+import com.example.muamaizingbot.ui.settings.ProfileAssistantSession
 import com.example.muamaizingbot.ui.settings.ProfileConfigureScreen
 import com.example.muamaizingbot.ui.settings.ProfileListScreen
 import com.example.muamaizingbot.ui.settings.SystemSettingsScreen
 import com.example.muamaizingbot.ui.shell.ConfigDrawerContent
+import com.example.muamaizingbot.ui.theme.ContextoColors
 import kotlinx.coroutines.launch
 
 object Routes {
@@ -45,11 +50,15 @@ object Routes {
     const val LICENSE = "license"
     const val SYSTEM = "system"
     const val PROFILE_CONFIGURE = "profile_configure/{profileStem}"
+    const val PROFILE_ASSISTANT = "profile_assistant"
+    const val PROFILE_ASSISTANT_REARM = "profile_assistant/{profileStem}"
     const val SPOT_PICKER = "spot_picker/{profileStem}/{locationType}"
     const val POTION_CONFIG = "potion_config/{profileStem}"
     const val DEVIL_SQUARE_CONFIG = "devil_square_config/{profileStem}"
 
     fun profileConfigure(profileStem: String) = "profile_configure/$profileStem"
+
+    fun profileAssistantRearm(profileStem: String) = "profile_assistant/$profileStem"
 
     fun spotPicker(profileStem: String, locationType: LocationPickerType): String {
         return "spot_picker/$profileStem/${locationType.name}"
@@ -69,6 +78,7 @@ fun AppNavigation(
     val navController = rememberNavController()
     val drawerState = rememberDrawerState(initialValue = androidx.compose.material3.DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val contextoChrome = true
 
     val currentProfile by ProfileRepository.currentProfile.collectAsState()
     val farmSpot by LocationRepository.farmSpot.collectAsState()
@@ -82,7 +92,9 @@ fun AppNavigation(
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(
+                drawerContainerColor = if (contextoChrome) ContextoColors.Canvas else androidx.compose.material3.MaterialTheme.colorScheme.surface,
+            ) {
                 ConfigDrawerContent(
                     profileLabel = profileLabel,
                     farmSpotLabel = farmSpotLabel,
@@ -119,6 +131,7 @@ fun AppNavigation(
         modifier = modifier,
     ) {
         Scaffold(
+            containerColor = if (contextoChrome) ContextoColors.Bg else androidx.compose.material3.MaterialTheme.colorScheme.background,
             topBar = {
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
@@ -128,6 +141,15 @@ fun AppNavigation(
                         ) {
                             Icon(Icons.Default.Menu, contentDescription = stringResource(R.string.action_menu))
                         }
+                    },
+                    colors = if (contextoChrome) {
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = ContextoColors.Canvas,
+                            titleContentColor = ContextoColors.TextPrimary,
+                            navigationIconContentColor = ContextoColors.TextPrimary,
+                        )
+                    } else {
+                        TopAppBarDefaults.topAppBarColors()
                     },
                 )
             },
@@ -145,7 +167,69 @@ fun AppNavigation(
                         onConfigureProfile = { profileStem ->
                             navController.navigate(Routes.profileConfigure(profileStem))
                         },
+                        onCreateWithAssistant = {
+                            ProfileAssistantSession.clear()
+                            navController.navigate(Routes.PROFILE_ASSISTANT)
+                        },
                         onBack = { navController.popBackStack() },
+                    )
+                }
+                composable(Routes.PROFILE_ASSISTANT) {
+                    ProfileAssistantScreen(
+                        initialProfileStem = null,
+                        onOpenFarmSpot = { stem ->
+                            navController.navigate(
+                                Routes.spotPicker(stem, LocationPickerType.FARM_SPOT),
+                            )
+                        },
+                        onOpenElfZone = { stem ->
+                            navController.navigate(
+                                Routes.spotPicker(stem, LocationPickerType.ELF_BUFF),
+                            )
+                        },
+                        onFinishedEditDetail = { stem ->
+                            navController.navigate(Routes.profileConfigure(stem)) {
+                                popUpTo(Routes.PROFILES) { inclusive = false }
+                            }
+                        },
+                        onFinishedDone = {
+                            navController.navigate(Routes.HOME) {
+                                popUpTo(Routes.HOME) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        },
+                        onCancel = { navController.popBackStack() },
+                    )
+                }
+                composable(
+                    route = Routes.PROFILE_ASSISTANT_REARM,
+                    arguments = listOf(navArgument("profileStem") { type = NavType.StringType }),
+                ) { entry ->
+                    val profileStem = entry.arguments?.getString("profileStem").orEmpty()
+                    ProfileAssistantScreen(
+                        initialProfileStem = profileStem,
+                        onOpenFarmSpot = { stem ->
+                            navController.navigate(
+                                Routes.spotPicker(stem, LocationPickerType.FARM_SPOT),
+                            )
+                        },
+                        onOpenElfZone = { stem ->
+                            navController.navigate(
+                                Routes.spotPicker(stem, LocationPickerType.ELF_BUFF),
+                            )
+                        },
+                        onFinishedEditDetail = { stem ->
+                            navController.navigate(Routes.profileConfigure(stem)) {
+                                popUpTo(Routes.PROFILES) { inclusive = false }
+                            }
+                        },
+                        onFinishedDone = {
+                            navController.navigate(Routes.HOME) {
+                                popUpTo(Routes.HOME) { inclusive = false }
+                                launchSingleTop = true
+                            }
+                        },
+                        onCancel = { navController.popBackStack() },
                     )
                 }
                 composable(Routes.LICENSE) {
@@ -180,6 +264,10 @@ fun AppNavigation(
                         },
                         onOpenDevilSquareConfig = {
                             navController.navigate(Routes.devilSquareConfig(profileStem))
+                        },
+                        onRearmWithAssistant = {
+                            ProfileAssistantSession.clear()
+                            navController.navigate(Routes.profileAssistantRearm(profileStem))
                         },
                         onBack = { navController.popBackStack() },
                     )

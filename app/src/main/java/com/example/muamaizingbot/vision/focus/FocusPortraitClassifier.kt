@@ -16,9 +16,11 @@ import kotlin.math.sqrt
 /**
  * Tiny 1-NN portrait classifier for the top-center focus HUD face slot.
  *
- * Labels: [Kind.PJ] (player portrait), [Kind.BOSS] (boss/golden emblem — same art),
- * [Kind.EMPTY] (no focus). Replaces `boss_focus` / `focus_clear_x` template probes
- * for fight validation; skull acquire / focus_player world taps stay template-based.
+ * The decision this bank owns is player vs not-player. [Kind.PJ] is an enemy
+ * (or ally) portrait. [Kind.BOSS] and [Kind.EMPTY] stay in the bank only so
+ * empty ground and the boss emblem are not called a player.
+ * Boss and golden fight-hold is a template score on `boss_focus.png`, not this
+ * nearest neighbor. The Focus Boss skull and the PJ button are fixed taps.
  *
  * Bank: `assets/vision/focus_portrait_bank.json` (export via
  * `scripts/export_focus_portrait_bank.py`).
@@ -135,6 +137,7 @@ object FocusPortraitClassifier {
 
     suspend fun isPjFocus(): Boolean = classifyLatest() == Kind.PJ
 
+    /** Nearest bank label is the boss class. Fight-hold does not use this. */
     suspend fun isBossFocus(): Boolean = classifyLatest() == Kind.BOSS
 
     private fun nearest(feat: FloatArray): Kind {

@@ -77,5 +77,57 @@
       "max_attempts": 10
     },
     "switch_wait": 5
-  }
+  },
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 2,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.205227004,
+        0.205887941,
+        -84.501229393
+      ],
+      "coord_y": [
+        0.206076626,
+        -0.20142042,
+        95.074122542
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ref_x": 592.0,
+      "ref_y": 428.0,
+      "game_x": 125,
+      "game_y": 131
+    },
+    {
+      "ref_x": 690.0,
+      "ref_y": 165.0,
+      "game_x": 91,
+      "game_y": 204
+    },
+    {
+      "ref_x": 880.0,
+      "ref_y": 325.0,
+      "game_x": 163,
+      "game_y": 211
+    },
+    {
+      "ref_x": 652.0,
+      "ref_y": 538.0,
+      "game_x": 160,
+      "game_y": 121
+    },
+    {
+      "ref_x": 648.0,
+      "ref_y": 380.0,
+      "game_x": 127,
+      "game_y": 152
+    }
+  ]
 }

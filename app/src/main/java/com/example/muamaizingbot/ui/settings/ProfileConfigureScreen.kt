@@ -3,40 +3,32 @@ package com.example.muamaizingbot.ui.settings
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.InputChip
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,28 +40,38 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
-import com.example.muamaizingbot.R
 import androidx.compose.ui.unit.dp
-import com.example.muamaizingbot.maps.MapDefinition
-import com.example.muamaizingbot.maps.MapDefinitionRepository
+import com.example.muamaizingbot.R
 import com.example.muamaizingbot.bot.maintenance.ElfBuffTargetingActions
+import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.BotMode
 import com.example.muamaizingbot.profile.BotProfile
 import com.example.muamaizingbot.profile.CombatFocusPkMode
 import com.example.muamaizingbot.profile.FarmLocation
-import com.example.muamaizingbot.profile.KillBossesConfig
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ModeRotationConfig
 import com.example.muamaizingbot.profile.ModeRotationStrategy
 import com.example.muamaizingbot.profile.PetType
 import com.example.muamaizingbot.profile.ProfileRepository
-import com.example.muamaizingbot.profile.isElfBuffPostMode
 import com.example.muamaizingbot.profile.isElfBuffWarMode
 import com.example.muamaizingbot.profile.isFarmBossesMode
-import com.example.muamaizingbot.profile.normalizedBotMode
+import com.example.muamaizingbot.ui.settings.components.ContextoChip
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseField
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseSelect
+import com.example.muamaizingbot.ui.settings.components.ContextoSurfaceCard
+import com.example.muamaizingbot.ui.settings.components.ProfileEditorNav
+import com.example.muamaizingbot.ui.settings.components.ProfileEditorSidebar
+import com.example.muamaizingbot.ui.theme.ContextoColors
+import com.example.muamaizingbot.ui.theme.ContextoTheme
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+private enum class ProfileEditSheet {
+    SPOT,
+    BOSSES,
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileConfigureScreen(
     profileStem: String,
@@ -77,6 +79,33 @@ fun ProfileConfigureScreen(
     onOpenElfBuff: () -> Unit,
     onOpenPotionConfig: () -> Unit,
     onOpenDevilSquareConfig: () -> Unit,
+    onRearmWithAssistant: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ContextoTheme {
+        ProfileConfigureScreenContent(
+            profileStem = profileStem,
+            onOpenFarmSpot = onOpenFarmSpot,
+            onOpenElfBuff = onOpenElfBuff,
+            onOpenPotionConfig = onOpenPotionConfig,
+            onOpenDevilSquareConfig = onOpenDevilSquareConfig,
+            onRearmWithAssistant = onRearmWithAssistant,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileConfigureScreenContent(
+    profileStem: String,
+    onOpenFarmSpot: () -> Unit,
+    onOpenElfBuff: () -> Unit,
+    onOpenPotionConfig: () -> Unit,
+    onOpenDevilSquareConfig: () -> Unit,
+    onRearmWithAssistant: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -88,218 +117,229 @@ fun ProfileConfigureScreen(
     val elfBuff = LocationRepository.getElfBuff(profileFilename)
 
     var showDeleteDialog by remember { mutableStateOf(false) }
-    val scrollState = rememberScrollState()
+    var section by remember { mutableStateOf(ProfileEditorNav.ESTILO) }
+    var editSheet by remember { mutableStateOf<ProfileEditSheet?>(null) }
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val contentScroll = rememberScrollState()
+    val sheetScroll = rememberScrollState()
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .verticalScroll(scrollState)
             .imePadding()
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+            .padding(horizontal = 4.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        CompactInfoTitle(
-            title = stringResource(R.string.profile_config_title),
-            info = stringResource(R.string.profile_config_hint),
-            titleStyle = MaterialTheme.typography.headlineSmall,
-        )
+        val (summaryChips, summaryFootnote) = rememberProfileSummaryChips(profile, farmSpot)
 
-        Text(
-            text = profile?.displayName ?: profileStem,
-            style = MaterialTheme.typography.titleMedium,
-        )
-
-        SectionHeader(stringResource(R.string.profile_section_general))
-
-        val potionStatus = if (profile?.enablePotionRecovery == true) {
-            stringResource(R.string.status_active)
-        } else {
-            stringResource(R.string.status_disabled)
-        }
-        ConfigOptionCard(
-            title = stringResource(R.string.potion_config_title),
-            summary = buildString {
-                append(potionStatus)
-                profile?.let {
-                    append(" | HP ${it.hpPotionStacks} | MP ${it.mpPotionStacks}")
-                }
-            },
-            onClick = onOpenPotionConfig,
-        )
-
-        RandomTeleportConfigCard(
-            profile = profile,
-            profileFilename = profileFilename,
-        )
-
-        CombatFocusConfigCard(
-            profile = profile,
-            profileFilename = profileFilename,
-        )
-
-        DevilSquareConfigCard(
-            profile = profile,
-            profileFilename = profileFilename,
-            onEdit = onOpenDevilSquareConfig,
-        )
-
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-            ),
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth(),
         ) {
-            Row(
+            ProfileEditorSidebar(
+                profileName = profile?.displayName ?: profileStem,
+                selected = section,
+                onSelect = { section = it },
+                onRearm = onRearmWithAssistant,
+            )
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .verticalScroll(contentScroll)
+                    .padding(start = 12.dp, end = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                CompactInfoTitle(
-                    title = stringResource(R.string.profile_bot_mode),
-                    info = stringResource(R.string.profile_bot_mode_hint),
-                    modifier = Modifier.weight(1f),
-                )
-                val botModeOptions = listOf(
-                    stringResource(R.string.profile_mode_farm),
-                    stringResource(R.string.profile_mode_elf),
-                    stringResource(R.string.profile_mode_bosses),
-                )
-                val botModeIndex = when {
-                    profile?.isFarmBossesMode() == true -> 2
-                    profile?.isElfBuffPostMode() == true -> 1
-                    else -> 0
-                }
-                CompactDropdown(
-                    selected = botModeOptions[botModeIndex],
-                    options = botModeOptions,
-                    enabled = profile != null,
-                    modifier = Modifier.width(190.dp),
-                    onSelect = { index ->
-                        when (index) {
-                            0 -> ProfileRepository.setBotMode(profileFilename, BotMode.FARM)
-                            1 -> {
-                                if (profile?.isElfBuffPostMode() != true) {
-                                    ProfileRepository.setBotMode(
-                                        profileFilename,
-                                        BotMode.ELF_BUFF_GIVER,
-                                    )
-                                }
+                ProfileSummaryChipRow(
+                    chips = summaryChips,
+                    footnote = summaryFootnote,
+                    onChipClick = { kind ->
+                        when (kind) {
+                            ProfileSummaryChip.Kind.CICLOS -> {
+                                section = ProfileEditorNav.ESTILO
                             }
-                            2 -> ProfileRepository.setBotMode(profileFilename, BotMode.FARM_BOSSES)
+                            ProfileSummaryChip.Kind.SPOT -> {
+                                section = ProfileEditorNav.LUGARES
+                                editSheet = ProfileEditSheet.SPOT
+                            }
+                            ProfileSummaryChip.Kind.BOSSES -> {
+                                section = ProfileEditorNav.LUGARES
+                                editSheet = ProfileEditSheet.BOSSES
+                            }
                         }
                     },
                 )
+                when (section) {
+                    ProfileEditorNav.ESTILO -> {
+                        ContextoEstiloSection(
+                            profile = profile,
+                            profileFilename = profileFilename,
+                        )
+                    }
+                    ProfileEditorNav.LUGARES -> {
+                        ContextoLugaresSection(
+                            profile = profile,
+                            farmSpot = farmSpot,
+                            elfBuff = elfBuff,
+                            onOpenSpotSheet = { editSheet = ProfileEditSheet.SPOT },
+                            onOpenBossesSheet = { editSheet = ProfileEditSheet.BOSSES },
+                            onOpenElf = onOpenElfBuff,
+                        )
+                    }
+                    ProfileEditorNav.MANTENIMIENTO -> {
+                        ContextoMantenimientoSection(
+                            profile = profile,
+                            profileFilename = profileFilename,
+                            onOpenPotionConfig = onOpenPotionConfig,
+                            onOpenSpotSheet = { editSheet = ProfileEditSheet.SPOT },
+                            onOpenBossesSheet = { editSheet = ProfileEditSheet.BOSSES },
+                            onOpenLugaresElf = {
+                                section = ProfileEditorNav.LUGARES
+                                onOpenElfBuff()
+                            },
+                        )
+                    }
+                    ProfileEditorNav.AVANZADO -> {
+                        ContextoAvanzadoSection(
+                            profile = profile,
+                            profileFilename = profileFilename,
+                            onOpenDevilSquareConfig = onOpenDevilSquareConfig,
+                        )
+                    }
+                }
             }
         }
 
-        ModeRotationConfigCard(
-            profile = profile,
-            profileFilename = profileFilename,
-        )
-
-        SectionHeader(stringResource(R.string.profile_section_mode_settings))
-
-        val rotationOn = profile?.modeRotation?.enabled == true
-        when {
-            profile?.isElfBuffPostMode() == true -> {
-                ConfigOptionCard(
-                    title = when {
-                        profile.isElfBuffWarMode() -> stringResource(R.string.profile_war_post_title)
-                        else -> stringResource(R.string.profile_buff_post_title)
-                    },
-                    summary = farmSpot?.summaryLabel(
-                        MapDefinitionRepository.getById(farmSpot.map)?.name
-                    ) ?: stringResource(R.string.profiles_unset),
-                    onClick = onOpenFarmSpot,
-                )
-                PetConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                ElfBuffParamsCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-            }
-            rotationOn -> {
-                ConfigOptionCard(
-                    title = stringResource(R.string.profile_farm_spot),
-                    summary = farmSpot?.summaryLabel(
-                        MapDefinitionRepository.getById(farmSpot.map)?.name
-                    ) ?: stringResource(R.string.profiles_unset),
-                    onClick = onOpenFarmSpot,
-                )
-                FarmBossesConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                PetConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                ElfBuffSeekConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                    elfBuff = elfBuff,
-                    onOpenElfBuff = onOpenElfBuff,
-                )
-            }
-            profile?.isFarmBossesMode() == true -> {
-                FarmBossesConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                PetConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                ElfBuffSeekConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                    elfBuff = elfBuff,
-                    onOpenElfBuff = onOpenElfBuff,
-                )
-            }
-            else -> {
-                ConfigOptionCard(
-                    title = stringResource(R.string.profile_farm_spot),
-                    summary = farmSpot?.summaryLabel(
-                        MapDefinitionRepository.getById(farmSpot.map)?.name
-                    ) ?: stringResource(R.string.profiles_unset),
-                    onClick = onOpenFarmSpot,
-                )
-                PetConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-                ElfBuffSeekConfigCard(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                    elfBuff = elfBuff,
-                    onOpenElfBuff = onOpenElfBuff,
-                )
-            }
-        }
-
-        OutlinedButton(
-            onClick = { showDeleteDialog = true },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp),
-            enabled = profile != null && profiles.size > 1,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(stringResource(R.string.profile_delete))
+            TextButton(
+                onClick = { showDeleteDialog = true },
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+                enabled = profile != null && profiles.size > 1,
+            ) {
+                Text(
+                    stringResource(R.string.profile_delete),
+                    color = ContextoColors.Danger,
+                )
+            }
+            TextButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .weight(1f)
+                    .height(36.dp),
+            ) {
+                Text(
+                    stringResource(R.string.action_back),
+                    color = ContextoColors.TextSecondary,
+                )
+            }
         }
+    }
 
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(38.dp),
+    if (editSheet != null) {
+        ModalBottomSheet(
+            onDismissRequest = { editSheet = null },
+            sheetState = sheetState,
+            containerColor = ContextoColors.Surface,
+            contentColor = ContextoColors.TextPrimary,
         ) {
-            Text(stringResource(R.string.action_back))
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(sheetScroll)
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                when (editSheet) {
+                    ProfileEditSheet.SPOT -> {
+                        Text(
+                            text = stringResource(R.string.profile_sheet_spot_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = ContextoColors.TextPrimary,
+                        )
+                        Text(
+                            text = stringResource(R.string.profile_sheet_spot_sub),
+                            color = ContextoColors.TextMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        PetConfigCard(
+                            profile = profile,
+                            profileFilename = profileFilename,
+                            forceFarmPet = true,
+                            titleRes = R.string.profile_pet_farm_title,
+                            hintRes = R.string.profile_pet_farm_hint,
+                        )
+                        Button(
+                            onClick = {
+                                editSheet = null
+                                onOpenFarmSpot()
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = ContextoColors.Teal,
+                                contentColor = ContextoColors.Bg,
+                            ),
+                        ) {
+                            Text(stringResource(R.string.profile_sheet_edit_point))
+                        }
+                    }
+                    ProfileEditSheet.BOSSES -> {
+                        Text(
+                            text = stringResource(R.string.profile_sheet_bosses_title),
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = ContextoColors.TextPrimary,
+                        )
+                        Text(
+                            text = stringResource(R.string.profile_sheet_bosses_sub),
+                            color = ContextoColors.TextMuted,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        PetConfigCard(
+                            profile = profile,
+                            profileFilename = profileFilename,
+                            forceBossesPet = true,
+                            titleRes = R.string.profile_pet_bosses_title,
+                            hintRes = R.string.profile_pet_bosses_hint,
+                        )
+                        FarmBossesConfigCard(
+                            profile = profile,
+                            profileFilename = profileFilename,
+                        )
+                    }
+                    null -> Unit
+                }
+                Button(
+                    onClick = { editSheet = null },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = ContextoColors.Teal,
+                        contentColor = ContextoColors.Bg,
+                    ),
+                ) {
+                    Text(stringResource(R.string.profile_sheet_listo))
+                }
+                TextButton(
+                    onClick = { editSheet = null },
+                    modifier = Modifier.align(Alignment.CenterHorizontally),
+                ) {
+                    Text(
+                        stringResource(R.string.profiles_cancel),
+                        color = ContextoColors.TextSecondary,
+                    )
+                }
+            }
         }
     }
 
@@ -328,6 +368,8 @@ fun ProfileConfigureScreen(
         )
     }
 }
+
+// Legacy section enum removed — use ProfileEditorNav.
 
 @Composable
 private fun SectionHeader(title: String) {
@@ -394,7 +436,6 @@ private fun CompactInfoButton(title: String, info: String) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CompactDropdown(
     selected: String,
@@ -403,39 +444,14 @@ private fun CompactDropdown(
     enabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { if (enabled) expanded = it },
+    ContextoDenseSelect(
+        label = null,
+        value = selected,
+        options = options.mapIndexed { index, option -> index.toString() to option },
+        onSelect = { id -> id.toIntOrNull()?.let(onSelect) },
+        enabled = enabled,
         modifier = modifier,
-    ) {
-        OutlinedTextField(
-            value = selected,
-            onValueChange = {},
-            readOnly = true,
-            enabled = enabled,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.bodyMedium,
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            options.forEachIndexed { index, option ->
-                DropdownMenuItem(
-                    text = { Text(option, style = MaterialTheme.typography.bodyMedium) },
-                    onClick = {
-                        onSelect(index)
-                        expanded = false
-                    },
-                )
-            }
-        }
-    }
+    )
 }
 
 @Composable
@@ -453,78 +469,65 @@ private fun RandomTeleportConfigCard(
         dotsText = (profile?.randomTeleportFarMinDots ?: BotProfile.DEFAULT_RANDOM_FAR_MIN_DOTS).toString()
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+    ContextoSurfaceCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CompactInfoTitle(
-                    title = stringResource(R.string.profile_random_title),
-                    info = stringResource(R.string.profile_random_hint),
-                    modifier = Modifier.weight(1f),
-                )
-                Switch(
-                    checked = randomEnabled,
-                    onCheckedChange = { enabled ->
-                        ProfileRepository.setRandomTeleportEnabled(profileFilename, enabled)
-                    },
-                    enabled = profile != null,
-                )
-            }
+            CompactInfoTitle(
+                title = stringResource(R.string.profile_random_title),
+                info = stringResource(R.string.profile_random_hint),
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = randomEnabled,
+                onCheckedChange = { enabled ->
+                    ProfileRepository.setRandomTeleportEnabled(profileFilename, enabled)
+                },
+                enabled = profile != null,
+            )
+        }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            ContextoDenseField(
+                value = dotsText,
+                onValueChange = { dotsText = it.filter { ch -> ch.isDigit() }.take(2) },
+                label = stringResource(R.string.profile_random_dots_label),
+                enabled = profile != null && randomEnabled,
+                keyboardType = KeyboardType.Number,
+                modifier = Modifier.weight(0.32f),
+            )
+            CompactInfoButton(
+                title = stringResource(R.string.profile_random_dots_label),
+                info = stringResource(
+                    R.string.profile_random_dots_hint,
+                    BotProfile.MIN_RANDOM_FAR_MIN_DOTS,
+                    BotProfile.MAX_RANDOM_FAR_MIN_DOTS,
+                ),
+            )
+            OutlinedButton(
+                onClick = {
+                    val dots = dotsText.toIntOrNull() ?: return@OutlinedButton
+                    ProfileRepository.setRandomTeleportFarMinDots(profileFilename, dots)
+                },
+                modifier = Modifier
+                    .weight(0.68f)
+                    .height(36.dp),
+                enabled = profile != null &&
+                    randomEnabled &&
+                    dotsText.toIntOrNull() != null,
             ) {
-                OutlinedTextField(
-                    value = dotsText,
-                    onValueChange = { dotsText = it.filter { ch -> ch.isDigit() }.take(2) },
-                    modifier = Modifier.weight(0.32f),
-                    enabled = profile != null && randomEnabled,
-                    singleLine = true,
-                    label = { Text(stringResource(R.string.profile_random_dots_label)) },
-                )
-                CompactInfoButton(
-                    title = stringResource(R.string.profile_random_dots_label),
-                    info = stringResource(
-                        R.string.profile_random_dots_hint,
-                        BotProfile.MIN_RANDOM_FAR_MIN_DOTS,
-                        BotProfile.MAX_RANDOM_FAR_MIN_DOTS,
-                    ),
-                )
-                OutlinedButton(
-                    onClick = {
-                        val dots = dotsText.toIntOrNull() ?: return@OutlinedButton
-                        ProfileRepository.setRandomTeleportFarMinDots(profileFilename, dots)
-                    },
-                    modifier = Modifier
-                        .weight(0.68f)
-                        .height(38.dp),
-                    enabled = profile != null &&
-                        randomEnabled &&
-                        dotsText.toIntOrNull() != null,
-                ) {
-                    Text(stringResource(R.string.profile_random_dots_save))
-                }
+                Text(stringResource(R.string.profile_random_dots_save))
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ModeRotationConfigCard(
     profile: BotProfile?,
@@ -557,170 +560,155 @@ private fun ModeRotationConfigCard(
         ProfileRepository.setModeRotationConfig(profileFilename, config.update())
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+    ContextoSurfaceCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CompactInfoTitle(
-                    title = stringResource(R.string.profile_mode_rotation_title),
-                    info = stringResource(R.string.profile_mode_rotation_hint),
-                    modifier = Modifier.weight(1f),
-                )
-                if (enabled) {
-                    CompactDropdown(
-                        selected = strategyLabels[
-                            strategies.indexOf(config.strategy).coerceAtLeast(0),
-                        ],
-                        options = strategyLabels,
-                        enabled = profile != null,
-                        modifier = Modifier.width(130.dp),
-                        onSelect = { index ->
-                            persist { copy(strategy = strategies[index]) }
-                        },
-                    )
-                }
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { on ->
-                        if (on) {
-                            val segment = if (profile?.isFarmBossesMode() == true) {
-                                ModeRotationConfig.SEGMENT_BOSSES
-                            } else {
-                                ModeRotationConfig.SEGMENT_REST
-                            }
-                            persist {
-                                copy(
-                                    enabled = true,
-                                    segment = segment,
-                                    lapCompletePending = false,
-                                )
-                            }
-                        } else {
-                            persist { copy(enabled = false) }
-                        }
-                    },
-                    enabled = profile != null,
-                )
-            }
+            CompactInfoTitle(
+                title = stringResource(R.string.profile_mode_rotation_title),
+                info = stringResource(R.string.profile_mode_rotation_hint),
+                modifier = Modifier.weight(1f),
+            )
             if (enabled) {
-                when (config.strategy) {
-                    ModeRotationStrategy.MAP_LAP -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            OutlinedTextField(
-                                value = restText,
-                                onValueChange = {
-                                    restText = it.filter { ch -> ch.isDigit() }.take(4)
-                                },
-                                modifier = Modifier.weight(0.36f),
-                                enabled = profile != null,
-                                singleLine = true,
-                                label = {
-                                    Text(stringResource(R.string.profile_mode_rotation_rest_label))
-                                },
-                            )
-                            CompactInfoButton(
-                                title = stringResource(R.string.profile_mode_rotation_rest_label),
-                                info = stringResource(
-                                    R.string.profile_mode_rotation_rest_hint,
-                                    ModeRotationConfig.MIN_REST_MINUTES,
-                                    ModeRotationConfig.MAX_REST_MINUTES,
-                                ),
-                            )
-                            OutlinedButton(
-                                onClick = {
-                                    val minutes = restText.toIntOrNull() ?: return@OutlinedButton
-                                    persist {
-                                        copy(
-                                            restMinutes = minutes.coerceIn(
-                                                ModeRotationConfig.MIN_REST_MINUTES,
-                                                ModeRotationConfig.MAX_REST_MINUTES,
-                                            ),
-                                        )
-                                    }
-                                },
-                                modifier = Modifier
-                                    .weight(0.64f)
-                                    .height(38.dp),
-                                enabled = profile != null && restText.toIntOrNull() != null,
-                            ) {
-                                Text(stringResource(R.string.profile_mode_rotation_rest_save))
-                            }
+                CompactDropdown(
+                    selected = strategyLabels[
+                        strategies.indexOf(config.strategy).coerceAtLeast(0),
+                    ],
+                    options = strategyLabels,
+                    enabled = profile != null,
+                    modifier = Modifier.width(130.dp),
+                    onSelect = { index ->
+                        persist { copy(strategy = strategies[index]) }
+                    },
+                )
+            }
+            Switch(
+                checked = enabled,
+                onCheckedChange = { on ->
+                    if (on) {
+                        val segment = if (profile?.isFarmBossesMode() == true) {
+                            ModeRotationConfig.SEGMENT_BOSSES
+                        } else {
+                            ModeRotationConfig.SEGMENT_REST
                         }
+                        persist {
+                            copy(
+                                enabled = true,
+                                segment = segment,
+                                lapCompletePending = false,
+                            )
+                        }
+                    } else {
+                        persist { copy(enabled = false) }
                     }
-                    ModeRotationStrategy.CLOCK -> {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                },
+                enabled = profile != null,
+            )
+        }
+        if (enabled) {
+            when (config.strategy) {
+                ModeRotationStrategy.MAP_LAP -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        ContextoDenseField(
+                            value = restText,
+                            onValueChange = {
+                                restText = it.filter { ch -> ch.isDigit() }.take(4)
+                            },
+                            label = stringResource(R.string.profile_mode_rotation_rest_label),
+                            enabled = profile != null,
+                            keyboardType = KeyboardType.Number,
+                            modifier = Modifier.weight(0.36f),
+                        )
+                        CompactInfoButton(
+                            title = stringResource(R.string.profile_mode_rotation_rest_label),
+                            info = stringResource(
+                                R.string.profile_mode_rotation_rest_hint,
+                                ModeRotationConfig.MIN_REST_MINUTES,
+                                ModeRotationConfig.MAX_REST_MINUTES,
+                            ),
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                val minutes = restText.toIntOrNull() ?: return@OutlinedButton
+                                persist {
+                                    copy(
+                                        restMinutes = minutes.coerceIn(
+                                            ModeRotationConfig.MIN_REST_MINUTES,
+                                            ModeRotationConfig.MAX_REST_MINUTES,
+                                        ),
+                                    )
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(0.64f)
+                                .height(36.dp),
+                            enabled = profile != null && restText.toIntOrNull() != null,
                         ) {
-                            OutlinedTextField(
-                                value = spotTimeText,
-                                onValueChange = { raw ->
-                                    val formatted = ModeRotationConfig.formatHhMmInput(raw)
-                                    spotTimeText = formatted
-                                    if (ModeRotationConfig.isValidHhMm(formatted)) {
-                                        persist {
-                                            copy(farmWindows = listOf(formatted))
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = profile != null,
-                                singleLine = true,
-                                placeholder = { Text("HH:MM") },
-                                label = {
-                                    Text(stringResource(R.string.profile_mode_rotation_spot_time))
-                                },
-                            )
-                            OutlinedTextField(
-                                value = bossesTimeText,
-                                onValueChange = { raw ->
-                                    val formatted = ModeRotationConfig.formatHhMmInput(raw)
-                                    bossesTimeText = formatted
-                                    if (ModeRotationConfig.isValidHhMm(formatted)) {
-                                        persist {
-                                            copy(bossesWindows = listOf(formatted))
-                                        }
-                                    }
-                                },
-                                modifier = Modifier.weight(1f),
-                                enabled = profile != null,
-                                singleLine = true,
-                                placeholder = { Text("HH:MM") },
-                                label = {
-                                    Text(stringResource(R.string.profile_mode_rotation_bosses_time))
-                                },
-                            )
-                            CompactInfoButton(
-                                title = stringResource(R.string.profile_mode_rotation_clock),
-                                info = stringResource(R.string.profile_mode_rotation_time_hint),
-                            )
+                            Text(stringResource(R.string.profile_mode_rotation_rest_save))
                         }
                     }
                 }
-                Text(
-                    text = stringResource(R.string.profile_mode_rotation_preview_note),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                ModeRotationStrategy.CLOCK -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        ContextoDenseField(
+                            value = spotTimeText,
+                            onValueChange = { raw ->
+                                val formatted = ModeRotationConfig.formatHhMmInput(raw)
+                                spotTimeText = formatted
+                                if (ModeRotationConfig.isValidHhMm(formatted)) {
+                                    persist {
+                                        copy(farmWindows = listOf(formatted))
+                                    }
+                                }
+                            },
+                            label = stringResource(R.string.profile_mode_rotation_spot_time),
+                            placeholder = "HH:MM",
+                            enabled = profile != null,
+                            modifier = Modifier.weight(1f),
+                        )
+                        ContextoDenseField(
+                            value = bossesTimeText,
+                            onValueChange = { raw ->
+                                val formatted = ModeRotationConfig.formatHhMmInput(raw)
+                                bossesTimeText = formatted
+                                if (ModeRotationConfig.isValidHhMm(formatted)) {
+                                    persist {
+                                        copy(bossesWindows = listOf(formatted))
+                                    }
+                                }
+                            },
+                            label = stringResource(R.string.profile_mode_rotation_bosses_time),
+                            placeholder = "HH:MM",
+                            enabled = profile != null,
+                            modifier = Modifier.weight(1f),
+                        )
+                        CompactInfoButton(
+                            title = stringResource(R.string.profile_mode_rotation_clock),
+                            info = stringResource(R.string.profile_mode_rotation_time_hint),
+                        )
+                    }
+                }
             }
+            Text(
+                text = when (config.strategy) {
+                    ModeRotationStrategy.MAP_LAP ->
+                        stringResource(R.string.profile_mode_rotation_map_lap_note)
+                    ModeRotationStrategy.CLOCK ->
+                        stringResource(R.string.profile_mode_rotation_clock_note)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
@@ -732,16 +720,9 @@ private fun DevilSquareConfigCard(
     onEdit: () -> Unit,
 ) {
     val cfg = profile?.devilSquare
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
+    ContextoSurfaceCard {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -783,16 +764,9 @@ private fun CombatFocusConfigCard(
         stringResource(R.string.profile_combat_focus_pk_union)
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
+    ContextoSurfaceCard {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -832,8 +806,22 @@ private fun CombatFocusConfigCard(
 private fun PetConfigCard(
     profile: BotProfile?,
     profileFilename: String,
+    forceFarmPet: Boolean = false,
+    forceBossesPet: Boolean = false,
+    titleRes: Int = R.string.profile_pet_title,
+    hintRes: Int = R.string.profile_pet_hint,
 ) {
-    val pet = profile?.effectivePetConfig()
+    val editBosses = forceBossesPet || (!forceFarmPet && profile?.isFarmBossesMode() == true)
+    val pet = when {
+        editBosses -> profile?.killBossesConfig?.pet
+        else -> profile?.let {
+            com.example.muamaizingbot.profile.PetConfig(
+                enablePet = it.enablePet,
+                petType = it.petType,
+                petCheckIntervalMinutes = it.petCheckIntervalMinutes,
+            )
+        }
+    }
     val enabled = pet?.enablePet == true
     val selected = pet?.petType ?: PetType.DEFAULT
     val petTypes = PetType.entries
@@ -841,90 +829,105 @@ private fun PetConfigCard(
         stringResource(R.string.profile_pet_angel),
         stringResource(R.string.profile_pet_imp),
     )
-    var intervalText by remember(profile?.filename, profile?.botMode, pet?.petCheckIntervalMinutes) {
+    var intervalText by remember(
+        profile?.filename,
+        editBosses,
+        pet?.petCheckIntervalMinutes,
+    ) {
         mutableStateOf(
             (pet?.petCheckIntervalMinutes
                 ?: BotProfile.DEFAULT_PET_CHECK_INTERVAL_MINUTES).toString(),
         )
     }
-    LaunchedEffect(profile?.botMode, pet?.petCheckIntervalMinutes) {
+    LaunchedEffect(editBosses, pet?.petCheckIntervalMinutes) {
         intervalText = (pet?.petCheckIntervalMinutes
             ?: BotProfile.DEFAULT_PET_CHECK_INTERVAL_MINUTES).toString()
     }
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+    fun persistEnabled(on: Boolean) {
+        if (editBosses) {
+            ProfileRepository.setPetEnabledForBosses(profileFilename, on)
+        } else {
+            ProfileRepository.setPetEnabledForFarm(profileFilename, on)
+        }
+    }
+
+    fun persistType(type: PetType) {
+        if (editBosses) {
+            ProfileRepository.setPetTypeForBosses(profileFilename, type)
+        } else {
+            ProfileRepository.setPetTypeForFarm(profileFilename, type)
+        }
+    }
+
+    fun persistInterval(minutes: Int) {
+        if (editBosses) {
+            ProfileRepository.setPetCheckIntervalForBosses(profileFilename, minutes)
+        } else {
+            ProfileRepository.setPetCheckIntervalForFarm(profileFilename, minutes)
+        }
+    }
+
+    ContextoSurfaceCard {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
+            CompactInfoTitle(
+                title = stringResource(titleRes),
+                info = stringResource(hintRes),
+                modifier = Modifier.weight(1f),
+            )
+            ContextoDenseSelect(
+                label = null,
+                value = petLabels[petTypes.indexOf(selected).coerceAtLeast(0)],
+                options = petTypes.mapIndexed { i, type -> type.name to petLabels[i] },
+                onSelect = { id ->
+                    PetType.entries.firstOrNull { it.name == id }?.let { persistType(it) }
+                },
+                enabled = profile != null && enabled,
+                modifier = Modifier.width(120.dp),
+            )
+            Switch(
+                checked = enabled,
+                onCheckedChange = { on -> persistEnabled(on) },
+                enabled = profile != null,
+            )
+        }
+        if (enabled) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalAlignment = Alignment.Bottom,
             ) {
-                CompactInfoTitle(
-                    title = stringResource(R.string.profile_pet_title),
-                    info = stringResource(R.string.profile_pet_hint),
-                    modifier = Modifier.weight(1f),
-                )
-                CompactDropdown(
-                    selected = petLabels[petTypes.indexOf(selected).coerceAtLeast(0)],
-                    options = petLabels,
-                    enabled = profile != null && enabled,
-                    modifier = Modifier.width(120.dp),
-                    onSelect = { index ->
-                        ProfileRepository.setPetType(profileFilename, petTypes[index])
-                    },
-                )
-                Switch(
-                    checked = enabled,
-                    onCheckedChange = { on ->
-                        ProfileRepository.setPetEnabled(profileFilename, on)
-                    },
+                ContextoDenseField(
+                    value = intervalText,
+                    onValueChange = { intervalText = it.filter { ch -> ch.isDigit() }.take(3) },
+                    label = stringResource(R.string.profile_pet_check_interval_label),
                     enabled = profile != null,
+                    keyboardType = KeyboardType.Number,
+                    modifier = Modifier.weight(0.32f),
                 )
-            }
-            if (enabled) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                CompactInfoButton(
+                    title = stringResource(R.string.profile_pet_check_interval_label),
+                    info = stringResource(
+                        R.string.profile_pet_check_interval_hint,
+                        BotProfile.MIN_PET_CHECK_INTERVAL_MINUTES,
+                        BotProfile.MAX_PET_CHECK_INTERVAL_MINUTES,
+                    ),
+                )
+                OutlinedButton(
+                    onClick = {
+                        val minutes = intervalText.toIntOrNull() ?: return@OutlinedButton
+                        persistInterval(minutes)
+                    },
+                    modifier = Modifier
+                        .weight(0.68f)
+                        .height(36.dp),
+                    enabled = profile != null && intervalText.toIntOrNull() != null,
                 ) {
-                    OutlinedTextField(
-                        value = intervalText,
-                        onValueChange = { intervalText = it.filter { ch -> ch.isDigit() }.take(3) },
-                        modifier = Modifier.weight(0.32f),
-                        enabled = profile != null,
-                        singleLine = true,
-                        label = { Text(stringResource(R.string.profile_pet_check_interval_label)) },
-                    )
-                    CompactInfoButton(
-                        title = stringResource(R.string.profile_pet_check_interval_label),
-                        info = stringResource(
-                            R.string.profile_pet_check_interval_hint,
-                            BotProfile.MIN_PET_CHECK_INTERVAL_MINUTES,
-                            BotProfile.MAX_PET_CHECK_INTERVAL_MINUTES,
-                        ),
-                    )
-                    OutlinedButton(
-                        onClick = {
-                            val minutes = intervalText.toIntOrNull() ?: return@OutlinedButton
-                            ProfileRepository.setPetCheckIntervalMinutes(profileFilename, minutes)
-                        },
-                        modifier = Modifier
-                            .weight(0.68f)
-                            .height(38.dp),
-                        enabled = profile != null && intervalText.toIntOrNull() != null,
-                    ) {
-                        Text(stringResource(R.string.profile_pet_check_interval_save))
-                    }
+                    Text(stringResource(R.string.profile_pet_check_interval_save))
                 }
             }
         }
@@ -938,16 +941,9 @@ private fun ElfBuffSeekConfigCard(
     elfBuff: FarmLocation?,
     onOpenElfBuff: () -> Unit,
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
+    ContextoSurfaceCard {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -990,178 +986,15 @@ private fun ElfBuffSeekConfigCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun FarmBossesConfigCard(
     profile: BotProfile?,
     profileFilename: String,
 ) {
-    val config = profile?.killBossesConfig ?: KillBossesConfig()
-    val pickerMaps = remember { MapDefinitionRepository.listForPicker() }
-    var selectedMaps by remember(profile?.filename, config.maps) {
-        mutableStateOf(config.maps)
-    }
-    var golden by remember(profile?.filename, config.includeGoldenMobs) {
-        mutableStateOf(config.includeGoldenMobs)
-    }
-    var searchQuery by remember { mutableStateOf("") }
-
-    LaunchedEffect(config.maps, config.includeGoldenMobs) {
-        selectedMaps = config.maps
-        golden = config.includeGoldenMobs
-    }
-
-    fun persist(
-        maps: List<String> = selectedMaps,
-        goldenOverride: Boolean? = null,
-    ) {
-        if (profile == null) return
-        ProfileRepository.setKillBossesConfig(
-            profileFilename,
-            config.copy(
-                includeGoldenMobs = goldenOverride ?: golden,
-                maps = maps,
-            ),
-        )
-    }
-
-    fun addMap(map: MapDefinition) {
-        if (map.id in selectedMaps) {
-            searchQuery = ""
-            return
-        }
-        val next = selectedMaps + map.id
-        selectedMaps = next
-        searchQuery = ""
-        persist(maps = next)
-    }
-
-    fun removeMap(mapId: String) {
-        val next = selectedMaps.filterNot { it == mapId }
-        selectedMaps = next
-        persist(maps = next)
-    }
-
-    val suggestions = remember(searchQuery, selectedMaps, pickerMaps) {
-        val q = searchQuery.trim()
-        if (q.isEmpty()) {
-            emptyList()
-        } else {
-            pickerMaps
-                .filter { map ->
-                    map.id !in selectedMaps &&
-                        (map.name.contains(q, ignoreCase = true) ||
-                            map.id.contains(q, ignoreCase = true))
-                }
-                .take(8)
-        }
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
-            CompactInfoTitle(
-                title = stringResource(R.string.mode_farm_bosses),
-                info = stringResource(R.string.profile_bosses_hint),
-            )
-
-            if (selectedMaps.isEmpty()) {
-                Text(
-                    text = stringResource(R.string.profile_bosses_no_maps),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                )
-            } else {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    selectedMaps.forEachIndexed { index, mapId ->
-                        val name = MapDefinitionRepository.getById(mapId)?.name ?: mapId
-                        InputChip(
-                            selected = false,
-                            onClick = { },
-                            enabled = profile != null,
-                            label = { Text("${index + 1}. $name") },
-                            trailingIcon = {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = stringResource(R.string.profile_bosses_remove_map, name),
-                                    modifier = Modifier.clickable(enabled = profile != null) {
-                                        removeMap(mapId)
-                                    },
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text(stringResource(R.string.profile_bosses_search)) },
-                placeholder = { Text(stringResource(R.string.profile_bosses_search_hint)) },
-                singleLine = true,
-                enabled = profile != null,
-            )
-
-            if (suggestions.isNotEmpty()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
-                ) {
-                    suggestions.forEach { map ->
-                        Text(
-                            text = map.name,
-                            style = MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable(enabled = profile != null) { addMap(map) }
-                                .padding(vertical = 10.dp, horizontal = 4.dp),
-                        )
-                    }
-                }
-            } else if (searchQuery.isNotBlank()) {
-                Text(
-                    text = stringResource(R.string.profile_bosses_no_match),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                CompactInfoTitle(
-                    title = stringResource(R.string.profile_bosses_golden),
-                    info = stringResource(R.string.profile_bosses_golden_hint),
-                    modifier = Modifier.weight(1f),
-                    titleStyle = MaterialTheme.typography.bodyMedium,
-                )
-                Switch(
-                    checked = golden,
-                    onCheckedChange = { enabled ->
-                        golden = enabled
-                        persist(goldenOverride = enabled)
-                    },
-                    enabled = profile != null,
-                )
-            }
-        }
-    }
+    BossesMapsPanel(
+        profile = profile,
+        profileFilename = profileFilename,
+    )
 }
 
 @Composable
@@ -1171,56 +1004,44 @@ private fun ElfBuffParamsCard(
 ) {
     val war = profile?.isElfBuffWarMode() == true
 
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+    ContextoSurfaceCard {
+        CompactInfoTitle(
+            title = stringResource(R.string.profile_elf_params),
+            info = stringResource(R.string.profile_elf_params_hint),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            CompactInfoTitle(
-                title = stringResource(R.string.profile_elf_params),
-                info = stringResource(R.string.profile_elf_params_hint),
+            ContextoChip(
+                label = stringResource(R.string.profile_elf_open_world),
+                selected = !war,
+                onClick = {
+                    ProfileRepository.setBotMode(profileFilename, BotMode.ELF_BUFF_GIVER)
+                },
+                enabled = profile != null,
             )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                FilterChip(
-                    selected = !war,
-                    onClick = {
-                        ProfileRepository.setBotMode(profileFilename, BotMode.ELF_BUFF_GIVER)
-                    },
-                    enabled = profile != null,
-                    label = { Text(stringResource(R.string.profile_elf_open_world)) },
-                )
-                FilterChip(
-                    selected = war,
-                    onClick = {
-                        ProfileRepository.setBotMode(profileFilename, BotMode.ELF_BUFF_WAR)
-                    },
-                    enabled = profile != null,
-                    label = { Text(stringResource(R.string.profile_elf_war)) },
-                )
-            }
+            ContextoChip(
+                label = stringResource(R.string.profile_elf_war),
+                selected = war,
+                onClick = {
+                    ProfileRepository.setBotMode(profileFilename, BotMode.ELF_BUFF_WAR)
+                },
+                enabled = profile != null,
+            )
+        }
 
-            if (war) {
-                CompactInfoTitle(
-                    title = stringResource(R.string.profile_elf_war),
-                    info = stringResource(R.string.profile_elf_war_hint),
-                    titleStyle = MaterialTheme.typography.bodyMedium,
-                )
-            } else {
-                ElfGiverCastFields(
-                    profile = profile,
-                    profileFilename = profileFilename,
-                )
-            }
+        if (war) {
+            CompactInfoTitle(
+                title = stringResource(R.string.profile_elf_war),
+                info = stringResource(R.string.profile_elf_war_hint),
+                titleStyle = MaterialTheme.typography.bodyMedium,
+            )
+        } else {
+            ElfGiverCastFields(
+                profile = profile,
+                profileFilename = profileFilename,
+            )
         }
     }
 }
@@ -1255,15 +1076,15 @@ private fun ElfGiverCastFields(
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Bottom,
     ) {
-        OutlinedTextField(
+        ContextoDenseField(
             value = intervalText,
             onValueChange = { intervalText = it.filter { ch -> ch.isDigit() }.take(3) },
-            modifier = Modifier.weight(0.32f),
-            label = { Text(stringResource(R.string.profile_elf_cast_pause)) },
-            singleLine = true,
+            label = stringResource(R.string.profile_elf_cast_pause),
             enabled = profile != null,
+            keyboardType = KeyboardType.Number,
+            modifier = Modifier.weight(0.32f),
         )
         CompactInfoButton(
             title = stringResource(R.string.profile_elf_cast_pause),
@@ -1284,7 +1105,7 @@ private fun ElfGiverCastFields(
             },
             modifier = Modifier
                 .weight(0.68f)
-                .height(38.dp),
+                .height(36.dp),
             enabled = profile != null,
         ) {
             Text(stringResource(R.string.profile_elf_save_cast))
@@ -1323,29 +1144,20 @@ private fun ConfigOptionCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-        ),
-        onClick = onClick,
+    ContextoSurfaceCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 7.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = summary,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            text = summary,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }

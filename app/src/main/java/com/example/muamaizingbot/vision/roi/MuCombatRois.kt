@@ -67,6 +67,28 @@ object MuCombatRois {
     fun targetingHudRoi(frame: Bitmap): Rect = targetingHudRoi(frame.width, frame.height)
 
     /**
+     * Focus-player button. Fixed on the skill cluster; measured on RiddD 1280×720
+     * at the white bust to the right of Attack. Template match was hitting a neighbor.
+     */
+    const val FOCUS_PLAYER_X_1280 = 1248
+    const val FOCUS_PLAYER_Y_720 = 532
+
+    /**
+     * Focus Boss skull. Fixed under Attack; measured on the same frame.
+     * The existing fallback (1115, 656) sits on this disk.
+     */
+    const val FOCUS_BOSS_X_1280 = 1116
+    const val FOCUS_BOSS_Y_720 = 657
+
+    fun focusPlayerTap(frameWidth: Int, frameHeight: Int): Pair<Int, Int> {
+        return FOCUS_PLAYER_X_1280 * frameWidth / 1280 to FOCUS_PLAYER_Y_720 * frameHeight / 720
+    }
+
+    fun focusBossTap(frameWidth: Int, frameHeight: Int): Pair<Int, Int> {
+        return FOCUS_BOSS_X_1280 * frameWidth / 1280 to FOCUS_BOSS_Y_720 * frameHeight / 720
+    }
+
+    /**
      * PK mode popup: option boxes that open **above** the All button (~10s visible).
      * Covers UnionKuaFu / All rows in that stack.
      */

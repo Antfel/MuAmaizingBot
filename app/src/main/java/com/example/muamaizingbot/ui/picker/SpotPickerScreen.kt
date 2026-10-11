@@ -3,6 +3,8 @@ package com.example.muamaizingbot.ui.picker
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -15,24 +17,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Save
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -50,35 +50,56 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import com.example.muamaizingbot.R
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.muamaizingbot.maps.CoordinateMapping
 import com.example.muamaizingbot.maps.MapDefinitionRepository
 import com.example.muamaizingbot.profile.LocationRepository
 import com.example.muamaizingbot.profile.ProfileRepository
-import com.example.muamaizingbot.ui.components.MapSearchField
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseField
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseSearchSelect
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseSelect
+import com.example.muamaizingbot.ui.theme.ContextoColors
 import com.example.muamaizingbot.vision.coord.RefCoords
 import com.example.muamaizingbot.vision.template.TemplateAssets
-import java.util.Locale
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import androidx.compose.ui.text.input.KeyboardType
 
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 6f
-private val MAP_VIEWPORT_HEIGHT = 320.dp
+private val MAP_VIEWPORT_HEIGHT = 360.dp
 
 enum class LocationPickerType {
     FARM_SPOT,
     ELF_BUFF,
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpotPickerScreen(
+    profileStem: String,
+    locationType: LocationPickerType,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    com.example.muamaizingbot.ui.theme.ContextoTheme {
+        SpotPickerScreenContent(
+            profileStem = profileStem,
+            locationType = locationType,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun SpotPickerScreenContent(
     profileStem: String,
     locationType: LocationPickerType,
     onBack: () -> Unit,
@@ -109,14 +130,6 @@ fun SpotPickerScreen(
     }
     var selectedWire by remember(profileFilename, locationType, selectedMapId) {
         mutableIntStateOf(existingLocation?.wire ?: profile?.wire ?: 1)
-    }
-    var spotName by remember(profileFilename, locationType) {
-        mutableStateOf(
-            existingLocation?.name ?: when (locationType) {
-                LocationPickerType.FARM_SPOT -> defaultFarmName
-                LocationPickerType.ELF_BUFF -> defaultElfName
-            }
-        )
     }
     var selectedX by remember(profileFilename, locationType) {
         mutableIntStateOf(existingLocation?.x ?: -1)
@@ -168,7 +181,6 @@ fun SpotPickerScreen(
             coordXText = spot.coordX?.toString().orEmpty()
             coordYText = spot.coordY?.toString().orEmpty()
             isCross = spot.isCross
-            spotName = spot.name
         }
     }
 
@@ -220,33 +232,129 @@ fun SpotPickerScreen(
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(7.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(
-            text = when (locationType) {
-                LocationPickerType.FARM_SPOT -> stringResource(R.string.spot_title_farm)
-                LocationPickerType.ELF_BUFF -> stringResource(R.string.spot_title_elf)
-            },
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
-
-        Text(
-            text = profile?.displayName ?: profileStem,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = stringResource(R.string.action_back),
+                    tint = ContextoColors.TextPrimary,
+                )
+            }
+            Text(
+                text = when (locationType) {
+                    LocationPickerType.FARM_SPOT -> stringResource(R.string.spot_title_farm)
+                    LocationPickerType.ELF_BUFF -> stringResource(R.string.spot_title_elf)
+                },
+                color = ContextoColors.TextPrimary,
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                modifier = Modifier.weight(1f),
+            )
+            Button(
+                onClick = {
+                    val currentProfile = profile
+                    if (currentProfile == null) {
+                        statusMessage = msgProfileMissing
+                        return@Button
+                    }
+                    if (selectedMapId.isBlank()) {
+                        statusMessage = msgSelectMap
+                        return@Button
+                    }
+                    if (selectedX < 0 || selectedY < 0) {
+                        statusMessage = msgMarkPoint
+                        return@Button
+                    }
+                    val trimmedName = when (locationType) {
+                        LocationPickerType.FARM_SPOT -> defaultFarmName
+                        LocationPickerType.ELF_BUFF -> defaultElfName
+                    }
+                    when (locationType) {
+                        LocationPickerType.FARM_SPOT -> {
+                            LocationRepository.upsertFarmSpot(
+                                profileFilename = currentProfile.filename,
+                                mapId = selectedMapId,
+                                wire = selectedWire,
+                                x = selectedX,
+                                y = selectedY,
+                                name = trimmedName,
+                                coordX = coordX,
+                                coordY = coordY,
+                                isCross = isCross,
+                            )
+                            ProfileRepository.updateProfileMapWire(
+                                currentProfile,
+                                selectedMapId,
+                                selectedWire,
+                            )
+                        }
+                        LocationPickerType.ELF_BUFF -> {
+                            LocationRepository.upsertElfBuff(
+                                profileFilename = currentProfile.filename,
+                                mapId = selectedMapId,
+                                wire = selectedWire,
+                                x = selectedX,
+                                y = selectedY,
+                                name = trimmedName,
+                                coordX = coordX,
+                                coordY = coordY,
+                                isCross = isCross,
+                            )
+                        }
+                    }
+                    statusMessage = msgSaved
+                },
+                enabled = profile != null,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = ContextoColors.Teal,
+                    contentColor = ContextoColors.Bg,
+                ),
+                modifier = Modifier.height(36.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.Save,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = stringResource(R.string.action_save),
+                    modifier = Modifier.padding(start = 4.dp),
+                    fontSize = 13.sp,
+                )
+            }
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            verticalAlignment = Alignment.Bottom,
         ) {
-            MapSearchField(
-                maps = maps,
-                selectedMapId = selectedMapId,
-                onMapSelected = { mapId ->
+            var mapMenuOpen by remember { mutableStateOf(false) }
+            var mapQuery by remember(selectedMapId) {
+                mutableStateOf(maps.firstOrNull { it.id == selectedMapId }?.name.orEmpty())
+            }
+            val mapSuggestions = remember(mapQuery, maps) {
+                val q = mapQuery.trim()
+                maps.filter { map ->
+                    q.isEmpty() ||
+                        map.name.contains(q, ignoreCase = true) ||
+                        map.id.contains(q, ignoreCase = true)
+                }.take(24).map { it.id to it.name }
+            }
+            ContextoDenseSearchSelect(
+                label = stringResource(R.string.spot_map),
+                query = mapQuery,
+                onQueryChange = { mapQuery = it },
+                suggestions = mapSuggestions,
+                onSelect = { mapId ->
                     selectedMapId = mapId
+                    mapQuery = maps.firstOrNull { it.id == mapId }?.name.orEmpty()
                     selectedX = -1
                     selectedY = -1
                     coordX = null
@@ -257,268 +365,137 @@ fun SpotPickerScreen(
                     statusMessage = ""
                 },
                 enabled = profile != null,
+                placeholder = stringResource(R.string.profile_bosses_search_hint),
+                expanded = mapMenuOpen,
+                onExpandedChange = { mapMenuOpen = it },
                 modifier = Modifier.weight(2f),
             )
-            WireDropdown(
-                wires = wires,
-                selectedWire = selectedWire,
-                onWireSelected = { selectedWire = it },
+            ContextoDenseSelect(
+                label = stringResource(R.string.spot_wire),
+                value = if (wires.isEmpty()) {
+                    ""
+                } else {
+                    stringResource(R.string.spot_wire_n, selectedWire)
+                },
+                options = wires.map { it.toString() to stringResource(R.string.spot_wire_n, it) },
+                onSelect = { id -> id.toIntOrNull()?.let { selectedWire = it } },
+                enabled = profile != null && wires.isNotEmpty(),
                 modifier = Modifier.weight(1f),
+            )
+            ContextoDenseField(
+                value = coordXText,
+                onValueChange = { applyGameCoordTexts(it, coordYText) },
+                label = stringResource(R.string.spot_coord_x),
+                enabled = hasMapping,
+                keyboardType = KeyboardType.Number,
+                modifier = Modifier.weight(0.7f),
+            )
+            ContextoDenseField(
+                value = coordYText,
+                onValueChange = { applyGameCoordTexts(coordXText, it) },
+                label = stringResource(R.string.spot_coord_y),
+                enabled = hasMapping,
+                keyboardType = KeyboardType.Number,
+                modifier = Modifier.weight(0.7f),
             )
         }
         if (maps.isEmpty()) {
             Text(
                 text = stringResource(R.string.spot_no_configured_maps),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error,
-            )
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            OutlinedTextField(
-                value = coordXText,
-                onValueChange = { applyGameCoordTexts(it, coordYText) },
-                label = { Text(stringResource(R.string.spot_coord_x)) },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                enabled = hasMapping,
-            )
-            OutlinedTextField(
-                value = coordYText,
-                onValueChange = { applyGameCoordTexts(coordXText, it) },
-                label = { Text(stringResource(R.string.spot_coord_y)) },
-                modifier = Modifier.weight(1f),
-                singleLine = true,
-                enabled = hasMapping,
+                color = ContextoColors.Danger,
+                fontSize = 12.sp,
             )
         }
 
         if (!hasMapping && mapDef?.hasMaintenanceImage() == true) {
             Text(
                 text = stringResource(R.string.spot_uncalibrated),
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
+                color = ContextoColors.Danger,
+                fontSize = 12.sp,
             )
         }
 
         if (mapDef?.hasMaintenanceImage() == true) {
-            ZoomableMapPicker(
-                canonicalAssetPath = mapDef.maintenance!!.mapUiImageAssetPath,
-                refImageWidth = RefCoords.REF_WIDTH,
-                refImageHeight = RefCoords.REF_HEIGHT,
-                selectedX = selectedX,
-                selectedY = selectedY,
-                onSelect = { refX, refY -> applyPixelSelection(refX, refY) },
-                modifier = Modifier.fillMaxWidth(),
-            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                ZoomableMapPicker(
+                    canonicalAssetPath = mapDef.maintenance!!.mapUiImageAssetPath,
+                    refImageWidth = RefCoords.REF_WIDTH,
+                    refImageHeight = RefCoords.REF_HEIGHT,
+                    selectedX = selectedX,
+                    selectedY = selectedY,
+                    onSelect = { refX, refY -> applyPixelSelection(refX, refY) },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = stringResource(R.string.spot_tap_to_mark),
+                    color = ContextoColors.TextPrimary,
+                    fontSize = 11.sp,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(8.dp)
+                        .background(ContextoColors.Bg.copy(alpha = 0.75f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
         } else {
             Text(
                 text = stringResource(R.string.spot_no_image),
-                color = MaterialTheme.colorScheme.error,
+                color = ContextoColors.Danger,
             )
         }
 
-        val pixelPart = if (selectedX >= 0 && selectedY >= 0) {
-            "($selectedX, $selectedY)"
-        } else {
-            "-"
+        if (coordX != null && coordY != null) {
+            Text(
+                text = stringResource(R.string.spot_coord_badge, coordX!!, coordY!!),
+                color = ContextoColors.Teal,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier
+                    .align(Alignment.CenterHorizontally)
+                    .background(ContextoColors.Surface, RoundedCornerShape(8.dp))
+                    .border(
+                        1.dp,
+                        ContextoColors.Border,
+                        RoundedCornerShape(8.dp),
+                    )
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
+            )
+        } else if (selectedX >= 0 && selectedY >= 0) {
+            Text(
+                text = "px ($selectedX, $selectedY)",
+                color = ContextoColors.TextSecondary,
+                fontSize = 12.sp,
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+            )
         }
-        val pixelStatus = stringResource(R.string.spot_pixel_label, pixelPart)
-        val coordStatus = if (coordX != null && coordY != null) {
-            "  |  " + stringResource(R.string.spot_coord_label, coordX!!, coordY!!)
-        } else {
-            ""
-        }
-        Text(
-            text = pixelStatus + coordStatus,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-        )
-
-        Text(
-            text = stringResource(R.string.spot_zoom_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
 
         if (statusMessage.isNotEmpty()) {
             Text(
                 text = statusMessage,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodySmall,
+                color = ContextoColors.Teal,
+                fontSize = 12.sp,
             )
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-        Button(
-            onClick = {
-                val currentProfile = profile
-                if (currentProfile == null) {
-                    statusMessage = msgProfileMissing
-                    return@Button
-                }
-                if (selectedMapId.isBlank()) {
-                    statusMessage = msgSelectMap
-                    return@Button
-                }
-                if (selectedX < 0 || selectedY < 0) {
-                    statusMessage = msgMarkPoint
-                    return@Button
-                }
-                val trimmedName = spotName.trim().ifBlank {
-                    when (locationType) {
-                        LocationPickerType.FARM_SPOT -> defaultFarmName
-                        LocationPickerType.ELF_BUFF -> defaultElfName
-                    }
-                }
-                when (locationType) {
-                    LocationPickerType.FARM_SPOT -> {
-                        LocationRepository.upsertFarmSpot(
-                            profileFilename = currentProfile.filename,
-                            mapId = selectedMapId,
-                            wire = selectedWire,
-                            x = selectedX,
-                            y = selectedY,
-                            name = trimmedName,
-                            coordX = coordX,
-                            coordY = coordY,
-                            isCross = isCross,
-                        )
-                        ProfileRepository.updateProfileMapWire(currentProfile, selectedMapId, selectedWire)
-                    }
-                    LocationPickerType.ELF_BUFF -> {
-                        LocationRepository.upsertElfBuff(
-                            profileFilename = currentProfile.filename,
-                            mapId = selectedMapId,
-                            wire = selectedWire,
-                            x = selectedX,
-                            y = selectedY,
-                            name = trimmedName,
-                            coordX = coordX,
-                            coordY = coordY,
-                            isCross = isCross,
-                        )
-                    }
-                }
-                statusMessage = msgSaved
-            },
             modifier = Modifier
-                .weight(1f)
-                .height(42.dp),
-            enabled = profile != null,
+                .fillMaxWidth()
+                .background(ContextoColors.Surface, RoundedCornerShape(10.dp))
+                .border(1.dp, ContextoColors.Border, RoundedCornerShape(10.dp))
+                .padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(stringResource(R.string.action_save))
-        }
-
-        OutlinedButton(
-            onClick = onBack,
-            modifier = Modifier
-                .weight(1f)
-                .height(42.dp),
-        ) {
-            Text(stringResource(R.string.action_back))
-        }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun UnionCrossDropdown(
-    isCross: Boolean,
-    onSelected: (Boolean) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val label = if (isCross) {
-        stringResource(R.string.spot_pk_cross)
-    } else {
-        stringResource(R.string.spot_pk_local)
-    }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        OutlinedTextField(
-            value = label,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.spot_pk_template)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            supportingText = {
-                Text(stringResource(R.string.spot_pk_hint))
-            },
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.spot_pk_cross)) },
-                onClick = {
-                    onSelected(true)
-                    expanded = false
-                },
+            Text(
+                text = "ⓘ",
+                color = ContextoColors.Teal,
+                modifier = Modifier.padding(end = 8.dp),
             )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.spot_pk_local)) },
-                onClick = {
-                    onSelected(false)
-                    expanded = false
-                },
+            Text(
+                text = stringResource(R.string.spot_elf_same_flow),
+                color = ContextoColors.TextSecondary,
+                fontSize = 11.sp,
+                modifier = Modifier.weight(1f),
             )
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun WireDropdown(
-    wires: List<Int>,
-    selectedWire: Int,
-    onWireSelected: (Int) -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    var expanded by remember { mutableStateOf(false) }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = modifier,
-    ) {
-        OutlinedTextField(
-            value = stringResource(R.string.spot_wire_n, selectedWire),
-            onValueChange = {},
-            readOnly = true,
-            label = { Text(stringResource(R.string.spot_wire)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            wires.forEach { wire ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.spot_wire_n, wire)) },
-                    onClick = {
-                        onWireSelected(wire)
-                        expanded = false
-                    },
-                )
-            }
         }
     }
 }
@@ -558,141 +535,152 @@ private fun ZoomableMapPicker(
     var zoom by remember(assetPath) { mutableFloatStateOf(MIN_ZOOM) }
     var panX by remember(assetPath) { mutableFloatStateOf(0f) }
     var panY by remember(assetPath) { mutableFloatStateOf(0f) }
+    val zoomStep = 0.5f
 
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    fun applyZoom(delta: Float) {
+        val next = (zoom + delta).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        zoom = next
+        if (next <= MIN_ZOOM) {
+            panX = 0f
+            panY = 0f
+        }
+    }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(MAP_VIEWPORT_HEIGHT)
+            .clip(RoundedCornerShape(8.dp))
+            .background(ContextoColors.SurfaceElevated),
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                text = stringResource(R.string.spot_zoom),
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.width(44.dp),
-            )
-            Slider(
-                value = zoom,
-                onValueChange = { newZoom ->
-                    zoom = newZoom.coerceIn(MIN_ZOOM, MAX_ZOOM)
-                    if (zoom <= MIN_ZOOM) {
-                        panX = 0f
-                        panY = 0f
-                    }
-                },
-                valueRange = MIN_ZOOM..MAX_ZOOM,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                text = String.format(Locale.US, "%.1fx", zoom),
-                style = MaterialTheme.typography.labelMedium,
-                modifier = Modifier.width(44.dp),
-            )
-            TextButton(
-                onClick = {
-                    zoom = MIN_ZOOM
-                    panX = 0f
-                    panY = 0f
-                },
-                enabled = zoom > MIN_ZOOM || panX != 0f || panY != 0f,
-            ) {
-                Text(stringResource(R.string.spot_reset))
-            }
+        val viewportW = constraints.maxWidth.toFloat()
+        val viewportH = constraints.maxHeight.toFloat()
+        val baseScale = min(viewportW / imageWidth, viewportH / imageHeight)
+        val totalScale = baseScale * zoom
+        val scaledW = imageWidth * totalScale
+        val scaledH = imageHeight * totalScale
+        val maxPanX = maxOf(0f, (scaledW - viewportW) / 2f)
+        val maxPanY = maxOf(0f, (scaledH - viewportH) / 2f)
+
+        LaunchedEffect(scaledW, scaledH, viewportW, viewportH) {
+            panX = panX.coerceIn(-maxPanX, maxPanX)
+            panY = panY.coerceIn(-maxPanY, maxPanY)
         }
 
-        BoxWithConstraints(
+        val currentPanX by rememberUpdatedState(panX)
+        val currentPanY by rememberUpdatedState(panY)
+        val currentTotalScale by rememberUpdatedState(totalScale)
+        val currentScaledW by rememberUpdatedState(scaledW)
+        val currentScaledH by rememberUpdatedState(scaledH)
+        val currentMaxPanX by rememberUpdatedState(maxPanX)
+        val currentMaxPanY by rememberUpdatedState(maxPanY)
+
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(MAP_VIEWPORT_HEIGHT)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            val viewportW = constraints.maxWidth.toFloat()
-            val viewportH = constraints.maxHeight.toFloat()
-            val baseScale = min(viewportW / imageWidth, viewportH / imageHeight)
-            val totalScale = baseScale * zoom
-            val scaledW = imageWidth * totalScale
-            val scaledH = imageHeight * totalScale
-            val maxPanX = maxOf(0f, (scaledW - viewportW) / 2f)
-            val maxPanY = maxOf(0f, (scaledH - viewportH) / 2f)
-
-            LaunchedEffect(scaledW, scaledH, viewportW, viewportH) {
-                panX = panX.coerceIn(-maxPanX, maxPanX)
-                panY = panY.coerceIn(-maxPanY, maxPanY)
-            }
-
-            val currentPanX by rememberUpdatedState(panX)
-            val currentPanY by rememberUpdatedState(panY)
-            val currentTotalScale by rememberUpdatedState(totalScale)
-            val currentScaledW by rememberUpdatedState(scaledW)
-            val currentScaledH by rememberUpdatedState(scaledH)
-            val currentMaxPanX by rememberUpdatedState(maxPanX)
-            val currentMaxPanY by rememberUpdatedState(maxPanY)
-
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInput(assetPath, zoom, viewportW, viewportH) {
-                        coroutineScope {
+                .fillMaxSize()
+                .pointerInput(assetPath, zoom, viewportW, viewportH) {
+                    coroutineScope {
+                        launch {
+                            detectTapGestures { tap ->
+                                val left = (viewportW - currentScaledW) / 2f + currentPanX
+                                val top = (viewportH - currentScaledH) / 2f + currentPanY
+                                if (tap.x !in left..(left + currentScaledW) ||
+                                    tap.y !in top..(top + currentScaledH)
+                                ) {
+                                    return@detectTapGestures
+                                }
+                                val relX = (tap.x - left) / currentTotalScale
+                                val relY = (tap.y - top) / currentTotalScale
+                                val localX = relX.roundToInt().coerceIn(0, imageWidth)
+                                val localY = relY.roundToInt().coerceIn(0, imageHeight)
+                                val refX = (localX.toLong() * refImageWidth / imageWidth).toInt()
+                                val refY = (localY.toLong() * refImageHeight / imageHeight).toInt()
+                                onSelect(refX, refY)
+                            }
+                        }
+                        if (zoom > MIN_ZOOM) {
                             launch {
-                                detectTapGestures { tap ->
-                                    val left = (viewportW - currentScaledW) / 2f + currentPanX
-                                    val top = (viewportH - currentScaledH) / 2f + currentPanY
-                                    if (tap.x !in left..(left + currentScaledW) ||
-                                        tap.y !in top..(top + currentScaledH)
-                                    ) {
-                                        return@detectTapGestures
-                                    }
-                                    val relX = (tap.x - left) / currentTotalScale
-                                    val relY = (tap.y - top) / currentTotalScale
-                                    val localX = relX.roundToInt().coerceIn(0, imageWidth)
-                                    val localY = relY.roundToInt().coerceIn(0, imageHeight)
-                                    val refX = (localX.toLong() * refImageWidth / imageWidth).toInt()
-                                    val refY = (localY.toLong() * refImageHeight / imageHeight).toInt()
-                                    onSelect(refX, refY)
-                                }
-                            }
-                            if (zoom > MIN_ZOOM) {
-                                launch {
-                                    detectDragGestures { change, dragAmount ->
-                                        change.consume()
-                                        panX = (panX + dragAmount.x).coerceIn(-currentMaxPanX, currentMaxPanX)
-                                        panY = (panY + dragAmount.y).coerceIn(-currentMaxPanY, currentMaxPanY)
-                                    }
+                                detectDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    panX = (panX + dragAmount.x).coerceIn(-currentMaxPanX, currentMaxPanX)
+                                    panY = (panY + dragAmount.y).coerceIn(-currentMaxPanY, currentMaxPanY)
                                 }
                             }
                         }
-                    },
-            ) {
-                if (bitmap != null) {
-                    val imageLeft = (viewportW - scaledW) / 2f + panX
-                    val imageTop = (viewportH - scaledH) / 2f + panY
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        drawImage(
-                            image = bitmap,
-                            dstOffset = IntOffset(imageLeft.roundToInt(), imageTop.roundToInt()),
-                            dstSize = IntSize(scaledW.roundToInt(), scaledH.roundToInt()),
+                    }
+                },
+        ) {
+            if (bitmap != null) {
+                val imageLeft = (viewportW - scaledW) / 2f + panX
+                val imageTop = (viewportH - scaledH) / 2f + panY
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    drawImage(
+                        image = bitmap,
+                        dstOffset = IntOffset(imageLeft.roundToInt(), imageTop.roundToInt()),
+                        dstSize = IntSize(scaledW.roundToInt(), scaledH.roundToInt()),
+                    )
+                    if (displaySelectedX >= 0 && displaySelectedY >= 0) {
+                        val markerX = imageLeft + displaySelectedX * totalScale
+                        val markerY = imageTop + displaySelectedY * totalScale
+                        drawCircle(
+                            color = Color(0xFF2BB8A9),
+                            radius = 10f,
+                            center = Offset(markerX, markerY),
                         )
-                        if (displaySelectedX >= 0 && displaySelectedY >= 0) {
-                            val markerX = imageLeft + displaySelectedX * totalScale
-                            val markerY = imageTop + displaySelectedY * totalScale
-                            drawCircle(
-                                color = Color(0xFF22C55E),
-                                radius = 10f,
-                                center = Offset(markerX, markerY),
-                            )
-                            drawCircle(
-                                color = Color.White,
-                                radius = 10f,
-                                center = Offset(markerX, markerY),
-                                style = Stroke(width = 2f),
-                            )
-                        }
+                        drawCircle(
+                            color = Color.White,
+                            radius = 10f,
+                            center = Offset(markerX, markerY),
+                            style = Stroke(width = 2f),
+                        )
                     }
                 }
             }
         }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(8.dp)
+                .background(ContextoColors.Bg.copy(alpha = 0.82f), RoundedCornerShape(8.dp))
+                .border(1.dp, ContextoColors.Border, RoundedCornerShape(8.dp)),
+        ) {
+            MapZoomButton(
+                label = "+",
+                enabled = zoom < MAX_ZOOM,
+                onClick = { applyZoom(zoomStep) },
+            )
+            Box(
+                modifier = Modifier
+                    .width(36.dp)
+                    .height(1.dp)
+                    .background(ContextoColors.Border),
+            )
+            MapZoomButton(
+                label = "−",
+                enabled = zoom > MIN_ZOOM,
+                onClick = { applyZoom(-zoomStep) },
+            )
+        }
     }
+}
+
+@Composable
+private fun MapZoomButton(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Text(
+        text = label,
+        color = if (enabled) ContextoColors.Teal else ContextoColors.TextMuted,
+        fontWeight = FontWeight.Bold,
+        fontSize = 18.sp,
+        modifier = Modifier
+            .width(36.dp)
+            .height(36.dp)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(top = 6.dp),
+        textAlign = TextAlign.Center,
+    )
 }

@@ -7,11 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -24,16 +20,36 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.content.MapContentSync
 import com.example.muamaizingbot.license.LicenseGate
 import com.example.muamaizingbot.license.LicenseStore
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseField
+import com.example.muamaizingbot.ui.settings.components.ContextoPrimaryButton
+import com.example.muamaizingbot.ui.settings.components.ContextoSecondaryButton
+import com.example.muamaizingbot.ui.settings.components.ContextoSectionTitle
+import com.example.muamaizingbot.ui.theme.ContextoColors
+import com.example.muamaizingbot.ui.theme.ContextoTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun LicenseSettingsScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ContextoTheme {
+        LicenseSettingsScreenContent(
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun LicenseSettingsScreenContent(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -55,57 +71,50 @@ fun LicenseSettingsScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text(
-            text = stringResource(R.string.license_title),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
+        ContextoSectionTitle(
+            title = stringResource(R.string.license_title),
+            subtitle = stringResource(R.string.license_hint),
         )
 
-        Text(
-            text = stringResource(R.string.license_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        OutlinedTextField(
+        ContextoDenseField(
             value = licenseKey,
             onValueChange = {
                 licenseKey = it
                 savedHint = ""
             },
-            label = { Text(stringResource(R.string.license_key_label)) },
-            singleLine = true,
+            label = stringResource(R.string.license_key_label),
             modifier = Modifier.fillMaxWidth(),
         )
 
-        OutlinedButton(
+        ContextoPrimaryButton(
+            text = stringResource(R.string.action_save),
             onClick = {
                 LicenseStore.setLicenseKey(licenseKey)
                 licenseKey = LicenseStore.licenseKey()
                 savedHint = savedLabel
             },
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.action_save))
-        }
+        )
 
         if (savedHint.isNotEmpty()) {
             Text(
                 text = savedHint,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodySmall,
+                color = ContextoColors.Teal,
+                fontSize = 12.sp,
             )
         }
 
         Text(
             text = stringResource(R.string.license_device_id),
+            color = ContextoColors.TextPrimary,
             fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
         )
         Text(
             text = deviceId,
-            style = MaterialTheme.typography.bodySmall,
+            color = ContextoColors.TextMuted,
+            fontSize = 12.sp,
             fontFamily = FontFamily.Monospace,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
         Text(
@@ -117,40 +126,43 @@ fun LicenseSettingsScreen(
             } else {
                 stringResource(R.string.license_session_none)
             },
-            style = MaterialTheme.typography.bodyMedium,
-            color = if (hasSession) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            },
+            color = if (hasSession) ContextoColors.Teal else ContextoColors.TextSecondary,
+            fontSize = 13.sp,
         )
 
         Text(
             text = stringResource(R.string.content_maps_title),
+            color = ContextoColors.TextPrimary,
             fontWeight = FontWeight.Medium,
+            fontSize = 13.sp,
         )
         Text(
             text = stringResource(
                 R.string.content_maps_version,
                 contentStatus.localPackVersion,
             ),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = ContextoColors.TextSecondary,
+            fontSize = 13.sp,
         )
         val syncMsg = contentStatus.lastSyncMessage
         if (!syncMsg.isNullOrBlank()) {
             Text(
                 text = syncMsg,
-                style = MaterialTheme.typography.bodySmall,
+                fontSize = 12.sp,
                 color = when (contentStatus.lastSyncOk) {
-                    true -> MaterialTheme.colorScheme.primary
-                    false -> MaterialTheme.colorScheme.error
-                    null -> MaterialTheme.colorScheme.onSurfaceVariant
+                    true -> ContextoColors.Teal
+                    false -> ContextoColors.Danger
+                    null -> ContextoColors.TextMuted
                 },
             )
         }
 
-        OutlinedButton(
+        ContextoSecondaryButton(
+            text = if (contentStatus.syncing) {
+                stringResource(R.string.content_maps_syncing)
+            } else {
+                stringResource(R.string.content_maps_check_updates)
+            },
             onClick = {
                 scope.launch {
                     withContext(Dispatchers.IO) {
@@ -164,27 +176,21 @@ fun LicenseSettingsScreen(
             },
             enabled = !contentStatus.syncing && LicenseStore.licenseKey().isNotBlank(),
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(
-                text = if (contentStatus.syncing) {
-                    stringResource(R.string.content_maps_syncing)
-                } else {
-                    stringResource(R.string.content_maps_check_updates)
-                },
-            )
-        }
+        )
 
         val msg = userMessage
         if (!msg.isNullOrBlank()) {
             Text(
                 text = msg,
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodyMedium,
+                color = ContextoColors.Danger,
+                fontSize = 13.sp,
             )
         }
 
-        TextButton(onClick = onBack) {
-            Text(stringResource(R.string.action_back))
-        }
+        ContextoSecondaryButton(
+            text = stringResource(R.string.action_back),
+            onClick = onBack,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }

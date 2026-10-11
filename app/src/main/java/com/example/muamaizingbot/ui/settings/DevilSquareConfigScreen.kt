@@ -8,17 +8,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -29,15 +21,39 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.muamaizingbot.R
 import com.example.muamaizingbot.profile.DevilSquareConfig
 import com.example.muamaizingbot.profile.PetType
 import com.example.muamaizingbot.profile.ProfileRepository
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseField
+import com.example.muamaizingbot.ui.settings.components.ContextoDenseSelect
+import com.example.muamaizingbot.ui.settings.components.ContextoPrimaryButton
+import com.example.muamaizingbot.ui.settings.components.ContextoSecondaryButton
+import com.example.muamaizingbot.ui.settings.components.ContextoSectionTitle
+import com.example.muamaizingbot.ui.settings.components.ContextoSurfaceCard
+import com.example.muamaizingbot.ui.theme.ContextoColors
+import com.example.muamaizingbot.ui.theme.ContextoTheme
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DevilSquareConfigScreen(
+    profileStem: String,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    ContextoTheme {
+        DevilSquareConfigScreenContent(
+            profileStem = profileStem,
+            onBack = onBack,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun DevilSquareConfigScreenContent(
     profileStem: String,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
@@ -69,84 +85,89 @@ fun DevilSquareConfigScreen(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(
-            text = stringResource(R.string.profile_devil_square_edit_title),
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            text = profile?.displayName ?: profileStem,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ContextoSectionTitle(
+            title = stringResource(R.string.profile_devil_square_edit_title),
+            subtitle = profile?.displayName ?: profileStem,
         )
 
-        Text(
-            text = stringResource(R.string.profile_devil_square_pet),
-            fontWeight = FontWeight.Medium,
-        )
-        Text(
-            text = stringResource(R.string.profile_devil_square_pet_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        PetTypeDropdown(
-            selected = petLabels[petTypes.indexOf(petType).coerceAtLeast(0)],
-            options = petLabels,
-            onSelect = { petType = petTypes[it] },
-        )
-
-        SettingSwitch(
-            title = stringResource(R.string.profile_devil_square_buy_potions),
-            hint = stringResource(R.string.profile_devil_square_buy_potions_hint),
-            checked = buyPotions,
-            onCheckedChange = { buyPotions = it },
-        )
-        if (buyPotions) {
-            StackField(
-                label = stringResource(R.string.potion_stacks_hp),
-                value = hpStacks,
-                onValueChange = {
-                    hpStacks = it.coerceIn(
-                        DevilSquareConfig.MIN_POTION_STACKS,
-                        DevilSquareConfig.MAX_POTION_STACKS,
-                    )
-                },
+        ContextoSurfaceCard {
+            Text(
+                text = stringResource(R.string.profile_devil_square_pet),
+                color = ContextoColors.TextPrimary,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
             )
-            StackField(
-                label = stringResource(R.string.potion_stacks_mp),
-                value = mpStacks,
-                onValueChange = {
-                    mpStacks = it.coerceIn(
-                        DevilSquareConfig.MIN_POTION_STACKS,
-                        DevilSquareConfig.MAX_POTION_STACKS,
-                    )
+            Text(
+                text = stringResource(R.string.profile_devil_square_pet_hint),
+                color = ContextoColors.TextMuted,
+                fontSize = 11.sp,
+            )
+            ContextoDenseSelect(
+                label = null,
+                value = petLabels[petTypes.indexOf(petType).coerceAtLeast(0)],
+                options = petTypes.mapIndexed { i, type -> type.name to petLabels[i] },
+                onSelect = { id ->
+                    PetType.entries.firstOrNull { it.name == id }?.let { petType = it }
                 },
             )
         }
 
-        SettingSwitch(
-            title = stringResource(R.string.profile_devil_square_prep_elf),
-            hint = stringResource(R.string.profile_devil_square_prep_elf_hint),
-            checked = prepElfBuff,
-            onCheckedChange = { prepElfBuff = it },
-        )
+        ContextoSurfaceCard {
+            SettingSwitch(
+                title = stringResource(R.string.profile_devil_square_buy_potions),
+                hint = stringResource(R.string.profile_devil_square_buy_potions_hint),
+                checked = buyPotions,
+                onCheckedChange = { buyPotions = it },
+            )
+            if (buyPotions) {
+                ContextoDenseField(
+                    value = hpStacks.toString(),
+                    onValueChange = { text ->
+                        text.toIntOrNull()?.let {
+                            hpStacks = it.coerceIn(
+                                DevilSquareConfig.MIN_POTION_STACKS,
+                                DevilSquareConfig.MAX_POTION_STACKS,
+                            )
+                        }
+                    },
+                    label = stringResource(R.string.potion_stacks_hp),
+                    keyboardType = KeyboardType.Number,
+                )
+                ContextoDenseField(
+                    value = mpStacks.toString(),
+                    onValueChange = { text ->
+                        text.toIntOrNull()?.let {
+                            mpStacks = it.coerceIn(
+                                DevilSquareConfig.MIN_POTION_STACKS,
+                                DevilSquareConfig.MAX_POTION_STACKS,
+                            )
+                        }
+                    },
+                    label = stringResource(R.string.potion_stacks_mp),
+                    keyboardType = KeyboardType.Number,
+                )
+            }
+            SettingSwitch(
+                title = stringResource(R.string.profile_devil_square_prep_elf),
+                hint = stringResource(R.string.profile_devil_square_prep_elf_hint),
+                checked = prepElfBuff,
+                onCheckedChange = { prepElfBuff = it },
+            )
+        }
 
         if (statusMessage.isNotEmpty()) {
-            Text(
-                text = statusMessage,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Text(text = statusMessage, color = ContextoColors.Teal, fontSize = 12.sp)
         }
 
-        TextButton(
+        ContextoPrimaryButton(
+            text = stringResource(R.string.action_save),
             onClick = {
                 if (profile == null) {
                     statusMessage = profileMissing
-                    return@TextButton
+                    return@ContextoPrimaryButton
                 }
                 ProfileRepository.setDevilSquareConfig(
                     profileFilename,
@@ -161,17 +182,14 @@ fun DevilSquareConfigScreen(
                 )
                 statusMessage = savedMessage
             },
-            modifier = Modifier.fillMaxWidth(),
             enabled = profile != null,
-        ) {
-            Text(stringResource(R.string.action_save))
-        }
-        OutlinedButton(
+            modifier = Modifier.fillMaxWidth(),
+        )
+        ContextoSecondaryButton(
+            text = stringResource(R.string.action_back),
             onClick = onBack,
             modifier = Modifier.fillMaxWidth(),
-        ) {
-            Text(stringResource(R.string.action_back))
-        }
+        )
     }
 }
 
@@ -188,70 +206,23 @@ private fun SettingSwitch(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, fontWeight = FontWeight.Medium)
             Text(
-                text = hint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = title,
+                color = ContextoColors.TextPrimary,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
             )
+            Text(text = hint, color = ContextoColors.TextMuted, fontSize = 11.sp)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PetTypeDropdown(
-    selected: String,
-    options: List<String>,
-    onSelect: (Int) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = it },
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        OutlinedTextField(
-            value = selected,
-            onValueChange = {},
-            readOnly = true,
-            singleLine = true,
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth(),
+        Switch(
+            checked = checked,
+            onCheckedChange = onCheckedChange,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = ContextoColors.Bg,
+                checkedTrackColor = ContextoColors.Teal,
+                uncheckedThumbColor = ContextoColors.TextSecondary,
+                uncheckedTrackColor = ContextoColors.Border,
+            ),
         )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-        ) {
-            options.forEachIndexed { index, option ->
-                DropdownMenuItem(
-                    text = { Text(option) },
-                    onClick = {
-                        onSelect(index)
-                        expanded = false
-                    },
-                )
-            }
-        }
     }
-}
-
-@Composable
-private fun StackField(
-    label: String,
-    value: Int,
-    onValueChange: (Int) -> Unit,
-) {
-    OutlinedTextField(
-        value = value.toString(),
-        onValueChange = { text ->
-            text.toIntOrNull()?.let(onValueChange)
-        },
-        label = { Text(label) },
-        singleLine = true,
-        modifier = Modifier.fillMaxWidth(),
-    )
 }

@@ -39,7 +39,6 @@ object ElfBuffTargetingActions {
 
     private const val TAG = "ElfBuffCast"
 
-    private const val FOCUS_PLAYER = "templates/mu/ui/targeting/focus_player.png"
     /** Closed targeting-bar All. */
     private const val PK_MODE_ALL = "templates/mu/ui/targeting/pk_mode_all.png"
     /** All row inside the open PK popup. */
@@ -57,7 +56,6 @@ object ElfBuffTargetingActions {
     private const val PK_MODE_TEAM_BAR = "templates/mu/ui/targeting/pk_mode_team_bar.png"
 
     private const val PK_TEMPLATE_THRESHOLD = 0.85f
-    private const val FOCUS_TEMPLATE_THRESHOLD = 0.62f
     private const val POST_PK_TAP_MS = 350L
     private const val PK_POPUP_QUICK_WAIT_MS = 800L
     private const val PK_POPUP_SECOND_WAIT_MS = 1_500L
@@ -406,6 +404,7 @@ object ElfBuffTargetingActions {
      * Union accepts either UnionKuaFu or short Union on the closed bar.
      */
     suspend fun ensurePkMode(mode: CombatFocusPkMode): Boolean {
+        LootToastDismiss.dismissIfPresent()
         val spec = pkModeSpec(mode)
         val currentBar = detectPkBarMode()
         if (currentBar?.mode == spec.barMode) {
@@ -564,25 +563,18 @@ object ElfBuffTargetingActions {
             Log.d(TAG, "[ELF_GIVER] red focus HUD already visible under All")
             return true
         }
-        val roi = barRoi()
         for (attempt in 1..maxAttempts) {
             if (BotController.state.value != BotRuntimeState.RUNNING) {
                 Log.d(TAG, "[ELF_GIVER] focus spam aborted — bot not running at attempt=$attempt")
                 return ElfBuffFocusHud.isRedHpBarVisible()
             }
-            val match = NavigationVision.findTemplate(FOCUS_PLAYER, FOCUS_TEMPLATE_THRESHOLD, roi)
-            if (match == null) {
-                Log.w(TAG, "[ELF_GIVER] focus_player miss attempt=$attempt/$maxAttempts")
-                delay(BotTiming.ms(POST_FOCUS_TAP_MS, BotTimingCategory.POST_TAP))
-                if (ElfBuffFocusHud.isRedHpBarVisible()) return true
-                continue
-            }
+            val (w, h) = RefCoords.activeScreenSize()
+            val (focusX, focusY) = MuCombatRois.focusPlayerTap(w, h)
             Log.d(
                 TAG,
-                "[ELF_GIVER] focus spam attempt=$attempt/$maxAttempts " +
-                    "at=(${match.centerX},${match.centerY}) score=${"%.3f".format(match.score)}",
+                "[ELF_GIVER] focus spam attempt=$attempt/$maxAttempts at=($focusX,$focusY)",
             )
-            if (!NavigationVision.tapScreen(match.centerX, match.centerY, label = "focus_player")) {
+            if (!NavigationVision.tapScreen(focusX, focusY, label = "focus_player")) {
                 Log.w(TAG, "[ELF_GIVER] focus_player tap failed")
             }
             delay(BotTiming.ms(POST_FOCUS_TAP_MS, BotTimingCategory.POST_TAP))

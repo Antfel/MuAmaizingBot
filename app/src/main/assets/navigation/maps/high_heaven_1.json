@@ -7,11 +7,75 @@
   "requirements": {
     "min_level": 300
   },
+  "navigation": {
+    "behavior": "direct_teleport",
+    "map_option_template": "templates/maps/High_heaven/mapsui/high_heaven_1.png",
+    "enter_wait": 10,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  },
   "maintenance": {
     "map_ui_image": "templates/maps/High_heaven/maintenance/high_heaven_1_map_open_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "order": 16,
-  "wire": 1
+  "wire": 1,
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 2,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.206078888,
+        0.203178168,
+        -113.880028714
+      ],
+      "coord_y": [
+        0.20528469,
+        -0.203359879,
+        59.138831383
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ref_x": 568.0,
+      "ref_y": 378.0,
+      "game_x": 80,
+      "game_y": 99
+    },
+    {
+      "ref_x": 700.0,
+      "ref_y": 200.0,
+      "game_x": 71,
+      "game_y": 162
+    },
+    {
+      "ref_x": 828.0,
+      "ref_y": 385.0,
+      "game_x": 135,
+      "game_y": 151
+    },
+    {
+      "ref_x": 710.0,
+      "ref_y": 500.0,
+      "game_x": 134,
+      "game_y": 103
+    },
+    {
+      "ref_x": 646.0,
+      "ref_y": 304.0,
+      "game_x": 81,
+      "game_y": 130
+    }
+  ]
 }

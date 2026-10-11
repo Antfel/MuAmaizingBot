@@ -7,11 +7,75 @@
   "requirements": {
     "min_level": 300
   },
+  "navigation": {
+    "behavior": "direct_teleport",
+    "map_option_template": "templates/maps/Purgatory_of_misery/mapsui/purgatory_of_misery_1.png",
+    "enter_wait": 10,
+    "map_list_swipe": {
+      "x1": 530,
+      "y1": 708,
+      "x2": 530,
+      "y2": 600,
+      "duration": 250
+    }
+  },
   "maintenance": {
     "map_ui_image": "templates/maps/Purgatory_of_misery/maintenance/purgatory_of_misery_1_map_open_reference.png",
-    "image_width": 2560,
-    "image_height": 1440
+    "image_width": 1280,
+    "image_height": 720
   },
   "order": 17,
-  "wire": 1
+  "wire": 1,
+  "coordinate_mapping": {
+    "type": "affine",
+    "version": 2,
+    "source_image_size": {
+      "width": 1280,
+      "height": 720
+    },
+    "transform": {
+      "coord_x": [
+        0.170395619,
+        0.170734198,
+        -64.82133374
+      ],
+      "coord_y": [
+        0.167534514,
+        -0.17050136,
+        65.403279572
+      ]
+    }
+  },
+  "calibration_points": [
+    {
+      "ref_x": 670.0,
+      "ref_y": 384.0,
+      "game_x": 115,
+      "game_y": 112
+    },
+    {
+      "ref_x": 800.0,
+      "ref_y": 285.0,
+      "game_x": 120,
+      "game_y": 151
+    },
+    {
+      "ref_x": 880.0,
+      "ref_y": 350.0,
+      "game_x": 145,
+      "game_y": 153
+    },
+    {
+      "ref_x": 744.0,
+      "ref_y": 528.0,
+      "game_x": 152,
+      "game_y": 100
+    },
+    {
+      "ref_x": 740.0,
+      "ref_y": 455.0,
+      "game_x": 139,
+      "game_y": 112
+    }
+  ]
 }

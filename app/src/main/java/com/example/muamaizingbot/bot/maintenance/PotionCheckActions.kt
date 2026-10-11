@@ -12,25 +12,82 @@ object PotionCheckActions {
     private const val TAG = "PotionCheck"
     const val HP_OUT = "templates/mu/ui/hp_potion_out.png"
     const val MP_OUT = "templates/mu/ui/mana_potion_out.png"
-    const val POTION_THRESHOLD = 0.96f
+    /** A real empty slot clears this. The other bottle can too; [resolveEmptySlots] breaks that tie. */
+    const val POTION_THRESHOLD = 0.92f
+    /** Same bottle if centers are at most this far apart at 1280×720. Adjacent slots are ~65px. */
+    const val SAME_SLOT_PX_1280 = 40
 
-    suspend fun isHpPotionEmpty(): Boolean {
-        return findEmpty(HP_OUT) != null
+    data class PotionEmptySlots(
+        val hpEmpty: Boolean,
+        val mpEmpty: Boolean,
+    )
+
+    /**
+     * Both templates are searched on the whole quick-slot bar. A double buy needs both scores
+     * at or above [threshold] on two different points. Hits on the same point buy only the winner.
+     */
+    fun resolveEmptySlots(
+        hpScore: Float,
+        hpCenterX: Int,
+        hpCenterY: Int,
+        mpScore: Float,
+        mpCenterX: Int,
+        mpCenterY: Int,
+        threshold: Float = POTION_THRESHOLD,
+        sameSlotPx: Int = SAME_SLOT_PX_1280,
+    ): PotionEmptySlots {
+        val hpHit = hpScore >= threshold
+        val mpHit = mpScore >= threshold
+        if (!hpHit || !mpHit) {
+            return PotionEmptySlots(hpEmpty = hpHit, mpEmpty = mpHit)
+        }
+        val dx = hpCenterX - mpCenterX
+        val dy = hpCenterY - mpCenterY
+        val samePoint = dx * dx + dy * dy <= sameSlotPx * sameSlotPx
+        if (!samePoint) {
+            return PotionEmptySlots(hpEmpty = true, mpEmpty = true)
+        }
+        return if (hpScore >= mpScore) {
+            PotionEmptySlots(hpEmpty = true, mpEmpty = false)
+        } else {
+            PotionEmptySlots(hpEmpty = false, mpEmpty = true)
+        }
     }
 
-    suspend fun isManaPotionEmpty(): Boolean {
-        return findEmpty(MP_OUT) != null
-    }
+    suspend fun isHpPotionEmpty(): Boolean = readEmptySlots().hpEmpty
+
+    suspend fun isManaPotionEmpty(): Boolean = readEmptySlots().mpEmpty
 
     suspend fun isAnyPotionEmpty(): Boolean {
-        val frame = NavigationVision.captureFrame() ?: return false
+        val slots = readEmptySlots()
+        return slots.hpEmpty || slots.mpEmpty
+    }
+
+    suspend fun readEmptySlots(): PotionEmptySlots {
+        val frame = NavigationVision.captureFrame() ?: return PotionEmptySlots(false, false)
         return try {
             val roi = MuCombatRois.potionSlotsRoi(frame)
-            val hp = NavigationVision.findOnFrame(frame, HP_OUT, POTION_THRESHOLD, roi) != null
-            val mp = NavigationVision.findOnFrame(frame, MP_OUT, POTION_THRESHOLD, roi) != null
-            val empty = hp || mp
-            Log.d(TAG, "[POTION] anyEmpty=$empty hp=$hp mp=$mp roi=$roi")
-            empty
+            val hpProbe = NavigationVision.probeOnFrame(frame, HP_OUT, roi)
+            val mpProbe = NavigationVision.probeOnFrame(frame, MP_OUT, roi)
+            val sameSlotPx = SAME_SLOT_PX_1280 * frame.width / 1280
+            val slots = resolveEmptySlots(
+                hpScore = hpProbe.score,
+                hpCenterX = hpProbe.centerX,
+                hpCenterY = hpProbe.centerY,
+                mpScore = mpProbe.score,
+                mpCenterX = mpProbe.centerX,
+                mpCenterY = mpProbe.centerY,
+                sameSlotPx = sameSlotPx.coerceAtLeast(1),
+            )
+            Log.d(
+                TAG,
+                "[POTION] hpEmpty=${slots.hpEmpty}(${"%.3f".format(hpProbe.score)}) " +
+                    "at=(${hpProbe.centerX},${hpProbe.centerY}) " +
+                    "mpEmpty=${slots.mpEmpty}(${"%.3f".format(mpProbe.score)}) " +
+                    "at=(${mpProbe.centerX},${mpProbe.centerY}) " +
+                    "sameSlotPx=$sameSlotPx roi=$roi",
+            )
+            slots
         } finally {
             frame.recycle()
         }
@@ -43,6 +100,4 @@ object PotionCheckActions {
         return MuCombatRois.potionSlotsRoi(w, h)
     }
 
-    private suspend fun findEmpty(assetPath: String) =
-        NavigationVision.findTemplate(assetPath, POTION_THRESHOLD, potionSlotsRoi())
 }

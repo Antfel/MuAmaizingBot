@@ -6,8 +6,7 @@ import android.util.Log
 import com.example.muamaizingbot.bot.combat.DeathActions
 import com.example.muamaizingbot.bot.combat.GameActions
 import com.example.muamaizingbot.bot.disconnect.DisconnectDetector
-import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isHpPotionEmpty
-import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.isManaPotionEmpty
+import com.example.muamaizingbot.bot.maintenance.PotionCheckActions.readEmptySlots
 import com.example.muamaizingbot.bot.navigation.MapWindowActions
 import com.example.muamaizingbot.bot.navigation.NavigationOrchestrator
 import com.example.muamaizingbot.bot.navigation.NavigationTemplateThresholds
@@ -117,8 +116,9 @@ object PotionPurchaseActions {
                 }
             }
 
-            val hpEmpty = isHpPotionEmpty()
-            val mpEmpty = isManaPotionEmpty()
+            val empty = readEmptySlots()
+            val hpEmpty = empty.hpEmpty
+            val mpEmpty = empty.mpEmpty
             if (!hpEmpty && !mpEmpty) {
                 Log.d(TAG, "[POTION] no empty potions")
                 return true
@@ -224,8 +224,9 @@ object PotionPurchaseActions {
             BotTimingCategory.SCREEN_LOAD,
         )
         while (System.currentTimeMillis() < deadline) {
-            val hpOk = !hpWasEmpty || !isHpPotionEmpty()
-            val mpOk = !mpWasEmpty || !isManaPotionEmpty()
+            val empty = readEmptySlots()
+            val hpOk = !hpWasEmpty || !empty.hpEmpty
+            val mpOk = !mpWasEmpty || !empty.mpEmpty
             if (hpOk && mpOk) {
                 Log.d(TAG, "[POTION] slots refilled")
                 return true
